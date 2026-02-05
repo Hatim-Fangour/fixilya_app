@@ -1,0 +1,23 @@
++ add error managment, like if no internat connection or app cant get a link like profile picture or other resources from internet
+
++ statistique part should be implemented
++ add translation for app 
++ test request and notification and recent activities reception and active jobs/ new requests counting  for handyman profile page
++ add dashboard for admin for handyman management 
++ add  a section for handyman verification management for admin
++ add gps location for handyman
++ add handyman service rating 
++ add client behavior rating to be showen to other handymen before accepting a job request from a client
++ add email verification while changing email from loged   handyman profile
++ implement notification for handyman when new request is posted in his service category
++ implement notification and sms notifications for handyman when he is assigned to a new job
++ implement picture remove from coudinary while handyman change or delete his profile picture or delete his account
++ implement delete account should delete all relative data from the app database
++ implemt help&support, terme & condition and privacy policy page for client and handyman 
++ add map integration for handyman to show his location
++ add user type detection at login and signup to redirect to the correct profile page (client/handyman)
++ implement password reset via email for handyman
+
+
+after login as client i sjould show here the info of the loged client with his favorite list and all his preference settings 
+and all stuff related to the loged client
