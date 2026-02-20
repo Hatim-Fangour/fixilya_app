@@ -10,6 +10,7 @@
 /// - Text colors
 /// - Status colors
 /// - Social media brand colors
+library;
 
 import 'package:flutter/material.dart';
 
@@ -266,5 +267,9 @@ class AppColors {
     Alignment center = Alignment.center,
   }) {
     return RadialGradient(colors: colors ?? primaryGradient, center: center);
+  }
+
+  static Color? inputFillColor(BuildContext buildContext) {
+    return null;
   }
 }

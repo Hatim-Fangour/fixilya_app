@@ -6,23 +6,24 @@ import "package:fixilya_app/data/controllers/auth_controller.dart";
 import "package:fixilya_app/data/controllers/theme_controller.dart";
 import "package:fixilya_app/data/controllers/user_controller.dart";
 import "package:fixilya_app/firebase_options.dart";
-import "package:fixilya_app/services/firebase_image_service.dart";
+import "package:fixilya_app/l10n/app_localizations.dart";
 import "package:fixilya_app/services/local_storage_service.dart";
 import "package:fixilya_app/services/service_locator.dart";
+import "package:fixilya_app/services/language_service.dart";
 import "package:fixilya_app/shared/animations/animated_theme_wrapper.dart";
 import "package:flutter/material.dart";
+import "package:flutter_localizations/flutter_localizations.dart";
+// import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+
 import "package:get/get.dart";
-import 'package:fixilya_app/services/cloudinary_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize Cloudinary
-  // final cloudinaryService = CloudinaryService(
-  //   cloudName: 'dbz3wtlbj', // ← From Cloudinary Dashboard
-  //   uploadPreset: 'fixilya_app', // ← Your upload preset name
-  // );
+  // final languageService = Get.put(LanguageService());
+  // languageService.onInit();
 
   await LocalStorageService().init();
+  await LocalStorageService().migrateDarkModeToThemePreference();
 
   // Initialize Firebase
   if (Firebase.apps.isEmpty) {
@@ -35,6 +36,7 @@ void main() async {
   Get.put(ThemeController()); // Theme first
   Get.put(AuthController());
   Get.put(UserController());
+  Get.put(LanguageService());
 
   ServiceLocator.init();
 
@@ -50,11 +52,30 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
+    final languageService = Get.find<LanguageService>();
 
     return Obx(
       () => AnimatedThemeWrapper(
         isDarkMode: themeController.isDarkMode,
         child: GetMaterialApp(
+          title: 'Fixilya',
+
+          // ✅ Localization Delegates
+          localizationsDelegates: [
+            AppLocalizations.delegate, // ✅ Your app localizations
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+
+          // ✅ Supported Locales
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+
+          // ✅ Current Locale
+          locale: languageService.locale,
+
+          // ✅ Fallback Locale
+          fallbackLocale: Locale('en'),
           debugShowCheckedModeBanner: false,
           theme: _buildLightTheme(),
           darkTheme: _buildDarkTheme(),

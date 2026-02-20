@@ -7,9 +7,13 @@
 /// - Route parameters
 /// - Navigation helpers
 /// - Deep linking support
+library;
 
+import 'package:fixilya_app/features/admin/presentation/screens/admin_home_page.dart';
 import 'package:fixilya_app/features/auth/presentation/screens/forgot_password_screen.dart';
-import 'package:fixilya_app/features/auth/presentation/screens/signin_screen.dart';
+import 'package:fixilya_app/features/client/presentation/screens/client_bookings_page.dart';
+import 'package:fixilya_app/features/client/presentation/screens/favorites_page.dart';
+import 'package:fixilya_app/features/guest/presentation/screens/guest_home_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_details_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_settings_page.dart';
 import 'package:fixilya_app/features/client/presentation/screens/invoices_page.dart';
@@ -65,11 +69,12 @@ class AppRoutes {
   static const String clientProfile = '/client-profile';
   static const String handymanProfile = '/handyman-profile';
   static const String editProfile = '/edit-profile';
-  static const String settings = '/settings';
+  static const String clientSettings = '/client-settings';
   static const String changePassword = '/change-password';
-  static const String notifications = '/notifications';
+  static const String clientNotifications = '/client-notifications';
   static const String notificationSettings = '/notification-settings';
-  static const String favorites = '/favorites';
+  static const String clientFavorites = '/client-favorites';
+  static const String clientBookings = '/client-bookings';
 
   // Handyman Routes
   static const String handymanDetails = '/handyman-details';
@@ -77,6 +82,12 @@ class AppRoutes {
   static const String handymanSearch = '/handyman-search';
   static const String handymanReviews = '/handyman-reviews';
   static const String handymanSettings = '/handyman-settings'; // ✅ NEW
+
+  // Admin
+  static const String admin = '/admin';
+
+  // Guest
+  static const String guestHome = '/guest-home';
 
   // Booking Routes
   static const String createBooking = '/create-booking';
@@ -106,9 +117,9 @@ class AppRoutes {
 
   // Navigation helpers
   static Future<void> toInvoices() => to(invoices)!;
-  static Future<void> toNotifications() => to(notifications)!;
+  static Future<void> toClientNotifications() => to(clientNotifications)!;
   static Future<void> toPayments() => to(payments)!;
-  static Future<void> toSettings() => to(settings)!;
+  static Future<void> toClientSettings() => to(clientSettings)!;
 
   // Category Routes
   static const String categories = '/categories';
@@ -187,10 +198,6 @@ class AppRoutes {
       page: () {
         final args = Get.arguments as Map<String, dynamic>;
 
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('🔀 ROUTER: email-verification');
-        print('Arguments: $args');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return EmailVerificationScreen(
           userType: args[paramUserType],
@@ -270,11 +277,6 @@ class AppRoutes {
         final args = Get.arguments as Map<String, dynamic>;
         final handyman = args["handyman"] as Map<String, dynamic>;
 
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('🔀 ROUTER: handyman-details');
-        print('Handyman: ${handyman['name']}');
-        print('ID: ${handyman['id']}');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return HandymanDetailsPage(handyman: handyman);
       },
       transition: Transition.rightToLeft,
@@ -295,8 +297,8 @@ class AppRoutes {
       transition: Transition.rightToLeft,
     ),
     GetPage(
-      name: notifications,
-      page: () => NotificationsPage(),
+      name: clientNotifications,
+      page: () => ClientNotificationsPage(),
       transition: Transition.rightToLeft,
     ),
     GetPage(
@@ -305,18 +307,41 @@ class AppRoutes {
       transition: Transition.rightToLeft,
     ),
     GetPage(
-      name: settings,
-      page: () => SettingsPage(),
+      name: clientSettings,
+      page: () => ClientSettingsPage(),
       transition: Transition.rightToLeft,
     ),
+
+    GetPage(
+      name: admin,
+      page: () => AdminDashboardPage(),
+      transition: Transition.rightToLeft,
+    ),
+
+    GetPage(
+      name: AppRoutes.guestHome,
+      page: () => const GuestHomePage(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(name: AppRoutes.clientFavorites, page: () => FavoritesPage()),
+    GetPage(name: clientBookings, page: () => ClientBookingsPage()),
   ];
+
+  static void toFavorites() {
+    Get.toNamed(clientFavorites);
+  }
+
+  static void toClientBookings() {
+    Get.toNamed(clientBookings);
+  }
 
   // ==================== Navigation Helpers ====================
 
-  /// Navigate to route
   static Future<T?>? to<T>(String route, {dynamic arguments}) {
     return Get.toNamed<T>(route, arguments: arguments);
   }
+
+  /// Navigate to route
 
   /// Navigate to route and remove previous route
   static Future<T?>? off<T>(String route, {dynamic arguments}) {
@@ -347,7 +372,6 @@ class AppRoutes {
   }
 
   // ==================== Specific Navigation Methods ====================
-
   /// Navigate to welcome screen
   static Future<void> toWelcome() => to(welcome)!;
 
@@ -360,6 +384,12 @@ class AppRoutes {
   /// Navigate to signup with user type
   static Future<void> toSignup(String userType) {
     return to(signup, arguments: {paramUserType: userType})!;
+  }
+
+  static void toAdmin() => Get.toNamed(admin);
+
+  static void toGuestHome() {
+    Get.offAllNamed(guestHome);
   }
 
   /// Navigate to email verification
@@ -419,7 +449,6 @@ class AppRoutes {
 
   /// Navigate to handyman details
   static Future<void> toHandymanDetails(Map<String, dynamic> handyman) {
-    print('📍 AppRoutes.toHandymanDetails called with: ${handyman['name']}');
     return to(handymanDetails, arguments: {'handyman': handyman})!;
   }
 
@@ -527,6 +556,5 @@ class AppRoutes {
   static void logRouteChange(String route) {
     // Implement analytics logging
     // Get.find<AnalyticsService>().logScreenView(route);
-    print('Route changed to: $route');
   }
 }

@@ -1,4 +1,4 @@
-package com.fixilya.fixilya_app
+package com.fixilya.app
 
 import io.flutter.embedding.android.FlutterActivity
 

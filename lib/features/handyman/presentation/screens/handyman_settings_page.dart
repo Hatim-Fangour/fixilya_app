@@ -1,15 +1,18 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
+import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
 import 'package:fixilya_app/services/handyman_data_service.dart';
+import 'package:fixilya_app/services/language_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
 class HandymanSettingsPage extends StatefulWidget {
-  const HandymanSettingsPage({Key? key}) : super(key: key);
+  const HandymanSettingsPage({super.key});
 
   @override
   State<HandymanSettingsPage> createState() => _HandymanSettingsPageState();
@@ -31,7 +34,6 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
   bool _pushNotifications = true;
   bool _emailNotifications = false;
   bool _smsNotifications = true;
-  bool _isAvailable = true;
 
   // Animation
   late AnimationController _fadeController;
@@ -66,13 +68,14 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
 
       if (profileData != null) {
         setState(() {
-          _profileData = profileData;
-          _isAvailable = profileData['isAvailable'] ?? true;
+          _profileData = profileData; // ✅ Already a Map, not a List
           _pushNotifications = profileData['pushNotifications'] ?? true;
           _emailNotifications = profileData['emailNotifications'] ?? false;
           _smsNotifications = profileData['smsNotifications'] ?? true;
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       print('❌ Error loading settings: $e');
@@ -82,21 +85,21 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
 
   Future<void> _updateSettings(Map<String, dynamic> updates) async {
     try {
-      final success = await _handymanDataService.updateHandymanProfile(updates);
+      await _handymanDataService.updateHandymanProfile(updates);
 
-      if (success) {
-        Get.snackbar(
-          'Success',
-          'Settings updated successfully',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          margin: EdgeInsets.all(16),
-          borderRadius: 16,
-          icon: Icon(Icons.check_circle, color: Colors.white),
-          duration: Duration(seconds: 2),
-        );
-      }
+      // if (success) {
+      //   Get.snackbar(
+      //     'Success',
+      //     'Settings updated successfully',
+      //     snackPosition: SnackPosition.BOTTOM,
+      //     backgroundColor: Colors.green,
+      //     colorText: Colors.white,
+      //     margin: EdgeInsets.all(16),
+      //     borderRadius: 16,
+      //     icon: Icon(Icons.check_circle, color: Colors.white),
+      //     duration: Duration(seconds: 2),
+      //   );
+      // }
     } catch (e) {
       Get.snackbar(
         'Error',
@@ -184,6 +187,15 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
 
                   // SizedBox(height: 24),
 
+                  // SizedBox(height: 20),
+
+                  // ✅ THEME SECTION (NEW)
+                  _buildThemeSection(),
+
+                  // SizedBox(height: 24),
+                  // _buildLanguageSection(),
+                  SizedBox(height: 24),
+
                   // Notifications Section
                   _buildLuxurySection(
                     'Notifications',
@@ -243,6 +255,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                       'Update your security',
                       Icons.lock_outline_rounded,
                       () => _showChangePasswordDialog(),
+                      isLast: true,
                     ),
                   ]),
 
@@ -270,6 +283,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                         'Your data protection',
                         Icons.policy_outlined,
                         () => _showPrivacyPolicy(),
+                        isLast: true,
                       ),
                     ],
                   ),
@@ -317,7 +331,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
       expandedHeight: 280,
       pinned: true,
       elevation: 0,
-      backgroundColor: primaryColor,
+      backgroundColor: AppColors.pagesAppBar(context),
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           fit: StackFit.expand,
@@ -325,11 +339,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
             // Gradient Background
             Container(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [primaryColor, secondaryColor, accentColor],
-                ),
+                gradient: AppColors.subtleHeaderGradientThemed(context),
               ),
             ),
 
@@ -366,7 +376,9 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: AppColors.shadowColor(
+                                      context,
+                                    ).withValues(alpha: 0.5),
                                     blurRadius: 30,
                                     spreadRadius: 5,
                                   ),
@@ -496,7 +508,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: AppColors.textPrimaryColor(context),
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -507,12 +519,15 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
           // Items Container
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.cardColor(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade100, width: 1.5),
+              border: Border.all(
+                color: AppColors.dividerColor(context),
+                width: 1.5,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
+                  color: AppColors.shadowColor(context).withValues(alpha: 0.08),
                   blurRadius: 20,
                   offset: Offset(0, 8),
                   spreadRadius: 2,
@@ -536,8 +551,10 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
+        color: AppColors.transparent,
+        borderRadius: BorderRadius.circular(12),
         border: Border(
-          bottom: BorderSide(color: Colors.grey.shade100, width: 1),
+          bottom: BorderSide(color: AppColors.dividerColor(context), width: 1),
         ),
       ),
       child: Row(
@@ -568,14 +585,17 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                    color: AppColors.textPrimaryColor(context),
                     letterSpacing: 0.3,
                   ),
                 ),
                 SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondaryColor(context),
+                  ),
                 ),
               ],
             ),
@@ -587,7 +607,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
             child: Switch(
               value: value,
               onChanged: onChanged,
-              activeColor: primaryColor,
+              activeThumbColor: primaryColor,
               activeTrackColor: primaryColor.withValues(alpha: 0.5),
             ),
           ),
@@ -602,6 +622,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
     IconData icon,
     VoidCallback onTap, {
     bool isDestructive = false,
+    bool isLast = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -611,9 +632,14 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade100, width: 1),
-            ),
+            border: isLast
+                ? null
+                : Border(
+                    bottom: BorderSide(
+                      color: AppColors.dividerColor(context),
+                      width: 1,
+                    ),
+                  ),
           ),
           child: Row(
             children: [
@@ -654,14 +680,19 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: isDestructive ? Colors.red : Colors.black87,
+                        color: isDestructive
+                            ? AppColors.red
+                            : AppColors.textPrimaryColor(context),
                         letterSpacing: 0.3,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondaryColor(context),
+                      ),
                     ),
                   ],
                 ),
@@ -680,6 +711,461 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
     );
   }
 
+  Widget _buildThemeSection() {
+    final themeController = Get.find<ThemeController>();
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Header
+          Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primaryColor,
+                        AppColors.secondaryColor,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryColor.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.palette_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Appearance',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimaryColor(context),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Theme Options Container
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardColor(context),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.borderColor(context),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadowColor(context).withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildThemeOption(
+                  title: 'Light Mode',
+                  subtitle: 'Classic bright theme',
+                  icon: Icons.light_mode_outlined,
+                  value: ThemePreference.light,
+                  themeController: themeController,
+                ),
+                _buildThemeOption(
+                  title: 'Dark Mode',
+                  subtitle: 'Easy on the eyes',
+                  icon: Icons.dark_mode_outlined,
+                  value: ThemePreference.dark,
+                  themeController: themeController,
+                ),
+                _buildThemeOption(
+                  title: 'System Default',
+                  subtitle: 'Match device settings',
+                  icon: Icons.settings_suggest_outlined,
+                  value: ThemePreference.system,
+                  themeController: themeController,
+                  isLast: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: Language Section
+  Widget _buildLanguageSection() {
+    final languageService = Get.find<LanguageService>();
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Header
+          Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primaryColor, secondaryColor],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.language_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Language',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimaryColor(context),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Language Options Container
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardColor(context),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.borderColor(context),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadowColor(context).withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildLanguageOption(
+                  title: 'English',
+                  nativeName: 'English',
+                  icon: '🇬🇧',
+                  languageCode: 'en',
+                  languageService: languageService,
+                ),
+                _buildLanguageOption(
+                  title: 'Arabic',
+                  nativeName: 'العربية',
+                  icon: '🇲🇦',
+                  languageCode: 'ar',
+                  languageService: languageService,
+                ),
+                _buildLanguageOption(
+                  title: 'French',
+                  nativeName: 'Français',
+                  icon: '🇫🇷',
+                  languageCode: 'fr',
+                  languageService: languageService,
+                  isLast: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: Language Option Tile
+  Widget _buildLanguageOption({
+    required String title,
+    required String nativeName,
+    required String icon,
+    required String languageCode,
+    required LanguageService languageService,
+    bool isLast = false,
+  }) {
+    return Obx(() {
+      final isSelected = languageService.locale.languageCode == languageCode;
+
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            await languageService.changeLanguage(languageCode);
+
+            Get.snackbar(
+              'Language Updated',
+              'Switched to $title',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+              margin: EdgeInsets.all(16),
+              borderRadius: 16,
+              duration: Duration(seconds: 2),
+              icon: Icon(Icons.check_circle, color: Colors.white),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(
+                      bottom: BorderSide(
+                        color: AppColors.dividerColor(context),
+                        width: 1,
+                      ),
+                    ),
+            ),
+            child: Row(
+              children: [
+                // Flag Icon
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: isSelected
+                        ? LinearGradient(colors: [primaryColor, secondaryColor])
+                        : LinearGradient(
+                            colors: [
+                              primaryColor.withValues(alpha: 0.15),
+                              secondaryColor.withValues(alpha: 0.1),
+                            ],
+                          ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Text(icon, style: TextStyle(fontSize: 28)),
+                  ),
+                ),
+                SizedBox(width: 16),
+
+                // Text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? primaryColor
+                              : AppColors.textPrimaryColor(context),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        nativeName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondaryColor(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Selection Indicator
+                if (isSelected)
+                  Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [primaryColor, secondaryColor],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.check, color: Colors.white, size: 16),
+                  )
+                else
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.borderColor(context),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _buildThemeOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required ThemePreference value,
+    required ThemeController themeController,
+    bool isLast = false,
+  }) {
+    return Obx(() {
+      final isSelected = themeController.themePreference == value;
+
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            await themeController.setThemePreference(value);
+
+            // Show success message
+            // Get.snackbar(
+            //   'Theme Updated',
+            //   'Switched to ${title.toLowerCase()}',
+            //   snackPosition: SnackPosition.BOTTOM,
+            //   backgroundColor: Colors.green,
+            //   colorText: Colors.white,
+            //   margin: EdgeInsets.all(16),
+            //   borderRadius: 16,
+            //   duration: Duration(seconds: 2),
+            //   icon: Icon(Icons.check_circle, color: Colors.white),
+            // );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              border: isLast
+                  ? null
+                  : Border(
+                      bottom: BorderSide(
+                        color: AppColors.dividerColor(context),
+                        width: 1,
+                      ),
+                    ),
+            ),
+            child: Row(
+              children: [
+                // Icon
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isSelected
+                          ? [AppColors.primaryColor, AppColors.secondaryColor]
+                          : [
+                              AppColors.primaryColor.withValues(alpha: 0.15),
+                              AppColors.secondaryColor.withValues(alpha: 0.1),
+                            ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isSelected ? Colors.white : primaryColor,
+                    size: 24,
+                  ),
+                ),
+                SizedBox(width: 16),
+
+                // Text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? primaryColor
+                              : AppColors.secondaryColor,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondaryColor(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Selection Indicator
+                if (isSelected)
+                  Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primaryColor,
+                          AppColors.secondaryColor,
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.check, color: AppColors.white, size: 16),
+                  )
+                else
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.borderColor(context),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+  }
   // [Previous dialog methods remain the same - _showEditProfileDialog, _changeProfilePicture, etc.]
   // Copy all the dialog methods from your original file here
 
@@ -1035,8 +1521,10 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                                   });
 
                                                   // Close loading
-                                                  if (Get.isDialogOpen ?? false)
+                                                  if (Get.isDialogOpen ??
+                                                      false) {
                                                     Get.back();
+                                                  }
 
                                                   // Close edit dialog
                                                   Get.back();
@@ -1066,8 +1554,10 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                                   );
                                                 } catch (e) {
                                                   // Close loading
-                                                  if (Get.isDialogOpen ?? false)
+                                                  if (Get.isDialogOpen ??
+                                                      false) {
                                                     Get.back();
+                                                  }
 
                                                   // Error message
                                                   Get.snackbar(

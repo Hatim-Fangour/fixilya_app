@@ -4,9 +4,10 @@ import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'package:flutter/services.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -59,7 +60,7 @@ class _SplashScreenState extends State<SplashScreen>
       print(
         currentUser == null
             ? 'ℹ️ No user is currently logged in.'
-            : 'ℹ️ User is logged in: ${currentUser} ${currentUser.email}',
+            : 'ℹ️ User is logged in: $currentUser ${currentUser.email}',
       );
 
       print(currentUser);
@@ -71,17 +72,8 @@ class _SplashScreenState extends State<SplashScreen>
         bool userStillExists = true;
 
         try {
-          try {
-            if (currentUser != null) {
-              await currentUser.reload();
-              print('✅ User reloaded successfully');
-            } else {
-              print('⚠️ User is null before reload');
-              userStillExists = false;
-            }
-          } catch (e) {
-            print(e);
-          }
+          await currentUser.reload();
+          print('✅ User reloaded successfully');
         } on FirebaseAuthException catch (e) {
           print('⚠️ FirebaseAuthException during reload: ${e.code}');
 
@@ -116,15 +108,25 @@ class _SplashScreenState extends State<SplashScreen>
               // For unknown errors, assume user might still exist
               break;
           }
-        } on Exception catch (e) {
-          print('⚠️ Platform exception during reload: $e');
+        } on PlatformException catch (e) {
+          // ✅ ADD THIS CATCH BLOCK FOR PlatformException
+          print('⚠️ PlatformException during reload: ${e.code} - ${e.message}');
 
-          // ✅ Handle platform-specific errors (like PlatformException)
-          final errorString = e.toString().toLowerCase();
-          if (errorString.contains('user_not_found') ||
-              errorString.contains('user not found') ||
-              errorString.contains('no user record')) {
+          // Check for user not found errors
+          if (e.code == 'ERROR_USER_NOT_FOUND' ||
+              e.code == 'user-not-found' ||
+              e.message?.toLowerCase().contains('no user record') == true ||
+              e.message?.toLowerCase().contains('user may have been deleted') ==
+                  true) {
             print('❌ User not found (platform exception)');
+            userStillExists = false;
+          } else if (e.code == 'ERROR_USER_DISABLED' ||
+              e.message?.toLowerCase().contains('disabled') == true) {
+            print('❌ User account disabled (platform exception)');
+            userStillExists = false;
+          } else {
+            print('⚠️ Other platform error, continuing cautiously');
+            // For other platform errors, be conservative
             userStillExists = false;
           }
         } catch (e) {

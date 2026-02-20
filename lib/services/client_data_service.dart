@@ -32,17 +32,17 @@ class ClientDataService {
       print(clientData);
 
       // Also get user document for name and email
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      // final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
-      final userData = userDoc.data() ?? {};
+      // final userData = userDoc.data() ?? {};
 
       print(clientData);
       // Merge data
       return {
         ...clientData,
-        'fullName': userData['fullName'] ?? clientData['fullName'] ?? 'Client',
-        'email': userData['email'] ?? user.email ?? '',
-        'phone': userData['phone'] ?? '',
+        'fullName': clientData['fullName'] ?? 'Client',
+        'email': clientDoc['email'] ?? user.email ?? '',
+        'phone': clientDoc['phone'] ?? '',
         'uid': user.uid,
       };
     } catch (e) {
@@ -129,6 +129,8 @@ class ClientDataService {
       // Fields that go to clients collection
       final clientFields = [
         'city',
+        'fullName',
+        'phone',
         'address',
         'profilePicture',
         'favoriteHandymen',
@@ -136,7 +138,7 @@ class ClientDataService {
       ];
 
       // Fields that go to users collection
-      final userFields = ['fullName', 'email', 'phone'];
+      final userFields = ['fullName', 'email'];
 
       updates.forEach((key, value) {
         if (clientFields.contains(key)) {

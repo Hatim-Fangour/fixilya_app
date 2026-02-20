@@ -1,0 +1,173 @@
+{
+  "@@locale": "en",
+  
+  "appName": "Fixilya",
+  "@appName": {
+    "description": "The application name"
+  },
+
+  "welcome": "Welcome to Fixilya",
+  "findHandymen": "Find trusted handymen in Morocco",
+  
+  "getStarted": "Get Started",
+  "signIn": "Sign In",
+  "signUp": "Sign Up",
+  "continueAsGuest": "Continue as Guest",
+  
+  "email": "Email",
+  "password": "Password",
+  "confirmPassword": "Confirm Password",
+  "fullName": "Full Name",
+  "phoneNumber": "Phone Number",
+  "address": "Address",
+  "city": "City",
+  
+  "login": "Login",
+  "register": "Register",
+  "forgotPassword": "Forgot Password?",
+  "resetPassword": "Reset Password",
+  "sendResetLink": "Send Reset Link",
+  
+  "alreadyHaveAccount": "Already have an account?",
+  "dontHaveAccount": "Don't have an account?",
+  "createAccount": "Create Account",
+  
+  "joinAsClient": "Join as Client",
+  "joinAsHandyman": "Join as Handyman",
+  "findSkilledProfessionals": "Find skilled professionals",
+  "connectWithClients": "Connect with clients",
+  
+  "home": "Home",
+  "bookings": "Bookings",
+  "favorites": "Favorites",
+  "profile": "Profile",
+  "notifications": "Notifications",
+
+  "verifiedPro": "Verified Pro",
+  
+  "searchHandymen": "Search handymen...",
+  "searchServices": "Search services...",
+  "popularServices": "Popular Services",
+  "topRatedHandymen": "Top Rated Handymen",
+  "nearYou": "Near You",
+  
+  "services": "Services",
+  "plumbing": "Plumbing",
+  "electrical": "Electrical Work",
+  "carpentry": "Carpentry",
+  "painting": "Painting",
+  "cleaning": "Cleaning",
+  "gardening": "Gardening",
+  "acRepair": "AC Repair",
+  "applianceRepair": "Appliance Repair",
+  
+  "bookNow": "Book Now",
+  "viewProfile": "View Profile",
+  "contactHandyman": "Contact Handyman",
+  "addToFavorites": "Add to Favorites",
+  "removeFromFavorites": "Remove from Favorites",
+  
+  "myBookings": "My Bookings",
+  "upcomingBookings": "Upcoming",
+  "completedBookings": "Completed",
+  "cancelledBookings": "Cancelled",
+  
+  "bookingDetails": "Booking Details",
+  "serviceName": "Service",
+  "handymanName": "Handyman",
+  "bookingDate": "Date",
+  "bookingTime": "Time",
+  "totalAmount": "Total Amount",
+  "status": "Status",
+  
+  "pending": "Pending",
+  "confirmed": "Confirmed",
+  "inProgress": "In Progress",
+  "completed": "Completed",
+  "cancelled": "Cancelled",
+  
+  "rateService": "Rate Service",
+  "writeReview": "Write a review",
+  "submitReview": "Submit Review",
+  "rating": "Rating",
+  "reviews": "Reviews",
+  "review": "Review",
+  "profileStrength": "Profile Strength",
+  "completeProfile": "Complete your profile to get more clients",
+  
+  "personalInformation": "Personal Information",
+  "accountSettings": "Account Settings",
+  "changeLanguage": "Change Language",
+  "theme": "Theme",
+  "lightMode": "Light Mode",
+  "darkMode": "Dark Mode",
+  "systemDefault": "System Default",
+  
+  "editProfile": "Edit Profile",
+  "saveChanges": "Save Changes",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "confirm": "Confirm",
+  
+  "logout": "Logout",
+  "logoutConfirm": "Are you sure you want to logout?",
+  "yes": "Yes",
+  "no": "No",
+  
+  "settings": "Settings",
+  "privacyPolicy": "Privacy Policy",
+  "termsAndConditions": "Terms & Conditions",
+  "helpSupport": "Help & Support",
+  "aboutUs": "About Us",
+  
+  "error": "Error",
+  "success": "Success",
+  "warning": "Warning",
+  "info": "Info",
+  
+  "requiredField": "This field is required",
+  "invalidEmail": "Invalid email address",
+  "invalidPhone": "Invalid phone number",
+  "passwordTooShort": "Password must be at least 6 characters",
+  "passwordsDoNotMatch": "Passwords do not match",
+  
+  "noDataFound": "No data found",
+  "noBookingsYet": "No bookings yet",
+  "noFavoritesYet": "No favorites yet",
+  "noNotifications": "No notifications",
+  
+  "loading": "Loading...",
+  "pleaseWait": "Please wait...",
+  "tryAgain": "Try Again",
+  "somethingWentWrong": "Something went wrong",
+  
+  "selectCity": "Select City",
+  "selectService": "Select Service",
+  "selectDate": "Select Date",
+  "selectTime": "Select Time",
+  
+  "moroccanCities": "Moroccan Cities",
+  "casablanca": "Casablanca",
+  "rabat": "Rabat",
+  "marrakech": "Marrakech",
+  "fes": "Fes",
+  "tangier": "Tangier",
+  "agadir": "Agadir",
+  
+  "dh": "DH",
+  "perHour": "per hour",
+  "startingFrom": "Starting from",
+  
+  "emailVerification": "Email Verification",
+  "verifyEmail": "Verify Email",
+  "resendCode": "Resend Code",
+  "enterVerificationCode": "Enter verification code",
+  "codeSentTo": "Code sent to {email}",
+  "@codeSentTo": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  }
+}

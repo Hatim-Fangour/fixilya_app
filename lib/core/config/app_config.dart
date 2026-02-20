@@ -48,11 +48,14 @@ class AppConfig {
   static const int maxReviewLength = 500;
 
   // Contact
-  static const String supportEmail = 'support@fixilya.ma';
-  static const String supportPhone = '+212 5 22 XX XX XX';
+  static const String officialEmail = 'fixilya.sarl@gmail.com';
+  static const String supportEmail = 'fixilya.sarl@gmail.com';
+  static const String supportPhone = '+212619955898';
 
   // Social Media
   static const String facebookUrl = 'https://facebook.com/fixilya';
   static const String twitterUrl = 'https://twitter.com/fixilya';
   static const String instagramUrl = 'https://instagram.com/fixilya';
+
+  static const String showCaseWebSite = 'https://fixilya-sarl.vercel.app/';
 }

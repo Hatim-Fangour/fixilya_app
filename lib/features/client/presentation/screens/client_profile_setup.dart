@@ -11,7 +11,7 @@ import 'package:get/get.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 
 class ClientProfileSetup extends StatefulWidget {
-  const ClientProfileSetup({Key? key}) : super(key: key);
+  const ClientProfileSetup({super.key});
 
   @override
   State<ClientProfileSetup> createState() => _ClientProfileSetupState();

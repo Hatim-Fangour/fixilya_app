@@ -10,6 +10,7 @@
 /// - Transaction history
 /// - Fee calculations
 /// - Multi-currency support
+library;
 
 class PaymentService {
   static final PaymentService _instance = PaymentService._internal();

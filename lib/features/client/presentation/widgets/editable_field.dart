@@ -11,7 +11,7 @@ class EditableField extends StatelessWidget {
   final Function(String?) onSaved;
 
   const EditableField({
-    Key? key,
+    super.key,
     required this.label,
     required this.icon,
     required this.initialValue,
@@ -20,7 +20,7 @@ class EditableField extends StatelessWidget {
     required this.primaryColor,
     required this.secondaryColor,
     required this.onSaved,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

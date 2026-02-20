@@ -72,7 +72,7 @@ class UserRepository {
     final snapshot = await _firestore
         .collection(_collection)
         .where('fullName', isGreaterThanOrEqualTo: query)
-        .where('fullName', isLessThan: query + 'z')
+        .where('fullName', isLessThan: '${query}z')
         .limit(20)
         .get();
 

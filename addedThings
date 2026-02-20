@@ -1,23 +1,45 @@
-+ add error managment, like if no internat connection or app cant get a link like profile picture or other resources from internet
 
++! test request and notification and recent activities reception and active jobs/ new requests counting  for handyman profile page
++! add handyman service rating 
++! implement notification for handyman when new request is posted in his service category
++! implement notification and sms notifications for handyman when he is assigned to a new job
++! add user type detection at login and signup to redirect to the correct profile page (client/handyman)
+
++ add error managment, like if no internat connection or app cant get a link like profile picture or other resources from internet
++ if a user try to login without confirmed email, should be redirected to EmailConfirmation page 
 + statistique part should be implemented
 + add translation for app 
-+ test request and notification and recent activities reception and active jobs/ new requests counting  for handyman profile page
 + add dashboard for admin for handyman management 
 + add  a section for handyman verification management for admin
 + add gps location for handyman
-+ add handyman service rating 
 + add client behavior rating to be showen to other handymen before accepting a job request from a client
 + add email verification while changing email from loged   handyman profile
-+ implement notification for handyman when new request is posted in his service category
-+ implement notification and sms notifications for handyman when he is assigned to a new job
 + implement picture remove from coudinary while handyman change or delete his profile picture or delete his account
 + implement delete account should delete all relative data from the app database
 + implemt help&support, terme & condition and privacy policy page for client and handyman 
 + add map integration for handyman to show his location
-+ add user type detection at login and signup to redirect to the correct profile page (client/handyman)
 + implement password reset via email for handyman
 
 
-after login as client i sjould show here the info of the loged client with his favorite list and all his preference settings 
+after login as client i should show here the info of the loged client with his favorite list and all his preference settings 
 and all stuff related to the loged client
+
+
+
+ widget.handyman { 
+    category: General,     
+    hourlyRate: 123.0,   
+    verified: false, 
+    profilePicture: https://res.cloudinary.com/dbz3wtlbj/image/upload/v1770335398/profiles/profile_diuUrDnmBCcx4o8U41kp7OWDpiG.jpg, 
+    addedAt: FieldValue(Instance of 'MethodChannelFieldValue')}
+
+
+widget.handyman { 
+    category: Electricity,    
+    hourlyRate: 100, 
+    image: https://res.cloudinary.com/dbz3wtlbj/image/upload/v1770335398/profilesprofile_diuUrDnmBCcx4o8U41kp7OWDpiG3.jpg, verified: true,   
+    skills: [Electricity, Carpentry,Gardening], 
+    bio: hello, 
+    availability: true}
+
+

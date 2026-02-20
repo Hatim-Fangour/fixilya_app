@@ -261,8 +261,9 @@ class CloudinaryService {
         final fileSize = await imageFile.length();
         if (fileSize == 0) {
           print('⚠️ File $i empty');
-          if (onProgress != null)
+          if (onProgress != null) {
             onProgress(i + 1, imageFiles.length, 'File is empty');
+          }
           continue;
         }
 

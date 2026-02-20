@@ -1,16 +1,23 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:ui';
+import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
-import 'package:fixilya_app/features/client/presentation/controllers/client_controller.dart';
+import 'package:fixilya_app/services/admin_data_service.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/services/client_data_service.dart'; // ✅ Use ClientDataService
+import 'package:fixilya_app/services/cloudinary_service.dart';
+import 'package:fixilya_app/services/firebase_image_service.dart';
+import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart'; // ✅ Add GetX
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ClientProfilePage extends StatefulWidget {
-  const ClientProfilePage({Key? key}) : super(key: key);
+  const ClientProfilePage({super.key});
 
   @override
   State<ClientProfilePage> createState() => _ClientProfilePageState();
@@ -18,11 +25,18 @@ class ClientProfilePage extends StatefulWidget {
 
 class _ClientProfilePageState extends State<ClientProfilePage>
     with TickerProviderStateMixin {
+  final _clientDataService = ClientDataService(); // ✅ Use service layer
+  // ✅ ADD THESE NEW VARIABLES
+  late final CloudinaryService _cloudinaryService;
+  late final FirebaseImageService _firebaseImageService;
+  bool _isAdmin = false; // ✅ Add this
+  final _adminService = AdminDataService(); // ✅ Add this
   // ✅ GetX Controller - handles all business logic
-  late final ClientProfileController controller;
+  // late final ClientProfileController controller;
 
   bool _isEditing = false;
   int _profileCompletion = 0;
+  bool _isLoading = true;
 
   // // Premium Colors - Same as Handyman
   // static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
@@ -30,16 +44,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   // static const accentColor = Color.fromRGBO(147, 167, 255, 1);
 
   // ✅ SERVICE INTEGRATION (Same as HandymanProfilePage)
-  final _clientDataService = ClientDataService(); // ✅ Use service layer
-  bool _isLoadingData = true;
   Map<String, dynamic>? _profileData;
-  Map<String, dynamic>? _statsData;
 
   // Animation Controllers
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
 
   // Form
   final _formKey = GlobalKey<FormState>();
@@ -49,15 +59,15 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   String _email = '';
   String _phone = '';
   String _address = '';
-  String _city = '';
   String _profilePicture = '';
+  String _clientType = '';
   DateTime? _memberSince;
 
   // ✅ STATS (from Firebase)
   int _totalBookings = 0;
-  int _completedBookings = 0;
-  int _activeBookings = 0;
   int _favoriteHandymen = 0;
+
+  String? selectedCity;
 
   // ✅ RECENT BOOKINGS (from Firebase)
   List<Map<String, dynamic>> _recentBookings = [];
@@ -68,6 +78,11 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   @override
   void initState() {
     super.initState();
+
+    try {
+      _cloudinaryService = Get.find<CloudinaryService>();
+      _firebaseImageService = Get.find<FirebaseImageService>();
+    } catch (e) {}
 
     _fadeController = AnimationController(
       duration: Duration(milliseconds: 1200),
@@ -81,15 +96,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
       parent: _fadeController,
       curve: Curves.easeOut,
     );
-    _scaleAnimation = CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeOut,
-    );
     _fadeController.forward();
     _scaleController.forward();
 
     // ✅ LOAD DATA FROM FIREBASE (Same as HandymanProfilePage)
     _loadProfileData();
+    _checkAdminStatus();
   }
 
   @override
@@ -99,64 +111,209 @@ class _ClientProfilePageState extends State<ClientProfilePage>
     super.dispose();
   }
 
+  Future<void> _checkAdminStatus() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        if (mounted) {
+          setState(() => _isAdmin = false);
+        }
+        return;
+      }
+
+      final isAdmin = await _adminService.isUserAdmin(currentUser.uid);
+      if (mounted) {
+        setState(() => _isAdmin = isAdmin);
+      }
+    } catch (e) {
+      print('❌ Error checking admin status: $e');
+      if (mounted) {
+        setState(() => _isAdmin = false);
+      }
+    }
+  }
+
+  /// ✅ PICK AND UPLOAD PROFILE PICTURE
+  Future<void> _pickAndUploadProfilePicture() async {
+    try {
+      // Pick image
+      final image = await _cloudinaryService.pickImage();
+
+      if (image == null) {
+        return;
+      }
+
+      setState(() {});
+
+      // Show uploading dialog
+      Get.dialog(
+        WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: 32),
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primaryColor,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Text(
+                    'Uploading profile picture...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'This may take a moment',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // Upload to Cloudinary
+      final imageUrl = await _cloudinaryService.uploadImage(
+        imageFile: image,
+        folder: 'profiles',
+        publicId: 'profile_${FirebaseAuth.instance.currentUser?.uid}',
+        isProfilePicture: true,
+        timeoutSeconds: 30,
+      );
+
+      if (imageUrl != null) {
+        // Save URL to Firebase
+        final success = await _firebaseImageService.saveProfileImageUrl(
+          userId: FirebaseAuth.instance.currentUser!.uid,
+          imageUrl: imageUrl,
+          userType: 'clients',
+        );
+
+        if (success) {
+          // Update local state
+          if (mounted) {
+            setState(() {
+              _profilePicture = imageUrl;
+
+              // Recalculate profile completion
+              _profileCompletion = _calculateProfileCompletion();
+            });
+          }
+
+          // Close uploading dialog
+          if (Get.isDialogOpen ?? false) {
+            Get.back();
+          }
+
+          // Show success message
+          Get.snackbar(
+            '✅ Success',
+            'Profile picture updated successfully!',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            margin: EdgeInsets.all(16),
+            borderRadius: 12,
+            icon: Icon(Icons.check_circle, color: Colors.white),
+            duration: Duration(seconds: 2),
+          );
+        } else {
+          throw Exception('Failed to save URL to Firebase');
+        }
+      } else {
+        throw Exception('Upload returned null');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {});
+      }
+
+      // Close uploading dialog if open
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        'Error',
+        'Failed to upload profile picture: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: Duration(seconds: 3),
+      );
+    }
+  }
+
   // ✅ LOAD DATA FROM FIREBASE (Same pattern as HandymanProfilePage)
   Future<void> _loadProfileData() async {
     if (!mounted) return;
-    setState(() => _isLoadingData = true);
+    setState(() => _isLoading = true); // ✅ Set loading true
 
     try {
-      // ✅ Call service methods (same as HandymanProfilePage)
-      final profileData = await _clientDataService.getClientProfile();
-      final statsData = await _clientDataService.getClientStats();
+      final results = await Future.wait([
+        _clientDataService.getClientProfile(),
+        _clientDataService.getClientStats(),
+      ]);
 
-      print('📊 Profile Data: $profileData');
-      print('📊 Stats Data: $statsData');
+      final profileData = results[0];
+      final statsData = results[1];
 
       if (profileData != null && mounted) {
         setState(() {
           _profileData = profileData;
-          _statsData = statsData;
 
-          // ✅ Map profile data (same as HandymanProfilePage)
           _name = profileData['fullName'] ?? 'Client';
           _email = profileData['email'] ?? '';
           _phone = profileData['phone'] ?? '';
-          _city = profileData['city'] ?? '';
           _address = profileData['address'] ?? '';
           _profilePicture = profileData['profilePicture'] ?? '';
+          _clientType = _getClientType(profileData['clientType'] ?? '1');
 
-          // Parse memberSince
+          selectedCity = profileData['city'] ?? '';
+
           if (profileData['createdAt'] != null) {
             if (profileData['createdAt'] is Timestamp) {
               _memberSince = (profileData['createdAt'] as Timestamp).toDate();
             }
           }
 
-          // ✅ Map stats data (same as HandymanProfilePage)
           _totalBookings = statsData?['totalBookings'] ?? 0;
-          _completedBookings = statsData?['completedBookings'] ?? 0;
-          _activeBookings = statsData?['activeBookings'] ?? 0;
           _favoriteHandymen = statsData?['favoritesCount'] ?? 0;
 
-          // ✅ Calculate profile completion
           _profileCompletion = _calculateProfileCompletion();
 
-          _isLoadingData = false;
+          _isLoading = false; // ✅ Set loading false
         });
 
-        print('✅ Client profile loaded successfully');
-        print('   Name: $_name');
-        print('   Total Bookings: $_totalBookings');
-        print('   Favorites: $_favoriteHandymen');
-        print('   Profile Completion: $_profileCompletion%');
-
-        // ✅ Load additional data in parallel (same as HandymanProfilePage)
         await Future.wait([_loadRecentBookings(), _loadFavoriteServices()]);
       }
     } catch (e) {
-      print('❌ Error loading profile: $e');
       if (mounted) {
-        setState(() => _isLoadingData = false);
+        setState(() => _isLoading = false); // ✅ Set loading false on error
       }
     }
   }
@@ -175,7 +332,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
     if (_phone.isNotEmpty) completedFields++;
 
     // City (15%)
-    if (_city.isNotEmpty) completedFields++;
+    if (selectedCity != null && selectedCity!.isNotEmpty) completedFields++;
 
     // Address (15%)
     if (_address.isNotEmpty) completedFields++;
@@ -208,12 +365,8 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             };
           }).toList();
         });
-
-        print('✅ Loaded ${_recentBookings.length} recent bookings');
       }
-    } catch (e) {
-      print('❌ Error loading bookings: $e');
-    }
+    } catch (e) {}
   }
 
   // ✅ LOAD FAVORITE SERVICES
@@ -234,12 +387,8 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             return {'name': serviceName, 'icon': _getServiceIcon(serviceName)};
           }).toList();
         });
-
-        print('✅ Loaded ${_favoriteServices.length} favorite services');
       }
-    } catch (e) {
-      print('❌ Error loading favorite services: $e');
-    }
+    } catch (e) {}
   }
 
   // ✅ HELPER: Get service icon
@@ -256,6 +405,16 @@ class _ClientProfilePageState extends State<ClientProfilePage>
     };
 
     return iconMap[serviceName] ?? FontAwesomeIcons.wrench;
+  }
+
+  String _getClientType(String clientType) {
+    final types = {
+      '1': "New Client",
+      '2': "Standard Client",
+      '3': "Premium Client",
+    };
+
+    return types[clientType] ?? '1';
   }
 
   // ✅ HELPER: Format date
@@ -318,21 +477,51 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   // ✅ SAVE PROFILE TO FIREBASE (Same as HandymanProfilePage)
   Future<void> _saveProfileToFirebase() async {
     try {
-      print('💾 Saving client profile to Firebase...');
+      // ✅ Validate first
+      // if (!_formKey.currentState!.validate()) {
+      //   Get.snackbar(
+      //     'Validation Error',
+      //     'Please fill in all required fields',
+      //     snackPosition: SnackPosition.BOTTOM,
+      //     backgroundColor: Colors.orange,
+      //     colorText: Colors.white,
+      //     margin: EdgeInsets.all(16),
+      //     borderRadius: 12,
+      //   );
+      //   return;
+      // }
+
+      // ✅ Save form to capture all values
+      _formKey.currentState!.save();
 
       final success = await _clientDataService.updateClientProfile({
         'fullName': _name,
         'email': _email,
         'phone': _phone,
-        'city': _city,
+        'city': selectedCity,
         'address': _address,
       });
 
       if (success) {
-        print('✅ Client profile saved successfully');
+        // ✅ UPDATE LOCAL STATE
+        if (mounted) {
+          setState(() {
+            _profileData = {
+              ..._profileData ?? {},
+              'fullName': _name,
+              'email': _email,
+              'phone': _phone,
+              'city': selectedCity,
+              'address': _address,
+            };
+
+            // Recalculate profile completion
+            _profileCompletion = _calculateProfileCompletion();
+          });
+        }
 
         Get.snackbar(
-          'Success',
+          '✅ Success',
           'Profile updated successfully!',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
@@ -340,13 +529,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
           margin: EdgeInsets.all(16),
           borderRadius: 12,
           icon: Icon(Icons.check_circle, color: Colors.white),
+          duration: Duration(seconds: 2),
         );
       } else {
         throw Exception('Update returned false');
       }
     } catch (e) {
-      print('❌ Error saving profile: $e');
-
       Get.snackbar(
         'Error',
         'Failed to update profile: ${e.toString()}',
@@ -700,8 +888,6 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                                                   ),
                                                 );
                                               } catch (e) {
-                                                print('❌ Logout error: $e');
-
                                                 if (Get.isDialogOpen ?? false) {
                                                   Get.back();
                                                 }
@@ -820,29 +1006,11 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   @override
   Widget build(BuildContext context) {
     // ✅ LOADING STATE (Same as HandymanProfilePage)
-    if (_isLoadingData) {
+    if (_isLoading) {
+      // if (true) {
       return Scaffold(
         backgroundColor: AppColors.backgroundColor(context),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.primaryColor,
-                ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Loading profile...',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textPrimaryColor(context),
-                ),
-              ),
-            ],
-          ),
-        ),
+        body: _buildSkeletonLoading(),
       );
     }
 
@@ -853,10 +1021,10 @@ class _ClientProfilePageState extends State<ClientProfilePage>
           // Premium App Bar - Same style as Handyman
           SliverAppBar(
             expandedHeight: 320,
-            pinned: true,
+            pinned: false,
             elevation: 0,
             backgroundColor: AppColors.cardColor(context),
-            automaticallyImplyLeading: false,
+            automaticallyImplyLeading: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -864,15 +1032,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                   // Gradient Background
                   Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primaryColor,
-                          AppColors.secondaryColor,
-                          AppColors.accentColor,
-                        ],
-                      ),
+                      gradient: AppColors.subtleHeaderGradientThemed(context),
                     ),
                   ),
 
@@ -891,44 +1051,86 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                           SizedBox(height: 40),
 
                           // Profile Picture
-                          Hero(
-                            tag: 'profile_picture',
-                            child: Container(
-                              padding: EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white,
-                                    Colors.white.withValues(alpha: 0.5),
-                                  ],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.2),
-                                    blurRadius: 20,
-                                    offset: Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              // ✅ SHOW PROFILE PICTURE IF EXISTS
-                              child: _profilePicture.isNotEmpty
-                                  ? CircleAvatar(
-                                      radius: 50,
-                                      backgroundImage: NetworkImage(
-                                        _profilePicture,
+                          GestureDetector(
+                            onTap: _pickAndUploadProfilePicture,
+                            child: Stack(
+                              children: [
+                                Hero(
+                                  tag: 'profile_picture',
+                                  child: Container(
+                                    padding: EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white,
+                                          Colors.white.withValues(alpha: 0.5),
+                                        ],
                                       ),
-                                      backgroundColor: Colors.white,
-                                    )
-                                  : CircleAvatar(
-                                      radius: 50,
-                                      backgroundColor: Colors.white,
-                                      child: Icon(
-                                        Icons.person,
-                                        size: 50,
-                                        color: AppColors.primaryColor,
-                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                          blurRadius: 20,
+                                          offset: Offset(0, 10),
+                                        ),
+                                      ],
                                     ),
+                                    // ✅ SHOW PROFILE PICTURE IF EXISTS
+                                    child: _profilePicture.isNotEmpty
+                                        ? CircleAvatar(
+                                            radius: 50,
+                                            backgroundImage: NetworkImage(
+                                              _profilePicture,
+                                            ),
+                                            backgroundColor: Colors.white,
+                                          )
+                                        : CircleAvatar(
+                                            radius: 50,
+                                            backgroundColor: Colors.white,
+                                            child: Icon(
+                                              Icons.person,
+                                              size: 50,
+                                              color: AppColors.primaryColor,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.primaryColor,
+                                          AppColors.secondaryColor,
+                                        ],
+                                      ),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.primaryColor
+                                              .withValues(alpha: 0.5),
+                                          blurRadius: 10,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
 
@@ -973,7 +1175,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                                 Icon(Icons.star, color: Colors.white, size: 16),
                                 SizedBox(width: 6),
                                 Text(
-                                  'Premium Client',
+                                  _clientType,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -1020,22 +1222,47 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                     ),
                   ),
 
-                  // Edit Button
+                  // Action Button
                   Positioned(
                     top: 50,
                     right: 16,
-                    child: _buildGlassButton(
-                      icon: _isEditing ? Icons.check : Icons.edit,
-                      onPressed: () {
-                        setState(() {
-                          if (_isEditing && _formKey.currentState!.validate()) {
-                            _formKey.currentState!.save();
-                            // ✅ SAVE TO FIREBASE
-                            _saveProfileToFirebase();
-                          }
-                          _isEditing = !_isEditing;
-                        });
-                      },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildGlassButton(
+                          icon: Icons.settings,
+                          onPressed: () => AppRoutes.toClientSettings(),
+                        ),
+                        SizedBox(width: 12),
+                        if (_isAdmin) ...[
+                          _buildGlassButton(
+                            icon: Icons.admin_panel_settings,
+                            onPressed: () => AppRoutes.toAdmin(),
+                          ),
+                          SizedBox(width: 12),
+                        ],
+
+                        _buildGlassButton(
+                          icon: _isEditing ? Icons.check : Icons.edit,
+                          onPressed: () async {
+                            // ← Make async
+                            if (_isEditing) {
+                              // ✅ User clicked CHECK button - save changes
+                              await _saveProfileToFirebase();
+
+                              // ✅ Exit edit mode only if save was successful
+                              setState(() {
+                                _isEditing = false;
+                              });
+                            } else {
+                              // ✅ User clicked EDIT button - enter edit mode
+                              setState(() {
+                                _isEditing = true;
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1063,22 +1290,32 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                       Row(
                         children: [
                           Expanded(
-                            child: _buildPremiumStatCard(
-                              icon: FontAwesomeIcons.check,
-                              value: '$_totalBookings',
-                              label: 'Bookings',
-                              gradient: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
-                              iconColor: Color(0xFF2196F3),
+                            child: GestureDetector(
+                              onTap: () => AppRoutes.toClientBookings(),
+                              child: _buildPremiumStatCard(
+                                icon: FontAwesomeIcons.check,
+                                value: '$_totalBookings',
+                                label: 'Bookings',
+                                gradient: AppColors.blueStateCardGradientThemed(
+                                  context,
+                                ),
+                                iconColor: Color(0xFF2196F3),
+                              ),
                             ),
                           ),
                           SizedBox(width: 12),
                           Expanded(
-                            child: _buildPremiumStatCard(
-                              icon: FontAwesomeIcons.heart,
-                              value: '$_favoriteHandymen',
-                              label: 'Favorites',
-                              gradient: [Color(0xFFFCE4EC), Color(0xFFF8BBD0)],
-                              iconColor: Color(0xFFE91E63),
+                            child: GestureDetector(
+                              onTap: () => AppRoutes.toFavorites(),
+                              child: _buildPremiumStatCard(
+                                icon: FontAwesomeIcons.heart,
+                                value: '$_favoriteHandymen',
+                                label: 'Favorites',
+                                gradient: AppColors.roseStateCardGradientThemed(
+                                  context,
+                                ),
+                                iconColor: Color(0xFFE91E63),
+                              ),
                             ),
                           ),
                         ],
@@ -1133,11 +1370,27 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               onSaved: (value) => _address = value!,
                             ),
                             _buildDivider(),
-                            _buildEditableField(
+                            // _buildEditableField(
+                            //   label: 'City',
+                            //   icon: Icons.location_city_outlined,
+                            //   initialValue: _city,
+                            //   onSaved: (value) => _city = value!,
+                            // ),
+                            GenericDropdown<String>(
+                              items: GlobalVariables.cities.skip(1).toList(),
+                              value: selectedCity,
                               label: 'City',
-                              icon: Icons.location_city_outlined,
-                              initialValue: _city,
-                              onSaved: (value) => _city = value!,
+                              hint: 'Select your city',
+                              itemLabel: (city) => city,
+                              onChanged: (value) =>
+                                  setState(() => selectedCity = value),
+                              validator: (value) =>
+                                  value == null ? 'Please select a city' : null,
+                              prefixIcon: Icons.location_city_outlined,
+                              primaryColor: AppColors.primaryColor,
+                              secondaryColor: AppColors.secondaryColor,
+                              isEditing:
+                                  _isEditing, // Set to false for preview mode
                             ),
                           ],
                         ),
@@ -1152,9 +1405,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                           Icons.star_outline,
                         ),
                         SizedBox(height: 16),
-                        ..._favoriteServices
-                            .map((service) => _buildServiceCard(service))
-                            .toList(),
+                        ..._favoriteServices.map(
+                          (service) => _buildServiceCard(service),
+                        ),
                         SizedBox(height: 24),
                       ],
 
@@ -1168,24 +1421,20 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                           message: 'No bookings yet',
                         )
                       else
-                        ..._recentBookings
-                            .map(
-                              (booking) => Padding(
-                                padding: EdgeInsets.only(bottom: 12),
-                                child: _buildBookingCard(
-                                  handymanName: booking['handymanName'],
-                                  service: booking['service'],
-                                  date: booking['date'],
-                                  status: booking['status'],
-                                  statusColor: _getStatusColor(
-                                    booking['status'],
-                                  ),
-                                  price: booking['price'],
-                                  rating: booking['rating'],
-                                ),
-                              ),
-                            )
-                            .toList(),
+                        ..._recentBookings.map(
+                          (booking) => Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: _buildBookingCard(
+                              handymanName: booking['handymanName'],
+                              service: booking['service'],
+                              date: booking['date'],
+                              status: booking['status'],
+                              statusColor: _getStatusColor(booking['status']),
+                              // price: booking['price'],
+                              rating: booking['rating'],
+                            ),
+                          ),
+                        ),
 
                       SizedBox(height: 24),
 
@@ -1204,12 +1453,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               label: 'Invoices',
                               color: Color(0xFF2196F3),
                               onTap: () {
-                                // TODO: Navigate to invoices
-                                Get.snackbar(
-                                  'Coming Soon',
-                                  'Invoices feature is under development',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                );
+                                AppRoutes.toInvoices();
+                                // Get.snackbar(
+                                //   'Coming Soon',
+                                //   'Invoices feature is under development',
+                                //   snackPosition: SnackPosition.BOTTOM,
+                                // );
                               },
                             ),
                           ),
@@ -1220,12 +1469,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               label: 'Notifications',
                               color: Color(0xFFFF9800),
                               onTap: () {
-                                // TODO: Navigate to notifications
-                                Get.snackbar(
-                                  'Coming Soon',
-                                  'Notifications feature is under development',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                );
+                                AppRoutes.toClientNotifications();
+                                // Get.snackbar(
+                                //   'Coming Soon',
+                                //   'Notifications feature is under development',
+                                //   snackPosition: SnackPosition.BOTTOM,
+                                // );
                               },
                             ),
                           ),
@@ -1240,12 +1489,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               label: 'Payments',
                               color: Color(0xFF4CAF50),
                               onTap: () {
-                                // TODO: Navigate to payments
-                                Get.snackbar(
-                                  'Coming Soon',
-                                  'Payments feature is under development',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                );
+                                AppRoutes.toPayments();
+                                // Get.snackbar(
+                                //   'Coming Soon',
+                                //   'Payments feature is under development',
+                                //   snackPosition: SnackPosition.BOTTOM,
+                                // );
                               },
                             ),
                           ),
@@ -1256,12 +1505,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               label: 'Settings',
                               color: Color(0xFF757575),
                               onTap: () {
-                                // TODO: Navigate to settings
-                                Get.snackbar(
-                                  'Coming Soon',
-                                  'Settings feature is under development',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                );
+                                AppRoutes.toClientSettings();
+                                // Get.snackbar(
+                                //   'Coming Soon',
+                                //   'Settings feature is under development',
+                                //   snackPosition: SnackPosition.BOTTOM,
+                                // );
                               },
                             ),
                           ),
@@ -1287,16 +1536,163 @@ class _ClientProfilePageState extends State<ClientProfilePage>
 
   // ✅ UI WIDGETS (Same as HandymanProfilePage)
 
+  Widget _buildSkeletonLoading() {
+    return CustomScrollView(
+      slivers: [
+        // Skeleton AppBar
+        SliverAppBar(
+          expandedHeight: 320,
+          pinned: true,
+          elevation: 0,
+          backgroundColor: AppColors.backgroundColor(context),
+          automaticallyImplyLeading: false,
+          flexibleSpace: FlexibleSpaceBar(
+            background: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.subtleHeaderGradientThemed(context),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(height: 40),
+                        // Skeleton Avatar
+                        Container(
+                          width: 108,
+                          height: 108,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        // Skeleton Name
+                        Container(
+                          width: 150,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        // Skeleton Badge
+                        Container(
+                          width: 120,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Skeleton Content
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Skeleton Profile Completion Card
+                _buildSkeletonCard(height: 120),
+                SizedBox(height: 20),
+
+                // Skeleton Stats
+                Row(
+                  children: [
+                    Expanded(child: _buildSkeletonCard(height: 140)),
+                    SizedBox(width: 12),
+                    Expanded(child: _buildSkeletonCard(height: 140)),
+                  ],
+                ),
+                SizedBox(height: 24),
+
+                // Skeleton Section 1
+                _buildSkeletonSectionHeader(),
+                SizedBox(height: 16),
+                _buildSkeletonCard(height: 180),
+                SizedBox(height: 24),
+
+                // Skeleton Section 2
+                _buildSkeletonSectionHeader(),
+                SizedBox(height: 16),
+                _buildSkeletonCard(height: 120),
+                SizedBox(height: 24),
+
+                // Skeleton Bookings
+                _buildSkeletonSectionHeader(),
+                SizedBox(height: 16),
+                _buildSkeletonCard(height: 100),
+                SizedBox(height: 12),
+                _buildSkeletonCard(height: 100),
+                SizedBox(height: 12),
+                _buildSkeletonCard(height: 100),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonCard({required double height}) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceColor(context),
+        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonSectionHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        SizedBox(width: 12),
+        Container(
+          width: 150,
+          height: 20,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildGlassButton({
     required IconData icon,
     required VoidCallback onPressed,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.25),
+        color: AppColors.surfaceColor(context).withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.3),
+          color: AppColors.iconColor(context).withValues(alpha: 0.2),
           width: 1,
         ),
         boxShadow: [
@@ -1315,7 +1711,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             color: Colors.transparent,
             child: InkWell(
               onTap: onPressed,
-              child: Container(
+              child: SizedBox(
                 width: 44,
                 height: 44,
                 child: Icon(icon, color: Colors.white, size: 20),
@@ -1421,7 +1817,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
         boxShadow: [
           BoxShadow(
             color: iconColor.withValues(alpha: 0.15),
-            blurRadius: 15,
+            blurRadius: 10,
             offset: Offset(0, 6),
           ),
         ],
@@ -1431,7 +1827,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
           Container(
             padding: EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: iconColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
@@ -1449,7 +1845,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: AppColors.textPrimaryColor(context),
             ),
           ),
           SizedBox(height: 4),
@@ -1457,7 +1853,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[700],
+              color: AppColors.textSecondaryColor(context),
               fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
@@ -1568,9 +1964,15 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                   style: TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     labelText: label,
-                    labelStyle: TextStyle(fontSize: 13),
+                    labelStyle: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondaryColor(context),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppColors.borderColor(context),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -1691,7 +2093,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
     required String date,
     required String status,
     required Color statusColor,
-    required String price,
+    // required String price,
     double? rating,
   }) {
     return Container(
@@ -1790,14 +2192,14 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                     ),
                   ),
                   SizedBox(height: 8),
-                  Text(
-                    price,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: AppColors.primaryColor,
-                    ),
-                  ),
+                  // Text(
+                  //   price,
+                  //   style: TextStyle(
+                  //     fontWeight: FontWeight.bold,
+                  //     fontSize: 16,
+                  //     color: AppColors.primaryColor,
+                  //   ),
+                  // ),
                 ],
               ),
             ],
@@ -1958,7 +2360,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
       case 'cancelled':
         return Colors.red;
       default:
-        return Colors.grey;
+        return const Color.fromARGB(255, 155, 169, 0);
     }
   }
 }

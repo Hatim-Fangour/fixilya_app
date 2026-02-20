@@ -5,8 +5,7 @@ class GlassButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const GlassButton({Key? key, required this.icon, required this.onPressed})
-    : super(key: key);
+  const GlassButton({super.key, required this.icon, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +33,7 @@ class GlassButton extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               onTap: onPressed,
-              child: Container(
+              child: SizedBox(
                 width: 44,
                 height: 44,
                 child: Icon(icon, color: Colors.white, size: 20),

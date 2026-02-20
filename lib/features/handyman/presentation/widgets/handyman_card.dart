@@ -1,7 +1,11 @@
+import 'package:fixilya_app/core/config/app_config.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
+import 'package:fixilya_app/features/client/presentation/widgets/booking_dialog.dart';
 import 'package:fixilya_app/features/handyman/presentation/widgets/info_chip.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 // Handyman Card Widget
@@ -10,16 +14,47 @@ class HandymanCard extends StatelessWidget {
 
   const HandymanCard({super.key, required this.job});
 
+  void print(job) {
+    print('--- Handyman Card Data ---');
+    print('Name: ${job['name']}');
+    print('Category: ${job['category']}');
+    print('Rating: ${job['rating']}');
+    print('Reviews: ${job['reviews']}');
+    print('City: ${job['city']}');
+    print('Completed Jobs: ${job['completedJobs']}');
+    print('Experience: ${job['experience']}');
+    print('Phone: ${job['phone']}');
+    print('Verified: ${job['verified']}');
+    print('Image URL: ${job['image']}');
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
+    await launchUrl(launchUri);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 1,
-      shadowColor: AppColors.black.withValues(alpha: 0.05),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return Container(
+      // surfaceTintColor: AppColors.surfaceColor(context),
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceColor(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.inputFillColor(context)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowColor(context),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+
       child: InkWell(
         onTap: () => AppRoutes.toHandymanDetails(job),
-     
+
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: EdgeInsets.all(12),
@@ -36,15 +71,38 @@ class HandymanCard extends StatelessWidget {
                     height: 60,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      image: DecorationImage(
-                        image: NetworkImage(job['image']),
-                        fit: BoxFit.cover,
+                      border: Border.all(
+                        color: AppColors.borderColor(context),
+                        width: 1,
                       ),
-                      border: Border.all(color: AppColors.grey200, width: 1),
+                      gradient:
+                          job['profilePicture'] == null ||
+                              job['profilePicture'].isEmpty
+                          ? LinearGradient(
+                              colors: [
+                                AppColors.primaryColor,
+                                AppColors.secondaryColor,
+                              ],
+                            )
+                          : null,
                     ),
+                    child:
+                        job['profilePicture'] != null &&
+                            job['profilePicture'].isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              job['profilePicture'],
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return _buildAvatarFallback(job['name']);
+                              },
+                            ),
+                          )
+                        : _buildAvatarFallback(job['name']),
                   ),
 
-                  SizedBox(width: 10),
+                  SizedBox(width: 15),
 
                   // Name and Category
                   Expanded(
@@ -59,12 +117,13 @@ class HandymanCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: AppColors.black,
+                                  color: AppColors.textPrimaryColor(context),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            // Verified = Approved
                             if (job['verified'])
                               Container(
                                 padding: EdgeInsets.symmetric(
@@ -76,7 +135,14 @@ class HandymanCard extends StatelessWidget {
                                     alpha: 0.1,
                                   ),
                                   borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: AppColors.infoColor(
+                                      context,
+                                    ).withValues(alpha: 0.2),
+                                    width: 1,
+                                  ),
                                 ),
+
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -127,7 +193,7 @@ class HandymanCard extends StatelessWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
-                                color: AppColors.black,
+                                color: AppColors.textPrimaryColor(context),
                               ),
                             ),
                             SizedBox(width: 3),
@@ -135,7 +201,7 @@ class HandymanCard extends StatelessWidget {
                               '(${job['reviews']})',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.grey600,
+                                color: AppColors.textSecondaryColor(context),
                               ),
                             ),
                           ],
@@ -146,91 +212,52 @@ class HandymanCard extends StatelessWidget {
                 ],
               ),
 
-              SizedBox(height: 10),
+              SizedBox(height: 20),
 
-              // Info Row
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  InfoChip(
-                    icon: FontAwesomeIcons.locationDot,
-                    label: job['city'],
-                    color: AppColors.cityColor,
-                  ),
-                  InfoChip(
-                    icon: FontAwesomeIcons.briefcase,
-                    label: '${job['completedJobs']} jobs',
-                    color: AppColors.jobs,
-                  ),
-                  InfoChip(
-                    icon: FontAwesomeIcons.clock,
-                    label: job['experience'],
-                    color: AppColors.experience,
-                  ),
-                ],
-              ),
-
-              SizedBox(height: 10),
-
-              // Price and Actions Row
+              // Info Row & Action Buttons
               Row(
                 children: [
-                  // Price
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primaryColor.withValues(alpha: 0.1),
-                          AppColors.secondaryColor.withValues(alpha: 0.1),
-                        ],
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      InfoChip(
+                        icon: FontAwesomeIcons.locationDot,
+                        label: job['city'],
+                        color: AppColors.cityColor,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.primaryColor.withValues(alpha: 0.2),
-                        width: 1,
+                      InfoChip(
+                        icon: FontAwesomeIcons.briefcase,
+                        label: '${job['completedJobs']} jobs',
+                        color: AppColors.jobs,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FaIcon(
-                          FontAwesomeIcons.moneyBill,
-                          size: 12,
-                          color: AppColors.primaryColor,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          '${job['hourlyRate']} DH/h',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
+                      InfoChip(
+                        icon: FontAwesomeIcons.clock,
+                        label: job['experience'],
+                        color: AppColors.experience,
+                      ),
+                    ],
                   ),
 
                   Spacer(),
-
-                  // Call Button
+                  // Phone/ Book Handyman
                   Container(
                     height: 34,
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: AppColors.primaryColor,
+                        color: AppColors.infoColor(context),
                         width: 1,
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: IconButton(
                       onPressed: () {
+                        _makePhoneCall(AppConfig.supportPhone);
+                        // _makePhoneCall(job['phone']);
                         print('Calling ${job['phone']}');
                       },
                       icon: FaIcon(FontAwesomeIcons.phone, size: 14),
-                      color: AppColors.primaryColor,
+                      color: AppColors.infoColor(context),
                       padding: EdgeInsets.symmetric(horizontal: 12),
                       constraints: BoxConstraints(),
                     ),
@@ -238,14 +265,13 @@ class HandymanCard extends StatelessWidget {
 
                   SizedBox(width: 6),
 
-                  // Book Button
                   Container(
                     height: 34,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          AppColors.primaryColor,
-                          AppColors.secondaryColor,
+                          AppColors.mainButtonColor(context),
+                          AppColors.infoColor(context),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(8),
@@ -259,7 +285,7 @@ class HandymanCard extends StatelessWidget {
                     ),
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        print('Booking ${job['name']}');
+                        showBookingDialog(context, job);
                       },
                       icon: FaIcon(FontAwesomeIcons.calendarCheck, size: 12),
                       label: Text(
@@ -284,8 +310,73 @@ class HandymanCard extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // SizedBox(height: 10),
+
+              // // Price and Actions Row
+              // Row(
+              //   children: [
+              //     // Price
+              //     // Container(
+              //     //   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              //     //   decoration: BoxDecoration(
+              //     //     gradient: LinearGradient(
+              //     //       colors: [
+              //     //         AppColors.primaryColor.withValues(alpha: 0.1),
+              //     //         AppColors.secondaryColor.withValues(alpha: 0.1),
+              //     //       ],
+              //     //     ),
+              //     //     borderRadius: BorderRadius.circular(8),
+              //     //     border: Border.all(
+              //     //       color: AppColors.primaryColor.withValues(alpha: 0.2),
+              //     //       width: 1,
+              //     //     ),
+              //     //   ),
+              //     //   child: Row(
+              //     //     mainAxisSize: MainAxisSize.min,
+              //     //     children: [
+              //     //       FaIcon(
+              //     //         FontAwesomeIcons.moneyBill,
+              //     //         size: 12,
+              //     //         color: AppColors.primaryColor,
+              //     //       ),
+              //     //       SizedBox(width: 5),
+              //     //       // Text(
+              //     //       //   '${job['hourlyRate']} DH/h',
+              //     //       //   style: TextStyle(
+              //     //       //     fontSize: 13,
+              //     //       //     fontWeight: FontWeight.bold,
+              //     //       //     color: AppColors.primaryColor,
+              //     //       //   ),
+              //     //       // ),
+              //     //     ],
+              //     //   ),
+              //     // ),
+              //     Spacer(),
+
+              //     // Call Button
+
+              //     // Book Button
+              //   ],
+              // ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String name) {
+    // Get first letter of name
+    String initial = name.isNotEmpty ? name[0].toUpperCase() : 'H';
+
+    return Center(
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
         ),
       ),
     );

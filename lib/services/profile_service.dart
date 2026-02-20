@@ -96,22 +96,28 @@ class ProfileService {
 
       if (userType == 'handyman') {
         if (data['city']?.toString().isEmpty ?? true) missingFields.add('City');
-        if (data['experience']?.toString().isEmpty ?? true)
+        if (data['experience']?.toString().isEmpty ?? true) {
           missingFields.add('Experience');
+        }
         if ((data['hourlyRate'] ?? 0) == 0) missingFields.add('Hourly Rate');
         if (data['bio']?.toString().isEmpty ?? true) missingFields.add('Bio');
-        if ((data['skills'] as List?)?.isEmpty ?? true)
+        if ((data['skills'] as List?)?.isEmpty ?? true) {
           missingFields.add('Skills');
-        if (data['profilePicture']?.toString().isEmpty ?? true)
+        }
+        if (data['profilePicture']?.toString().isEmpty ?? true) {
           missingFields.add('Profile Picture');
-        if ((data['workImages'] as List?)?.isEmpty ?? true)
+        }
+        if ((data['workImages'] as List?)?.isEmpty ?? true) {
           missingFields.add('Work Photos');
+        }
       } else {
         if (data['city']?.toString().isEmpty ?? true) missingFields.add('City');
-        if (data['address']?.toString().isEmpty ?? true)
+        if (data['address']?.toString().isEmpty ?? true) {
           missingFields.add('Address');
-        if (data['profilePicture']?.toString().isEmpty ?? true)
+        }
+        if (data['profilePicture']?.toString().isEmpty ?? true) {
           missingFields.add('Profile Picture');
+        }
       }
 
       final percentage = await calculateProfileCompletion(

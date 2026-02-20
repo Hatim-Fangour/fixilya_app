@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 
 class UserTypeSelectionScreen extends StatefulWidget {
-  const UserTypeSelectionScreen({Key? key}) : super(key: key);
+  const UserTypeSelectionScreen({super.key});
 
   @override
   State<UserTypeSelectionScreen> createState() =>
@@ -71,15 +71,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryColor,
-              AppColors.secondaryColor,
-              AppColors.accentColor,
-            ],
-          ),
+          gradient: AppColors.appHeaderGradientThemed(context),
         ),
         child: SafeArea(
           child: Column(

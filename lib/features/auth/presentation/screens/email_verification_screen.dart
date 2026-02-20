@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   static const String routeName = '/email-verification';
@@ -17,13 +18,13 @@ class EmailVerificationScreen extends StatefulWidget {
   final String fullName;
 
   const EmailVerificationScreen({
-    Key? key,
+    super.key,
     required this.userType,
     required this.userName,
     required this.email,
     required this.phone,
     required this.fullName,
-  }) : super(key: key);
+  });
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -49,6 +50,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   @override
   void initState() {
     super.initState();
+
+    if (widget.fullName.isEmpty || widget.phone.isEmpty) {
+      _fetchUserData();
+    }
 
     // Initialize animations
     _iconController = AnimationController(
@@ -81,6 +86,26 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     Future.delayed(Duration(milliseconds: 300), () {
       _contentController.forward();
     });
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        // You might want to store this in state variables if needed
+        print('✅ Fetched user data: ${data?['fullName']}');
+      }
+    } catch (e) {
+      print('⚠️ Could not fetch user data: $e');
+    }
   }
 
   @override
@@ -149,7 +174,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(gradient: AppColors.primaryGradient),
+        decoration: BoxDecoration(
+          gradient: AppColors.appHeaderGradientThemed(context),
+        ),
         child: SafeArea(
           child: _isVerifying ? _buildVerifying() : _buildContent(),
         ),
@@ -163,11 +190,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         margin: EdgeInsets.symmetric(horizontal: 32),
         padding: EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.cardColor(context),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
+              color: AppColors.shadowColor(context).withValues(alpha: 0.2),
               blurRadius: 30,
               offset: Offset(0, 15),
             ),
@@ -201,7 +228,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
             SizedBox(height: 12),
             Text(
               'This will only take a moment',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryColor(context),
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -224,11 +254,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
             child: Container(
               padding: EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.cardColor(context),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
+                    color: AppColors.shadowColor(
+                      context,
+                    ).withValues(alpha: 0.15),
                     blurRadius: 30,
                     offset: Offset(0, 15),
                   ),
@@ -257,7 +289,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppColors.textPrimaryColor(context),
                 letterSpacing: 0.5,
               ),
               textAlign: TextAlign.center,
@@ -272,10 +304,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: AppColors.borderColor(context).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: AppColors.borderColor(context).withValues(alpha: 0.3),
                   width: 1.5,
                 ),
               ),
@@ -300,7 +332,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                       widget.email,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white,
+                        color: AppColors.textPrimaryColor(context),
                         fontWeight: FontWeight.w600,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -321,11 +353,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
               child: Container(
                 padding: EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.cardColor(context),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
+                      color: AppColors.shadowColor(
+                        context,
+                      ).withValues(alpha: 0.1),
                       blurRadius: 30,
                       offset: Offset(0, 15),
                     ),
@@ -375,7 +409,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
+                                    color: AppColors.textPrimaryColor(context),
                                   ),
                                 ),
                                 SizedBox(height: 4),
@@ -383,7 +417,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                                   'We\'ve sent a verification link to your email. Click it, then return and tap below.',
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.textSecondary,
+                                    color: AppColors.textSecondaryColor(
+                                      context,
+                                    ),
                                     height: 1.3,
                                   ),
                                 ),
@@ -501,10 +537,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
             child: Container(
               padding: EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: AppColors.cardColor(context).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: AppColors.borderColor(context).withValues(alpha: 0.3),
                   width: 1.5,
                 ),
               ),
@@ -591,8 +627,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
           'Please sign in again',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.error,
-          colorText: Colors.white,
-          icon: Icon(Icons.error_outline, color: Colors.white),
+          colorText: AppColors.white,
+          icon: Icon(Icons.error_outline, color: AppColors.white),
           margin: EdgeInsets.all(16),
           borderRadius: 12,
         );
@@ -642,8 +678,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         e.toString(),
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.error,
-        colorText: Colors.white,
-        icon: Icon(Icons.error_outline, color: Colors.white),
+        colorText: AppColors.white,
+        icon: Icon(Icons.error_outline, color: AppColors.white),
         margin: EdgeInsets.all(16),
         borderRadius: 12,
         duration: Duration(seconds: 4),

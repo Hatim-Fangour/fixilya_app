@@ -12,6 +12,9 @@
 /// - Privacy settings
 /// - Data caching
 /// - Offline support
+// ignore_for_file: depend_on_referenced_packages, avoid_print
+
+library;
 
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -427,15 +430,6 @@ class UserController extends GetxController {
   Future<void> _saveUserPreferences() async {
     try {
       // TODO: Save to local storage (SharedPreferences or GetStorage)
-      final prefs = {
-        'notificationsEnabled': _notificationsEnabled.value,
-        'emailNotifications': _emailNotifications.value,
-        'pushNotifications': _pushNotifications.value,
-        'smsNotifications': _smsNotifications.value,
-        'profilePublic': _profilePublic.value,
-        'showEmail': _showEmail.value,
-        'showPhone': _showPhone.value,
-      };
 
       // await GetStorage().write('userPreferences', prefs);
     } catch (e) {

@@ -1,6 +1,7 @@
 /// Data Models - Booking Model
 /// Comprehensive booking/appointment data model
 ///
+library;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum BookingStatus {

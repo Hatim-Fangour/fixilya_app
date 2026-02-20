@@ -50,7 +50,7 @@ extension DateTimeExtensions on DateTime {
 
 /// List Extensions
 extension ListExtensions<T> on List<T> {
-  bool get isNullOrEmpty => this == null || isEmpty;
+  bool get isNullOrEmpty => isEmpty;
 
   List<T> get unique => toSet().toList();
 

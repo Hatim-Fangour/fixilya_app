@@ -7,12 +7,12 @@ class SectionHeader extends StatelessWidget {
   final Color secondaryColor;
 
   const SectionHeader({
-    Key? key,
+    super.key,
     required this.title,
     required this.icon,
     required this.primaryColor,
     required this.secondaryColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

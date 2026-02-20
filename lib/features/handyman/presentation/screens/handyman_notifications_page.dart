@@ -8,7 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HandymanNotificationsPage extends StatefulWidget {
-  const HandymanNotificationsPage({Key? key}) : super(key: key);
+  const HandymanNotificationsPage({super.key});
 
   @override
   State<HandymanNotificationsPage> createState() =>
@@ -87,7 +87,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: AppColors.backgroundColor(context),
       body: CustomScrollView(
         slivers: [
           // ✅ UPDATED: Premium App Bar with Real-time Unread Count
@@ -114,15 +114,11 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
           expandedHeight: 160,
           pinned: true,
           elevation: 0,
-          backgroundColor: primaryColor,
+          backgroundColor: AppColors.pagesAppBar(context),
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [primaryColor, secondaryColor, accentColor],
-                ),
+                gradient: AppColors.appHeaderGradientThemed(context),
               ),
               child: SafeArea(
                 child: Padding(
@@ -136,11 +132,11 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                           Container(
                             padding: EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: AppColors.white,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
+                                  color: AppColors.black.withValues(alpha: 0.1),
                                   blurRadius: 10,
                                   offset: Offset(0, 4),
                                 ),
@@ -148,7 +144,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                             ),
                             child: FaIcon(
                               FontAwesomeIcons.bell,
-                              color: primaryColor,
+                              color: AppColors.primaryColor,
                               size: 24,
                             ),
                           ),
@@ -160,7 +156,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                                 Text(
                                   'Notifications',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.white,
                                     fontSize: 28,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.5,
@@ -169,7 +165,9 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                                 Text(
                                   '$unreadCount unread',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: AppColors.white.withValues(
+                                      alpha: 0.9,
+                                    ),
                                     fontSize: 14,
                                   ),
                                 ),
@@ -185,7 +183,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
             ),
           ),
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.arrow_back, color: AppColors.white),
             onPressed: () => Navigator.pop(context),
           ),
           actions: [
@@ -197,7 +195,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('All notifications marked as read'),
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppColors.green,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -208,7 +206,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                 child: Text(
                   'Mark all read',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.white,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -237,7 +235,9 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                   child: Padding(
                     padding: EdgeInsets.all(40),
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primaryColor,
+                      ),
                     ),
                   ),
                 );
@@ -293,15 +293,19 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isRead ? Colors.white : color.withOpacity(0.05),
+        color: isRead
+            ? AppColors.surfaceColor(context)
+            : color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isRead ? Colors.grey.shade200 : color.withOpacity(0.3),
+          color: isRead
+              ? AppColors.borderColor(context)
+              : color.withValues(alpha: 0.3),
           width: isRead ? 1 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.black.withValues(alpha: .04),
             blurRadius: 10,
             offset: Offset(0, 4),
           ),
@@ -333,7 +337,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                     Container(
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: FaIcon(
@@ -355,7 +359,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
+                                    color: AppColors.textPrimaryColor(context),
                                   ),
                                 ),
                               ),
@@ -364,7 +368,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                                   width: 10,
                                   height: 10,
                                   decoration: BoxDecoration(
-                                    color: color,
+                                    color: color.withValues(alpha: 0.8),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -375,7 +379,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                             notification['message'] ?? '',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: AppColors.textSecondaryColor(context),
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -386,14 +390,14 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                               Icon(
                                 Icons.access_time,
                                 size: 14,
-                                color: Colors.grey[500],
+                                color: AppColors.textDisabledColor(context),
                               ),
                               SizedBox(width: 4),
                               Text(
                                 timeAgo,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey[500],
+                                  color: AppColors.textDisabledColor(context),
                                 ),
                               ),
                             ],
@@ -407,7 +411,7 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                 // Show action buttons for new requests
                 if (type == 'new_request' && bookingId != null) ...[
                   SizedBox(height: 12),
-                  Divider(height: 1, color: Colors.grey.shade200),
+                  Divider(height: 1, color: AppColors.dividerColor(context)),
                   SizedBox(height: 12),
                   _buildNotificationActions(notification),
                 ],
@@ -482,7 +486,10 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
                 ),
                 child: Text(
                   'Accept',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
@@ -771,7 +778,9 @@ class _HandymanNotificationsPageState extends State<HandymanNotificationsPage>
             style: TextStyle(
               fontSize: 14,
               fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal,
-              color: isHighlight ? Colors.green : Colors.black87,
+              color: isHighlight
+                  ? Colors.green
+                  : AppColors.textPrimaryColor(context),
             ),
           ),
         ),

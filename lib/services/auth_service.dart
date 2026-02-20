@@ -1,19 +1,28 @@
 // lib/core/services/auth_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'dart:io';
+import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   // ✅ ADD THIS: Auth state stream for GetX binding
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // ✅ ADD THIS: Current user stream (alternative)
   Stream<User?> get userChanges => _auth.userChanges();
+
+  // Auth state stream for GetX binding
+  // Stream<User?> get authStateChanges => _auth.authStateChanges();
+  // Stream<User?> get userChanges => _auth.userChanges();
+
+  String _capitalizeFirstLetter(String text) {
+    if (text.isEmpty) return text;
+    return "${text[0].toUpperCase()}${text.substring(1)}";
+  }
 
   // ✅ UPDATED: Don't create Firestore docs on signup
   Future<Map<String, dynamic>> signUpWithEmail({
@@ -32,10 +41,10 @@ class AuthService {
       print('Phone: $phone');
       print('User Type: $userType');
 
-      // ✅ FIX 1: Check network connectivity first
+      // ✅ Check network connectivity first
       try {
         final result = await InternetAddress.lookup('google.com').timeout(
-          Duration(seconds: 5),
+          const Duration(seconds: 5),
           onTimeout: () => throw Exception('Network timeout'),
         );
 
@@ -54,12 +63,14 @@ class AuthService {
         };
       }
 
-      // ✅ FIX 2: Validate email format before calling Firebase
-      if (!email.contains('@') || !email.contains('.')) {
+      final cleanEmail = email.trim().toLowerCase();
+
+      // ✅ Validate email format before calling Firebase
+      if (!cleanEmail.contains('@') || !cleanEmail.contains('.')) {
         return {'success': false, 'message': 'Invalid email format'};
       }
 
-      // ✅ FIX 3: Validate password length
+      // ✅ Validate password length
       if (password.length < 6) {
         return {
           'success': false,
@@ -69,14 +80,13 @@ class AuthService {
 
       print('🔐 Creating Firebase Auth user...');
 
-      // ✅ FIX 4: Add timeout to createUser
+      // Create the use in Authentication section
+
+      // ✅ Add timeout to createUser
       final UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(
-            email: email.trim(),
-            password: password,
-          )
+          .createUserWithEmailAndPassword(email: cleanEmail, password: password)
           .timeout(
-            Duration(seconds: 15),
+            const Duration(seconds: 15),
             onTimeout: () {
               throw FirebaseAuthException(
                 code: 'timeout',
@@ -97,11 +107,11 @@ class AuthService {
 
       print('✅ Firebase Auth user created: ${user.uid}');
 
-      // ✅ FIX 5: Send verification email with better error handling
+      // ✅ Send verification email (don’t fail signup if it fails)
       try {
         print('📧 Sending verification email...');
         await user.sendEmailVerification().timeout(
-          Duration(seconds: 10),
+          const Duration(seconds: 10),
           onTimeout: () {
             print('⏱️ Email verification timeout - continuing anyway');
             return;
@@ -110,62 +120,71 @@ class AuthService {
         print('✅ Verification email sent');
       } catch (e) {
         print('⚠️ Failed to send verification email: $e');
-        // Don't fail signup if email sending fails
       }
 
-      // ✅ FIX 6: Save to Firestore with timeout
+      // ✅ Save to Firestore with timeout
       print('💾 Saving user data to Firestore...');
-
+      final collection = userType.toLowerCase() == 'handyman'
+          ? 'handymen'
+          : 'clients';
       try {
-        // Save to users collection
+        // Create the use in Users Collection
         await _firestore
             .collection('users')
             .doc(user.uid)
             .set({
-              // 'fullName': fullName.trim(),
-              'email': email.trim().toLowerCase(),
-              // 'phone': phone.trim(),
+              'email': cleanEmail,
               'userType': userType.toLowerCase(),
-              // 'profileCompleted': false,
               'createdAt': FieldValue.serverTimestamp(),
-              // 'updatedAt': FieldValue.serverTimestamp(),
             })
             .timeout(
-              Duration(seconds: 10),
-              onTimeout: () {
-                throw Exception('Firestore save timeout');
-              },
+              const Duration(seconds: 10),
+              onTimeout: () => throw Exception('Firestore save timeout'),
             );
 
         print('✅ Users collection updated');
 
-        // Create empty document in handymen/clients collection
-        final collection = userType.toLowerCase() == 'handyman'
-            ? 'handymen'
-            : 'clients';
+        // final collection = userType.toLowerCase() == 'handyman'
+        //     ? 'handymen'
+        //     : 'clients';
 
+        // Create the use in handymen/client Collection
         await _firestore
             .collection(collection)
             .doc(user.uid)
             .set({
-              'approved': false, // For handymen
+              'approved': false,
               'suspended': false,
               'createdAt': FieldValue.serverTimestamp(),
             })
             .timeout(
-              Duration(seconds: 10),
-              onTimeout: () {
-                throw Exception('Firestore save timeout');
-              },
+              const Duration(seconds: 10),
+              onTimeout: () => throw Exception('Firestore save timeout'),
             );
 
         print('✅ $collection collection initialized');
       } catch (e) {
         print('❌ Firestore save failed: $e');
 
-        // If Firestore fails, delete the auth user to maintain consistency
+        // Rollback auth user if Firestore fails
         try {
           await user.delete();
+          await _firestore
+              .collection(collection)
+              .doc(user.uid)
+              .delete()
+              .timeout(
+                const Duration(seconds: 30),
+                onTimeout: () => throw Exception('Firestore delete timeout'),
+              );
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .delete()
+              .timeout(
+                const Duration(seconds: 30),
+                onTimeout: () => throw Exception('Firestore delete timeout'),
+              );
           print('🗑️ Auth user deleted due to Firestore failure');
         } catch (deleteError) {
           print('⚠️ Could not delete auth user: $deleteError');
@@ -193,39 +212,21 @@ class AuthService {
       print('Message: ${e.message}');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      String errorMessage;
-
-      switch (e.code) {
-        case 'email-already-in-use':
-          errorMessage =
-              'This email is already registered. Please sign in instead.';
-          break;
-        case 'invalid-email':
-          errorMessage = 'Invalid email address format.';
-          break;
-        case 'operation-not-allowed':
-          errorMessage =
-              'Email/password accounts are not enabled. Please contact support.';
-          break;
-        case 'weak-password':
-          errorMessage =
-              'Password is too weak. Please use at least 6 characters.';
-          break;
-        case 'network-request-failed':
-          errorMessage =
-              'Network error. Please check your internet connection.';
-          break;
-        case 'timeout':
-          errorMessage = 'Request timed out. Please try again.';
-          break;
-        case 'UNKNOWN':
-        case 'internal-error':
-          errorMessage =
-              'Internal error (Code: 26). Please try again in a moment.\n\nTroubleshooting:\n• Check your internet connection\n• Make sure you\'re using a valid email\n• Try again in a few minutes';
-          break;
-        default:
-          errorMessage = 'Signup failed: ${e.message ?? "Unknown error"}';
-      }
+      final errorMessage = switch (e.code) {
+        'email-already-in-use' =>
+          'This email is already registered. Please sign in instead.',
+        'invalid-email' => 'Invalid email address format.',
+        'operation-not-allowed' =>
+          'Email/password accounts are not enabled. Please contact support.',
+        'weak-password' =>
+          'Password is too weak. Please use at least 6 characters.',
+        'network-request-failed' =>
+          'Network error. Please check your internet connection.',
+        'timeout' => 'Request timed out. Please try again.',
+        'UNKNOWN' || 'internal-error' =>
+          'Internal error (Code: 26). Please try again in a moment.',
+        _ => 'Signup failed: ${e.message ?? "Unknown error"}',
+      };
 
       return {'success': false, 'message': errorMessage, 'errorCode': e.code};
     } catch (e, stackTrace) {
@@ -332,32 +333,31 @@ class AuthService {
         return {'success': false, 'message': 'No user found'};
       }
 
-      if (!user.emailVerified) {
-        return {'success': false, 'message': 'Email not verified'};
-      }
-
-      // Create users document
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        // 'email': user.email,
-        // 'fullName': fullName,
-        // 'phone': phone,
-        'userType': userType,
-        'emailVerified': true,
-        'isActive': false,
-        'suspended': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
       // Create type-specific document
       final typeCollection = userType == 'handyman' ? 'handymen' : 'clients';
 
+      // Continuer fill in the handymen/clients document after Email verification
       await _firestore.collection(typeCollection).doc(user.uid).set({
         'uid': user.uid,
         'email': user.email,
         'fullName': fullName,
         'phone': phone,
         'profileCompleted': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!user.emailVerified) {
+        return {'success': false, 'message': 'Email not verified'};
+      }
+
+      // Continuer fill in the Users document after Email verification
+      // Create users document
+      await _firestore.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'userType': userType,
+        'emailVerified': true,
+        'isActive': false,
+        'suspended': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -391,11 +391,22 @@ class AuthService {
 
         // ✅ Check if email is verified
         if (refreshedUser == null || !refreshedUser.emailVerified) {
-          await _auth.signOut();
+          // await _auth.signOut();
+          // ✅ Get user data to pass to verification screen
+          final userDoc = await _firestore
+              .collection('users')
+              .doc(refreshedUser!.uid)
+              .get();
+
+          final userData = userDoc.data();
+          final userType = userData?['userType'] ?? 'client';
           return {
             'success': false,
-            'message': 'Please verify your email before signing in.',
             'needsVerification': true,
+            'message': 'Please verify your email before signing in.',
+            'userType': userType,
+            'email': refreshedUser.email,
+            'userId': refreshedUser.uid,
           };
         }
 
@@ -432,93 +443,405 @@ class AuthService {
   // Sign in with Google
   Future<Map<String, dynamic>> signInWithGoogle(String userType) async {
     try {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🔐 STARTING GOOGLE SIGN-IN');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('User Type: $userType');
+
+      // ✅ Step 1: Check network connectivity
+      try {
+        final result = await InternetAddress.lookup('google.com').timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => throw Exception('Network timeout'),
+        );
+
+        if (result.isEmpty || result[0].rawAddress.isEmpty) {
+          return {
+            'success': false,
+            'message': 'No internet connection. Please check your network.',
+          };
+        }
+        print('✅ Network connection verified');
+      } catch (e) {
+        print('❌ Network check failed: $e');
+        return {
+          'success': false,
+          'message': 'No internet connection. Please try again.',
+        };
+      }
+
+      // ✅ Step 2: Validate user type
+      if (userType.toLowerCase() != 'handyman' &&
+          userType.toLowerCase() != 'client') {
+        return {
+          'success': false,
+          'message': 'Invalid user type. Please select handyman or client.',
+        };
+      }
+
+      final normalizedUserType = userType.toLowerCase();
+
+      // ✅ Step 3: Sign out from any previous Google session
+      try {
+        await _googleSignIn.signOut();
+        print('🔄 Cleared previous Google session');
+      } catch (e) {
+        print('⚠️ No previous session to clear: $e');
+      }
+
+      // ✅ Step 4: Trigger Google Sign-In flow
+      print('📱 Launching Google Sign-In...');
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        return {'success': false, 'message': 'Sign in cancelled'};
+        print('⚠️ User cancelled Google Sign-In');
+        return {
+          'success': false,
+          'message': 'Sign in cancelled',
+          'cancelled': true,
+        };
       }
 
+      print('✅ Google account selected: ${googleUser.email}');
+
+      // ✅ Step 5: Get authentication tokens
+      print('🔑 Getting Google authentication tokens...');
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        print('❌ Failed to get Google tokens');
+        return {
+          'success': false,
+          'message': 'Failed to authenticate with Google. Please try again.',
+        };
+      }
+
+      print('✅ Google tokens obtained');
+
+      // ✅ Step 6: Create Firebase credential
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
+      // ✅ Step 7: Sign in to Firebase with timeout
+      print('🔐 Signing in to Firebase...');
+      final UserCredential userCredential = await _auth
+          .signInWithCredential(credential)
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              throw FirebaseAuthException(
+                code: 'timeout',
+                message: 'Firebase sign-in timed out. Please try again.',
+              );
+            },
+          );
 
       final User? user = userCredential.user;
 
-      if (user != null) {
-        // Check if user document exists
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        String finalUserType; // ✅ Declare variable to store user type
-        Map<String, dynamic>? userData;
-
-        if (!userDoc.exists) {
-          // ✅ New user - create documents
-          finalUserType = userType; // Use the selected userType
-
-          userData = {
-            'uid': user.uid,
-            'email': user.email,
-            'fullName': user.displayName ?? '',
-            'phone': '',
-            'userType': finalUserType,
-            'createdAt': FieldValue.serverTimestamp(),
-            'emailVerified': true, // Google emails are pre-verified
-            'isActive': true,
-          };
-
-          await _firestore.collection('users').doc(user.uid).set(userData);
-
-          final typeCollection = finalUserType == 'handyman'
-              ? 'handymen'
-              : 'clients';
-          await _firestore.collection(typeCollection).doc(user.uid).set({
-            'uid': user.uid,
-            'email': user.email,
-            'fullName': user.displayName ?? '',
-            'phone': '',
-            'createdAt': FieldValue.serverTimestamp(),
-            'profileCompleted': false,
-          });
-        } else {
-          // ✅ Existing user - get userType from Firestore
-          userData = userDoc.data();
-          finalUserType = userData?['userType'] ?? 'client';
-        }
-
+      if (user == null) {
+        print('❌ Firebase sign-in returned null user');
+        await _googleSignIn.signOut();
         return {
-          'success': true,
-          'message': 'Google sign in successful',
-          'userType': finalUserType, // ✅ Return the correct userType
-          'isNewUser': !userDoc.exists, // ✅ Optional: indicate if new user
-          'userData': userData,
+          'success': false,
+          'message': 'Failed to sign in. Please try again.',
         };
       }
 
-      return {'success': false, 'message': 'Google sign in failed'};
-    } catch (e) {
-      print('❌ Google sign in error: $e');
-      return {'success': false, 'message': e.toString()};
+      print('✅ Firebase authentication successful');
+      print('User ID: ${user.uid}');
+      print('Email: ${user.email}');
+      print('Email Verified: ${user.emailVerified}');
+
+      // ✅ Step 8: Check if this is a new user or existing user
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw Exception('Firestore read timeout'),
+          );
+
+      final bool isNewUser = !userDoc.exists;
+      String finalUserType;
+      Map<String, dynamic>? userData;
+
+      if (isNewUser) {
+        // ✅ NEW USER - Create Firestore documents
+        print('👤 New user detected - Creating Firestore documents...');
+        finalUserType = normalizedUserType;
+
+        // ✅ Create users collection document
+        userData = {
+          'uid': user.uid,
+          'email': user.email,
+          'fullName': user.displayName ?? 'Google User',
+          'phone': user.phoneNumber ?? '',
+          'userType': finalUserType,
+          'emailVerified': true, // Google emails are pre-verified
+          'isActive': true,
+          'suspended': false,
+          'authProvider': 'google',
+          'photoURL': user.photoURL,
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastLogin': FieldValue.serverTimestamp(),
+        };
+
+        try {
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .set(userData)
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw Exception('Firestore write timeout'),
+              );
+
+          print('✅ Users collection document created');
+
+          // ✅ Create type-specific collection document
+          final typeCollection = finalUserType == 'handyman'
+              ? 'handymen'
+              : 'clients';
+
+          final typeSpecificData = {
+            'uid': user.uid,
+            'email': user.email,
+            'fullName': user.displayName ?? 'Google User',
+            'phone': user.phoneNumber ?? '',
+            'profilePicture': user.photoURL ?? '',
+            'profileCompleted': false,
+            'approved': finalUserType == 'handyman'
+                ? false
+                : true, // Handymen need approval
+            'suspended': false,
+            'authProvider': 'google',
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(),
+          };
+
+          // Add handyman-specific fields
+          if (finalUserType == 'handyman') {
+            typeSpecificData.addAll({
+              'isAvailable': false,
+              'skills': [],
+              'rating': 0.0,
+              'totalReviews': 0,
+              'completedJobs': 0,
+            });
+          }
+
+          await _firestore
+              .collection(typeCollection)
+              .doc(user.uid)
+              .set(typeSpecificData)
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw Exception('Firestore write timeout'),
+              );
+
+          print('✅ $typeCollection collection document created');
+        } catch (e) {
+          print('❌ Failed to create Firestore documents: $e');
+
+          // ✅ Rollback: Delete Firebase Auth user if Firestore fails
+          try {
+            await user.delete();
+            await _googleSignIn.signOut();
+            print('🗑️ Rolled back Firebase Auth user');
+          } catch (deleteError) {
+            print('⚠️ Could not rollback Firebase Auth: $deleteError');
+          }
+
+          return {
+            'success': false,
+            'message': 'Failed to create user profile. Please try again.',
+          };
+        }
+      } else {
+        // ✅ EXISTING USER - Verify user type matches
+        print('👤 Existing user detected - Verifying user type...');
+        userData = userDoc.data();
+        final existingUserType = userData?['userType'] as String?;
+
+        if (existingUserType == null) {
+          print(
+            '⚠️ User type not found in Firestore - Setting to: $normalizedUserType',
+          );
+          finalUserType = normalizedUserType;
+
+          // Update missing userType
+          await _firestore.collection('users').doc(user.uid).update({
+            'userType': finalUserType,
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+        } else {
+          finalUserType = existingUserType.toLowerCase();
+          print('✅ Existing user type: $finalUserType');
+
+          // ✅ Security: Verify user type consistency
+          if (finalUserType != normalizedUserType) {
+            print('⚠️ User type mismatch!');
+            print('Expected: $normalizedUserType');
+            print('Found: $finalUserType');
+
+            await _auth.signOut();
+            await _googleSignIn.signOut();
+
+            return {
+              'success': false,
+              'message':
+                  'This account is registered as a ${_capitalizeFirstLetter(finalUserType)}. '
+                  'Please sign in as ${_capitalizeFirstLetter(finalUserType)} instead.',
+              'wrongUserType': true,
+              'expectedUserType': finalUserType,
+            };
+          }
+
+          // ✅ Update last login timestamp
+          await _firestore.collection('users').doc(user.uid).update({
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // ✅ Check if account is suspended
+        final isSuspended = userData?['suspended'] ?? false;
+        if (isSuspended) {
+          await _auth.signOut();
+          await _googleSignIn.signOut();
+
+          return {
+            'success': false,
+            'message':
+                'Your account has been suspended. Please contact support.',
+            'suspended': true,
+          };
+        }
+
+        // ✅ For handymen, check approval status
+        if (finalUserType == 'handyman') {
+          final typeDoc = await _firestore
+              .collection('handymen')
+              .doc(user.uid)
+              .get();
+
+          final approved = typeDoc.data()?['approved'] ?? false;
+
+          if (!approved) {
+            return {
+              'success': true,
+              'message': 'Account pending approval',
+              'userType': finalUserType,
+              'isNewUser': false,
+              'pendingApproval': true,
+              'userData': userData,
+            };
+          }
+        }
+      }
+
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('✅ GOOGLE SIGN-IN SUCCESSFUL');
+      print('User Type: $finalUserType');
+      print('Is New User: $isNewUser');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      return {
+        'success': true,
+        'message': isNewUser ? 'Account created successfully' : 'Welcome back!',
+        'userType': finalUserType,
+        'isNewUser': isNewUser,
+        'userData': userData,
+      };
+    } on FirebaseAuthException catch (e) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('❌ FIREBASE AUTH ERROR');
+      print('Code: ${e.code}');
+      print('Message: ${e.message}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // ✅ Clean up on error
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      final errorMessage = switch (e.code) {
+        'account-exists-with-different-credential' =>
+          'An account already exists with the same email but different sign-in method.',
+        'invalid-credential' => 'Invalid Google credentials. Please try again.',
+        'operation-not-allowed' =>
+          'Google sign-in is not enabled. Please contact support.',
+        'user-disabled' =>
+          'This account has been disabled. Please contact support.',
+        'user-not-found' => 'No account found. Please sign up first.',
+        'wrong-password' => 'Invalid credentials. Please try again.',
+        'timeout' => 'Sign-in timed out. Please try again.',
+        'network-request-failed' =>
+          'Network error. Please check your connection.',
+        _ => 'Google sign-in failed: ${e.message ?? "Unknown error"}',
+      };
+
+      return {'success': false, 'message': errorMessage, 'errorCode': e.code};
+    } catch (e, stackTrace) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('❌ UNEXPECTED ERROR');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // ✅ Clean up on error
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      return {
+        'success': false,
+        'message': 'An unexpected error occurred. Please try again.',
+      };
     }
   }
 
   // Sign out
   Future<void> signOut() async {
     try {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🚪 STARTING LOGOUT PROCESS');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // ✅ Step 1: Reset theme to system mode
+      try {
+        final themeController = Get.find<ThemeController>();
+        await themeController.resetThemeToSystem();
+        print('✅ Theme reset to system mode');
+      } catch (e) {
+        print('⚠️ ThemeController not found or reset failed: $e');
+      }
+
+      // ✅ Step 2: Clear local storage (optional - keeps some settings)
+      // If you want to clear ALL local data:
+      // final localStorage = LocalStorageService();
+      // await localStorage.clearAll();
+
+      // ✅ Step 3: Sign out from Firebase Auth
       await _auth.signOut();
-      await _googleSignIn.signOut();
+      print('✅ Signed out from Firebase Auth');
+
+      // ✅ Step 4: Sign out from Google
+      try {
+        await _googleSignIn.signOut();
+        print('✅ Signed out from Google');
+      } catch (e) {
+        print('⚠️ Google sign out failed (may not be signed in): $e');
+      }
+
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('✅ LOGOUT COMPLETED SUCCESSFULLY');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (e) {
-      print('❌ Error signing out: $e');
+      print('❌ Error during sign out: $e');
       // Still throw to let caller handle
       rethrow;
     }
@@ -727,5 +1050,12 @@ class AuthService {
     } catch (e) {
       throw Exception('Failed to change password: $e');
     }
+  }
+}
+
+extension StringCapitalizationExtension on String {
+  String capitalizeFirst() {
+    if (isEmpty) return this;
+    return "${this[0].toUpperCase()}${substring(1)}";
   }
 }

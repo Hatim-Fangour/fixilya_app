@@ -1,3 +1,4 @@
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_icons.dart';
 import 'package:fixilya_app/data/notifiers.dart';
 import 'package:flutter/material.dart';
@@ -60,10 +61,10 @@ class _NavBarWidgetState extends State<NavBarWidget>
       builder: (BuildContext context, dynamic selectedPage, Widget? child) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surfaceColor(context),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: AppColors.shadowColor(context),
                 blurRadius: 20,
                 offset: Offset(0, -4),
               ),

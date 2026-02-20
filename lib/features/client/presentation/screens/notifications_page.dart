@@ -1,130 +1,187 @@
 import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/features/handyman/presentation/screens/bookings_service.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
-class NotificationsPage extends StatefulWidget {
-  const NotificationsPage({Key? key}) : super(key: key);
+class ClientNotificationsPage extends StatefulWidget {
+  const ClientNotificationsPage({super.key});
 
   @override
-  State<NotificationsPage> createState() => _NotificationsPageState();
+  State<ClientNotificationsPage> createState() =>
+      _ClientNotificationsPageState();
 }
 
-class _NotificationsPageState extends State<NotificationsPage> {
-  static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
-  static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
-  static const accentColor = Color.fromRGBO(147, 167, 255, 1);
-
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'title': 'Booking Confirmed',
-      'message':
-          'Your booking with Ahmed El Fassi has been confirmed for Jan 20, 2026',
-      'time': '2 hours ago',
-      'type': 'booking',
-      'read': false,
-    },
-    {
-      'title': 'Payment Successful',
-      'message': 'Payment of 450 DH has been processed successfully',
-      'time': '5 hours ago',
-      'type': 'payment',
-      'read': false,
-    },
-    {
-      'title': 'New Message',
-      'message': 'You have a new message from Youssef Bennani',
-      'time': '1 day ago',
-      'type': 'message',
-      'read': true,
-    },
-    {
-      'title': 'Service Completed',
-      'message':
-          'Your electrical work service has been completed. Please rate your experience.',
-      'time': '2 days ago',
-      'type': 'service',
-      'read': true,
-    },
-  ];
-
-  IconData _getNotificationIcon(String type) {
-    switch (type) {
-      case 'booking':
-        return FontAwesomeIcons.calendarCheck;
-      case 'payment':
-        return FontAwesomeIcons.creditCard;
-      case 'message':
-        return FontAwesomeIcons.message;
-      case 'service':
-        return FontAwesomeIcons.checkCircle;
-      default:
-        return FontAwesomeIcons.bell;
-    }
-  }
-
-  Color _getNotificationColor(String type) {
-    switch (type) {
-      case 'booking':
-        return AppColors.blue;
-      case 'payment':
-        return AppColors.green;
-      case 'message':
-        return AppColors.orange;
-      case 'service':
-        return AppColors.purple;
-      default:
-        return AppColors.primaryColor;
-    }
-  }
+class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
+  final BookingsService _bookingsService = BookingsService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: AppColors.backgroundColor(context),
       appBar: AppBar(
-        title: Text('Notifications'),
-        backgroundColor: primaryColor,
+        title: Text(
+          'Notifications',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+        ),
+        iconTheme: IconThemeData(color: AppColors.white),
+        backgroundColor: AppColors.pagesAppBar(context),
+        foregroundColor: AppColors.white,
         elevation: 0,
         actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                for (var notification in _notifications) {
-                  notification['read'] = true;
-                }
-              });
+          // Mark all as read button
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _bookingsService.streamNotifications(),
+            builder: (context, snapshot) {
+              final hasUnread =
+                  snapshot.hasData &&
+                  snapshot.data!.any((notif) => notif['read'] == false);
+
+              if (!hasUnread) return SizedBox.shrink();
+
+              return TextButton(
+                onPressed: () async {
+                  await _bookingsService.markAllNotificationsAsRead();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('All notifications marked as read'),
+                        backgroundColor: AppColors.success,
+                        behavior: SnackBarBehavior.floating,
+                        margin: EdgeInsets.all(16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: Text(
+                  'Mark all read',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
             },
-            child: Text('Mark all read', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: EdgeInsets.all(16),
-        itemCount: _notifications.length,
-        itemBuilder: (context, index) {
-          final notification = _notifications[index];
-          return _buildNotificationCard(notification);
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _bookingsService.streamNotifications(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryColor,
+                ),
+              ),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 60, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text(
+                    'Error loading notifications',
+                    style: TextStyle(fontSize: 16, color: Colors.red),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final notifications = snapshot.data ?? [];
+
+          if (notifications.isEmpty) {
+            return _buildEmptyState();
+          }
+
+          return ListView.builder(
+            padding: EdgeInsets.all(16),
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notification = notifications[index];
+              return _buildNotificationCard(notification);
+            },
+          );
         },
       ),
     );
   }
 
   Widget _buildNotificationCard(Map<String, dynamic> notification) {
-    final isRead = notification['read'];
-    final type = notification['type'];
-    final color = _getNotificationColor(type);
+    final isRead = notification['read'] == true;
+    final type = notification['type'] as String? ?? 'info';
+    final timestamp = notification['createdAt'] as Timestamp?;
+
+    // Get time ago
+    String timeAgo = 'Just now';
+    if (timestamp != null) {
+      timeAgo = timeago.format(timestamp.toDate());
+    }
+
+    // Get icon and color based on notification type
+    IconData icon;
+    Color iconColor;
+
+    switch (type) {
+      case 'booking_accepted':
+        icon = Icons.check_circle;
+        iconColor = Colors.green;
+        break;
+      case 'booking_declined':
+        icon = Icons.cancel;
+        iconColor = Colors.red;
+        break;
+      case 'booking_created':
+        icon = Icons.schedule;
+        iconColor = Colors.blue;
+        break;
+      case 'job_started':
+        icon = Icons.play_circle;
+        iconColor = Colors.orange;
+        break;
+      case 'job_completed':
+        icon = Icons.check_circle_outline;
+        iconColor = Colors.green;
+        break;
+      case 'booking_cancelled':
+        icon = Icons.close;
+        iconColor = Colors.grey;
+        break;
+      case 'new_request':
+        icon = Icons.notification_important;
+        iconColor = Colors.orange;
+        break;
+      default:
+        icon = Icons.notifications;
+        iconColor = AppColors.primaryColor;
+    }
 
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isRead ? Colors.white : primaryColor.withOpacity(0.05),
+        color: isRead
+            ? AppColors.cardColor(context)
+            : AppColors.primaryColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isRead ? Colors.grey.shade200 : primaryColor.withOpacity(0.2),
+          color: isRead
+              ? AppColors.borderColor(context)
+              : AppColors.primaryColor.withValues(alpha: 0.2),
+          width: isRead ? 1 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: Offset(0, 4),
           ),
@@ -134,61 +191,86 @@ class _NotificationsPageState extends State<NotificationsPage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            setState(() {
-              notification['read'] = true;
-            });
+          onTap: () async {
+            // Mark as read
+            if (!isRead) {
+              await _bookingsService.markNotificationAsRead(notification['id']);
+            }
+
+            // Navigate to booking if applicable
+            final bookingId = notification['bookingId'] as String?;
+            if (bookingId != null) {
+              // TODO: Navigate to booking details
+              print('Navigate to booking: $bookingId');
+            }
           },
           child: Padding(
             padding: EdgeInsets.all(16),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Icon
                 Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
+                    color: iconColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: FaIcon(
-                    _getNotificationIcon(type),
-                    color: color,
-                    size: 20,
-                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
                 ),
+
                 SizedBox(width: 14),
+
+                // Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Title
                       Text(
-                        notification['title'],
+                        notification['title'] ?? 'Notification',
                         style: TextStyle(
                           fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          fontWeight: isRead
+                              ? FontWeight.w600
+                              : FontWeight.bold,
+                          color: AppColors.textPrimaryColor(context),
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        notification['message'],
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+
                       SizedBox(height: 6),
+
+                      // Message
                       Text(
-                        notification['time'],
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        notification['message'] ?? '',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondaryColor(context),
+                          height: 1.4,
+                        ),
+                      ),
+
+                      SizedBox(height: 8),
+
+                      // Time
+                      Text(
+                        timeAgo,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondaryColor(context),
+                        ),
                       ),
                     ],
                   ),
                 ),
+
+                // Unread indicator
                 if (!isRead)
                   Container(
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: primaryColor,
+                      color: AppColors.primaryColor,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -196,6 +278,32 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.notifications_none, size: 80, color: Colors.grey[300]),
+          SizedBox(height: 20),
+          Text(
+            'No notifications yet',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'You\'ll see updates about your bookings here',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

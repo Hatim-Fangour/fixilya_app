@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
+import 'package:fixilya_app/services/admin_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
@@ -9,9 +11,10 @@ import 'package:fixilya_app/services/firebase_image_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
+import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
 
 class HandymanProfileSetup extends StatefulWidget {
-  const HandymanProfileSetup({Key? key}) : super(key: key);
+  const HandymanProfileSetup({super.key});
 
   @override
   State<HandymanProfileSetup> createState() => _HandymanProfileSetupState();
@@ -20,17 +23,9 @@ class HandymanProfileSetup extends StatefulWidget {
 class _HandymanProfileSetupState extends State<HandymanProfileSetup>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  // final _authService = AuthService();
-
-  // ✅ Use Cloudinary instead of Firebase Storage
-  // final _cloudinaryService = CloudinaryService(
-  //   cloudName: 'dbz3wtlbj', // ← Replace with your Cloudinary cloud name
-  //   uploadPreset: 'fixilya_app', // ← Replace with your upload preset
-  // );
-  // final _firebaseImageService = FirebaseImageService();
 
   // Controllers
-  final _cityController = TextEditingController();
+  final _cityController = GenericDropdownController<String>();
   final _experienceController = TextEditingController();
   final _hourlyRateController = TextEditingController();
   final _bioController = TextEditingController();
@@ -38,9 +33,11 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   // State
   File? _profileImage;
   List<File> _workImages = [];
-  List<Map<String, dynamic>> _selectedSkills = [];
+  final List<Map<String, dynamic>> _selectedSkills = [];
   bool _isLoading = false;
   int _currentStep = 0;
+  static const double _maxStepWidth = 500.0;
+  static const double _stepHeight = 550.0;
 
   // ✅ ADD THESE TWO LINES:
   String? _uploadedProfileUrl;
@@ -53,22 +50,6 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Premium Colors - Using AppColors
-  static const primaryColor = AppColors.primaryColor;
-  static const secondaryColor = AppColors.secondaryColor;
-  static const accentColor = AppColors.accentColor;
-
-  // Available skills with icons
-  final List<Map<String, dynamic>> _availableSkills = [
-    {'name': 'Plumbing', 'icon': FontAwesomeIcons.faucet},
-    {'name': 'Electricity', 'icon': FontAwesomeIcons.bolt},
-    {'name': 'Carpentry', 'icon': FontAwesomeIcons.hammer},
-    {'name': 'Painting', 'icon': FontAwesomeIcons.paintRoller},
-    {'name': 'Cleaning', 'icon': FontAwesomeIcons.broom},
-    {'name': 'Gardening', 'icon': FontAwesomeIcons.seedling},
-    {'name': 'AC Repair', 'icon': FontAwesomeIcons.snowflake},
-    {'name': 'Appliance Repair', 'icon': FontAwesomeIcons.plug},
-  ];
   late final CloudinaryService _cloudinaryService;
   late final FirebaseImageService _firebaseImageService;
   @override
@@ -105,10 +86,6 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         );
     _fadeController.forward();
     _slideController.forward();
-
-    // Get services from GetX
-    // _cloudinaryService = Get.find<CloudinaryService>();
-    // _firebaseImageService = Get.find<FirebaseImageService>();
   }
 
   @override
@@ -155,7 +132,6 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   }
 
   // ✅ Save Profile with Cloudinary Native Transformations
-
   Future<void> _saveProfile() async {
     print('🚀 Starting profile save...');
 
@@ -166,9 +142,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         return;
       }
     } else if (_currentStep > 1) {
-      if (_cityController.text.trim().isEmpty ||
-          _experienceController.text.trim().isEmpty ||
-          _hourlyRateController.text.trim().isEmpty) {
+      if (_cityController.isEmpty ||
+          _experienceController.text.trim().isEmpty) {
         Get.snackbar(
           'Incomplete Information',
           'Please complete basic information',
@@ -219,7 +194,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primaryColor,
+                        ),
                       ),
                       SizedBox(height: 20),
                       Text(
@@ -266,7 +243,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.primaryColor,
+                        ),
                       ),
                       SizedBox(height: 20),
                       Text(
@@ -374,9 +353,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       // ✅ Save to Firestore
       updateProgress('Saving profile data...');
-
+      print('📋 _selectedSkills Data: $_selectedSkills');
       final profileData = {
-        'city': _cityController.text.trim(),
+        'city': _cityController.value ?? '',
         'experience': _experienceController.text.trim(),
         'hourlyRate': double.tryParse(_hourlyRateController.text) ?? 0,
         'bio': _bioController.text.trim(),
@@ -407,6 +386,38 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       print('✅ Users collection updated');
 
+      // ✅ NOTIFY ADMIN (only for new users)
+      final adminNotificationService = AdminNotificationService();
+      final isNewUser = await adminNotificationService.isFirstTimeUser(
+        user.uid,
+      );
+
+      if (isNewUser) {
+        print('📧 Sending admin notification for new handyman...');
+
+        // Get user data for notification
+        final userData = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (userData.exists) {
+          final userInfo = userData.data()!;
+
+          await adminNotificationService.notifyAdminOfNewHandyman(
+            handymanId: user.uid,
+            handymanName: userInfo['fullName'] ?? 'Unknown',
+            email: userInfo['email'] ?? user.email ?? '',
+            phone: userInfo['phone'] ?? '',
+            profileCompleted: true, // Completed profile
+          );
+
+          print('✅ Admin notified of new handyman (profile completed)');
+        }
+      } else {
+        print('ℹ️ Existing user updating profile - no admin notification');
+      }
+
       // ✅ Close dialog
       if (Get.isDialogOpen ?? false) {
         Get.back();
@@ -417,7 +428,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
       // ✅ Show success
       Get.snackbar(
         'Success!',
-        'Your profile has been created with optimized images',
+        isNewUser
+            ? 'Your profile is under review. You\'ll be notified once approved.'
+            : 'Your profile has been updated successfully.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
@@ -432,6 +445,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         '   Profile Picture: ${profilePictureUrl != null ? "✅ Face-detected" : "❌ None"}',
       );
       print('   Work Images: ${workImageUrls.length} optimized images');
+      print(
+        '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
+      );
 
       await Future.delayed(Duration(milliseconds: 500));
       AppRoutes.toHome();
@@ -467,12 +483,16 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         children: [
           // Gradient Background Header
           Container(
-            height: 280,
+            height: 100,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [primaryColor, secondaryColor, accentColor],
+                colors: [
+                  AppColors.primaryColor,
+                  AppColors.secondaryColor,
+                  AppColors.accentColor,
+                ],
               ),
             ),
             child: CustomPaint(painter: CirclePatternPainter()),
@@ -491,7 +511,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                       ? Center(
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              primaryColor,
+                              AppColors.primaryColor,
                             ),
                           ),
                         )
@@ -530,26 +550,26 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                   ],
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 3),
               Text(
                 'Let clients know about your expertise',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: AppColors.textSecondaryColor(context),
                   fontSize: 15,
                   letterSpacing: 0.3,
                 ),
               ),
 
-              SizedBox(height: 24),
+              SizedBox(height: 20),
 
               // Progress Indicator
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: AppColors.primaryColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -558,7 +578,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     Text(
                       'Step ${_currentStep + 1} of 4',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.primaryColor,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -566,7 +586,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     Text(
                       '${((_currentStep + 1) / 4 * 100).toInt()}%',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.primaryColor,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -575,16 +595,20 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                 ),
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 10),
 
               // Linear Progress
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: LinearProgressIndicator(
                   value: (_currentStep + 1) / 4,
-                  minHeight: 8,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  minHeight: 3,
+                  backgroundColor: AppColors.cardColor(
+                    context,
+                  ).withValues(alpha: 0.2),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.primaryColor,
+                  ),
                 ),
               ),
             ],
@@ -646,136 +670,282 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   }
 
   Widget _buildProfilePictureStep() {
-    return Column(
-      key: ValueKey('profile_picture'),
-      children: [
-        // Step Icon
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [primaryColor, secondaryColor]),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.3),
-                blurRadius: 15,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(Icons.person, color: Colors.white, size: 32),
+    final bool canRemove = _profileImage != null || _uploadedProfileUrl != null;
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: _maxStepWidth,
+          // minHeight: _stepHeight, // ✅ Add min height
+          // maxHeight: _stepHeight, // ✅ Add max height
         ),
-
-        SizedBox(height: 20),
-
-        Text(
-          'Profile Picture',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimaryColor(context),
-          ),
-        ),
-
-        SizedBox(height: 8),
-
-        Text(
-          'Add a professional photo (Optional)',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondaryColor(context),
-          ),
-          textAlign: TextAlign.center,
-        ),
-
-        SizedBox(height: 32),
-
-        // Profile Image Picker
-        GestureDetector(
-          onTap: _pickProfileImage,
-          child: Container(
-            width: 180,
-            height: 180,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: _profileImage == null
-                  ? LinearGradient(
-                      colors: [
-                        primaryColor.withValues(alpha: 0.1),
-                        secondaryColor.withValues(alpha: 0.05),
-                      ],
-                    )
-                  : null,
-              border: Border.all(color: primaryColor, width: 4),
-              boxShadow: [
-                BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.2),
-                  blurRadius: 20,
-                  offset: Offset(0, 10),
+        child: Column(
+          key: ValueKey('profile_picture'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Step Icon
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
                 ),
-              ],
-            ),
-            child: _uploadedProfileUrl != null
-                ? ClipOval(
-                    child: Image.network(
-                      _uploadedProfileUrl!,
-                      fit: BoxFit.cover,
-                      width: 180,
-                      height: 180,
-                    ),
-                  )
-                : _profileImage != null
-                ? ClipOval(
-                    // ✅ Show local file as preview
-                    child: Image.file(
-                      _profileImage!,
-                      fit: BoxFit.cover,
-                      width: 180,
-                      height: 180,
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.camera_alt_rounded,
-                        size: 50,
-                        color: primaryColor,
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Add Photo',
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: Offset(0, 8),
                   ),
-          ),
-        ),
+                ],
+              ),
+              child: Icon(Icons.person, color: Colors.white, size: 60),
+            ),
 
-        // ✅ FIXED - Only one "Remove Photo" button
-        if (_profileImage != null) ...[
-          SizedBox(height: 20),
-          TextButton.icon(
-            onPressed: () => setState(() => _profileImage = null),
-            icon: Icon(Icons.delete_outline, color: Colors.red),
-            label: Text('Remove Photo', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ],
+            SizedBox(height: 20),
+
+            Text(
+              'Profile Picture',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryColor(context),
+              ),
+            ),
+
+            SizedBox(height: 8),
+
+            Text(
+              'Add a professional photo (Optional)',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryColor(context),
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            SizedBox(height: 32),
+
+            // Profile Image Picker
+            GestureDetector(
+              onTap: _pickProfileImage,
+              child: Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: _profileImage == null
+                      ? LinearGradient(
+                          colors: [
+                            AppColors.primaryColor.withValues(alpha: 0.1),
+                            AppColors.secondaryColor.withValues(alpha: 0.05),
+                          ],
+                        )
+                      : null,
+                  border: Border.all(color: AppColors.primaryColor, width: 4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryColor.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: _uploadedProfileUrl != null
+                    ? ClipOval(
+                        child: Image.network(
+                          _uploadedProfileUrl!,
+                          fit: BoxFit.cover,
+                          width: 180,
+                          height: 180,
+                        ),
+                      )
+                    : _profileImage != null
+                    ? ClipOval(
+                        // ✅ Show local file as preview
+                        child: Image.file(
+                          _profileImage!,
+                          fit: BoxFit.cover,
+                          width: 180,
+                          height: 180,
+                        ),
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.camera_alt_rounded,
+                            size: 50,
+                            color: AppColors.primaryColor,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'Add Photo',
+                            style: TextStyle(
+                              color: AppColors.primaryColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+
+            // ✅ FIXED - Only one "Remove Photo" button
+            SizedBox(height: 20),
+
+            TextButton.icon(
+              onPressed: canRemove
+                  ? () => setState(() => _profileImage = null)
+                  : null,
+              icon: Icon(
+                Icons.delete_outline,
+                color: canRemove
+                    ? Colors.red
+                    : Colors.grey.withValues(alpha: 0.5),
+              ),
+              label: Text(
+                'Remove Photo',
+                style: TextStyle(
+                  color: canRemove
+                      ? Colors.red
+                      : Colors.grey.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildBasicInfoStep() {
-    return Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        // Only this step gets minimal scrolling if keyboard appears
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: _maxStepWidth),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            // Only this step gets minimal scrolling if keyboard appears
+            child: Column(
+              key: ValueKey('basic_info'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Step Icon - Smaller
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primaryColor,
+                        AppColors.secondaryColor,
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryColor.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    color: Colors.white,
+                    size: 60,
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                Text(
+                  'Basic Information',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimaryColor(context),
+                  ),
+                ),
+
+                SizedBox(height: 8),
+
+                Text(
+                  'Tell us about yourself',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondaryColor(context),
+                  ),
+                ),
+
+                SizedBox(height: 34),
+
+                GenericDropdown<String>(
+                  controller: _cityController,
+                  items: GlobalVariables.cities.skip(1).toList(),
+                  label: 'City',
+                  hint: 'Select your city',
+                  itemLabel: (city) => city,
+                  onChanged: (value) => print('Selected: $value'),
+                  validator: (value) =>
+                      value == null ? 'Please select a city' : null,
+                ),
+
+                SizedBox(height: 15),
+
+                _buildUltraCompactTextField(
+                  controller: _experienceController,
+                  label: 'Experience (years)',
+                  icon: Icons.work,
+                  hint: 'Years',
+                  keyboardType: TextInputType.number,
+                  validator: (value) =>
+                      value?.isEmpty ?? true ? 'Required' : null,
+                ),
+
+                SizedBox(height: 15),
+
+                _buildUltraCompactTextField(
+                  controller: _hourlyRateController,
+                  label: 'Hourly Rate (DH)',
+                  icon: Icons.attach_money,
+                  hint: '150',
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'Required';
+                    if (double.tryParse(value!) == null) return 'Invalid';
+                    return null;
+                  },
+                ),
+
+                SizedBox(height: 15),
+
+                _buildUltraCompactTextField(
+                  controller: _bioController,
+                  label: 'Bio',
+                  icon: Icons.description,
+                  hint: 'Tell clients about your expertise...',
+                  maxLines: 2,
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'Required';
+                    if (value!.length < 20) return 'Min 20 chars';
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkillsStep() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: _maxStepWidth),
         child: Column(
-          key: ValueKey('basic_info'),
+          key: ValueKey('skills'),
           mainAxisSize: MainAxisSize.min,
           children: [
             // Step Icon - Smaller
@@ -783,90 +953,336 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
               padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [primaryColor, secondaryColor],
+                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: Offset(0, 5),
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
                   ),
                 ],
               ),
-              child: Icon(Icons.info_outline, color: Colors.white, size: 24),
+              child: Icon(Icons.build, color: Colors.white, size: 60),
             ),
 
-            SizedBox(height: 10),
+            SizedBox(height: 20),
 
             Text(
-              'Basic Information',
+              'Your Skills',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimaryColor(context),
               ),
             ),
 
-            SizedBox(height: 3),
+            SizedBox(height: 8),
 
             Text(
-              'Tell us about yourself',
+              'Select at least one skill',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 14,
                 color: AppColors.textSecondaryColor(context),
               ),
             ),
 
-            SizedBox(height: 14),
+            SizedBox(height: 10),
 
-            // Compact fields
-            _buildUltraCompactTextField(
-              controller: _cityController,
-              label: 'City',
-              icon: Icons.location_city,
-              hint: 'Casablanca',
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+            // Selected Count Badge - Compact
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryColor.withValues(alpha: 0.1),
+                    AppColors.secondaryColor.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    color: AppColors.primaryColor,
+                    size: 16,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '${_selectedSkills.length} skill${_selectedSkills.length == 1 ? '' : 's'}',
+                    style: TextStyle(
+                      color: AppColors.primaryColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             SizedBox(height: 10),
 
-            _buildUltraCompactTextField(
-              controller: _experienceController,
-              label: 'Experience',
-              icon: Icons.work,
-              hint: '5 years',
-              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+            // ✅ Skills Grid - Scrollable to prevent overflow
+            Expanded(
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: GlobalVariables.availableSkills
+                      .skip(1)
+                      .toList()
+                      .map((skill) {
+                        final isSelected = _selectedSkills.any(
+                          (s) => s['name'] == skill['name'],
+                        );
+                        return _buildCompactSkillChip(skill, isSelected);
+                      })
+                      .toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviousWorkStep() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: _maxStepWidth,
+          minHeight: _stepHeight, // ✅ Add consistent height
+          maxHeight: _stepHeight, // ✅ Add consistent height
+        ),
+        child: Column(
+          key: ValueKey('previous_work'),
+          children: [
+            // Header content (non-scrollable)
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Icon(Icons.photo_library, color: Colors.white, size: 32),
             ),
 
-            SizedBox(height: 10),
+            SizedBox(height: 20),
 
-            _buildUltraCompactTextField(
-              controller: _hourlyRateController,
-              label: 'Hourly Rate (DH)',
-              icon: Icons.attach_money,
-              hint: '150',
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value?.isEmpty ?? true) return 'Required';
-                if (double.tryParse(value!) == null) return 'Invalid';
-                return null;
-              },
+            Text(
+              'Previous Work',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryColor(context),
+              ),
             ),
 
-            SizedBox(height: 10),
+            SizedBox(height: 8),
 
-            _buildUltraCompactTextField(
-              controller: _bioController,
-              label: 'Bio',
-              icon: Icons.description,
-              hint: 'Tell clients about your expertise...',
-              maxLines: 2,
-              validator: (value) {
-                if (value?.isEmpty ?? true) return 'Required';
-                if (value!.length < 20) return 'Min 20 chars';
-                return null;
-              },
+            Text(
+              'Showcase your best work (Optional)',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryColor(context),
+              ),
+            ),
+
+            SizedBox(height: 16),
+
+            // ✅ Make images grid scrollable
+            Expanded(
+              child: _workImages.isEmpty
+                  ? _buildEmptyWorkState()
+                  : SingleChildScrollView(child: _buildWorkImagesGrid()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyWorkState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: _pickWorkImages,
+            child: Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryColor.withValues(alpha: 0.1),
+                    AppColors.secondaryColor.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_rounded,
+                    size: 60,
+                    color: AppColors.primaryColor,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Add Work Photos',
+                    style: TextStyle(
+                      color: AppColors.primaryColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkImagesGrid() {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          // ✅ Grid of images
+          GridView.builder(
+            shrinkWrap: true, // ✅ Important for SingleChildScrollView
+            physics:
+                NeverScrollableScrollPhysics(), // ✅ Let parent handle scrolling
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1,
+            ),
+            itemCount: _workImages.length,
+            itemBuilder: (context, index) {
+              return _buildWorkImageCard(_workImages[index], index);
+            },
+          ),
+
+          SizedBox(height: 16),
+
+          // ✅ Add more images button
+          GestureDetector(
+            onTap: _pickWorkImages,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryColor.withValues(alpha: 0.1),
+                    AppColors.secondaryColor.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate,
+                    color: AppColors.primaryColor,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Add More Images',
+                    style: TextStyle(
+                      color: AppColors.primaryColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkImageCard(File image, int index) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ✅ Image
+            Image.file(image, fit: BoxFit.cover),
+
+            // ✅ Delete button - Top Right Corner INSIDE the image
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _workImages.removeAt(index);
+                  });
+                },
+                child: Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(Icons.close, color: Colors.white, size: 16),
+                ),
+              ),
             ),
           ],
         ),
@@ -894,9 +1310,16 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
       ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: 12),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          color: AppColors.textSecondaryColor(context),
+          fontWeight: FontWeight.w500,
+        ),
         hintText: hint,
-        hintStyle: TextStyle(fontSize: 11),
+        hintStyle: TextStyle(
+          fontSize: 11,
+          color: AppColors.textSecondaryColor(context),
+        ),
         contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         prefixIcon: Container(
           margin: EdgeInsets.all(6),
@@ -904,27 +1327,27 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                primaryColor.withValues(alpha: 0.15),
-                secondaryColor.withValues(alpha: 0.1),
+                AppColors.primaryColor.withValues(alpha: 0.15),
+                AppColors.secondaryColor.withValues(alpha: 0.1),
               ],
             ),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Icon(icon, color: primaryColor, size: 16),
+          child: Icon(icon, color: AppColors.primaryColor, size: 16),
         ),
         filled: true,
-        fillColor: AppColors.backgroundColor(context),
+        fillColor: AppColors.cardColor(context),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: AppColors.borderColor(context)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: AppColors.borderColor(context)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: primaryColor, width: 2),
+          borderSide: BorderSide(color: AppColors.primaryColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -940,186 +1363,30 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
     );
   }
 
-  Widget _buildPremiumTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required String hint,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      style: TextStyle(
-        fontSize: 15,
-        color: AppColors.textPrimaryColor(context),
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Container(
-          margin: EdgeInsets.all(12),
-          padding: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                primaryColor.withValues(alpha: 0.15),
-                secondaryColor.withValues(alpha: 0.1),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: primaryColor, size: 20),
-        ),
-        filled: true,
-        fillColor: AppColors.backgroundColor(context),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: primaryColor, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.red),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.red, width: 2),
-        ),
-      ),
-      validator: validator,
-    );
-  }
-
-  Widget _buildSkillsStep() {
-    return Column(
-      key: ValueKey('skills'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Step Icon - Smaller
-        Container(
-          padding: EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [primaryColor, secondaryColor]),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Icon(Icons.build, color: Colors.white, size: 26),
-        ),
-
-        SizedBox(height: 12),
-
-        Text(
-          'Your Skills',
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimaryColor(context),
-          ),
-        ),
-
-        SizedBox(height: 4),
-
-        Text(
-          'Select at least one skill',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondaryColor(context),
-          ),
-        ),
-
-        SizedBox(height: 14),
-
-        // Selected Count Badge - Compact
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                primaryColor.withValues(alpha: 0.1),
-                secondaryColor.withValues(alpha: 0.05),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle, color: primaryColor, size: 16),
-              SizedBox(width: 6),
-              Text(
-                '${_selectedSkills.length} skill${_selectedSkills.length == 1 ? '' : 's'}',
-                style: TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        SizedBox(height: 16),
-
-        // ✅ Skills Grid - Scrollable to prevent overflow
-        Expanded(
-          child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
-              children: _availableSkills.map((skill) {
-                final isSelected = _selectedSkills.any(
-                  (s) => s['name'] == skill['name'],
-                );
-                return _buildCompactSkillChip(skill, isSelected);
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildCompactSkillChip(Map<String, dynamic> skill, bool isSelected) {
     return GestureDetector(
       onTap: () => _toggleSkill(skill),
       child: AnimatedContainer(
         duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           gradient: isSelected
-              ? LinearGradient(colors: [primaryColor, secondaryColor])
+              ? LinearGradient(
+                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
+                )
               : null,
           color: isSelected ? null : AppColors.cardColor(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey.shade300,
-            width: isSelected ? 2 : 1,
+            color: isSelected ? AppColors.primaryColor : Colors.grey.shade300,
+            width: isSelected ? 1 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.3),
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
                     blurRadius: 8,
-                    offset: Offset(0, 3),
+                    offset: Offset(0, 2),
                   ),
                 ]
               : [
@@ -1136,7 +1403,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
             FaIcon(
               skill['icon'],
               size: 16,
-              color: isSelected ? Colors.white : primaryColor,
+              color: isSelected ? Colors.white : AppColors.primaryColor,
             ),
             SizedBox(width: 8),
             Text(
@@ -1167,18 +1434,20 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
           gradient: isSelected
-              ? LinearGradient(colors: [primaryColor, secondaryColor])
+              ? LinearGradient(
+                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
+                )
               : null,
           color: isSelected ? null : AppColors.cardColor(context),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey.shade300,
+            color: isSelected ? AppColors.primaryColor : Colors.grey.shade300,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.3),
+                    color: AppColors.primaryColor.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: Offset(0, 4),
                   ),
@@ -1197,7 +1466,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
             FaIcon(
               skill['icon'],
               size: 20,
-              color: isSelected ? Colors.white : primaryColor,
+              color: isSelected ? Colors.white : AppColors.primaryColor,
             ),
             SizedBox(width: 10),
             Text(
@@ -1220,178 +1489,142 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
     );
   }
 
-  Widget _buildPreviousWorkStep() {
-    return Column(
-      key: ValueKey('previous_work'),
-      children: [
-        // Step Icon
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [primaryColor, secondaryColor]),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.3),
-                blurRadius: 15,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(Icons.photo_library, color: Colors.white, size: 32),
-        ),
+  // Widget _buildEmptyWorkState() {
+  //   return GestureDetector(
+  //     onTap: _pickWorkImages,
+  //     child: Container(
+  //       padding: EdgeInsets.all(20),
+  //       height: 200,
+  //       decoration: BoxDecoration(
+  //         gradient: LinearGradient(
+  //           colors: [
+  //             AppColors.primaryColor.withValues(alpha: 0.05),
+  //             AppColors.secondaryColor.withValues(alpha: 0.03),
+  //           ],
+  //         ),
+  //         borderRadius: BorderRadius.circular(20),
+  //         border: Border.all(
+  //           color: AppColors.primaryColor.withValues(alpha: 0.3),
+  //           width: 2,
+  //           style: BorderStyle.solid,
+  //         ),
+  //       ),
+  //       child: Column(
+  //         mainAxisAlignment: MainAxisAlignment.center,
+  //         children: [
+  //           Container(
+  //             padding: EdgeInsets.all(20),
+  //             decoration: BoxDecoration(
+  //               gradient: LinearGradient(
+  //                 colors: [
+  //                   AppColors.primaryColor.withValues(alpha: 0.1),
+  //                   AppColors.secondaryColor.withValues(alpha: 0.05),
+  //                 ],
+  //               ),
+  //               shape: BoxShape.circle,
+  //             ),
+  //             child: Icon(
+  //               Icons.add_photo_alternate,
+  //               size: 50,
+  //               color: AppColors.primaryColor,
+  //             ),
+  //           ),
+  //           SizedBox(height: 16),
+  //           Text(
+  //             'Add Work Photos',
+  //             style: TextStyle(
+  //               color: AppColors.primaryColor,
+  //               fontSize: 16,
+  //               fontWeight: FontWeight.w600,
+  //             ),
+  //           ),
+  //           SizedBox(height: 8),
+  //           Text(
+  //             'Up to 10 photos',
+  //             style: TextStyle(
+  //               color: AppColors.textSecondaryColor(context),
+  //               fontSize: 13,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
-        SizedBox(height: 20),
+  // Widget _buildWorkImagesGrid() {
+  //   return Column(
+  //     children: [
+  //       // Images Count
+  //       Container(
+  //         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //         decoration: BoxDecoration(
+  //           gradient: LinearGradient(
+  //             colors: [
+  //               AppColors.primaryColor.withValues(alpha: 0.1),
+  //               AppColors.secondaryColor.withValues(alpha: 0.05),
+  //             ],
+  //           ),
+  //           borderRadius: BorderRadius.circular(20),
+  //         ),
+  //         child: Row(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             Icon(Icons.image, color: AppColors.primaryColor, size: 20),
+  //             SizedBox(width: 8),
+  //             Text(
+  //               '${_workImages.length} / 10 photos added',
+  //               style: TextStyle(
+  //                 color: AppColors.primaryColor,
+  //                 fontWeight: FontWeight.w600,
+  //                 fontSize: 14,
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
 
-        Text(
-          'Previous Work',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimaryColor(context),
-          ),
-        ),
+  //       SizedBox(height: 20),
 
-        SizedBox(height: 8),
+  //       Expanded(
+  //         child: SingleChildScrollView(
+  //           child: Wrap(
+  //             spacing: 10,
+  //             runSpacing: 8,
+  //             alignment: WrapAlignment.center,
+  //             children: GlobalVariables.availableSkills.map((skill) {
+  //               final isSelected = _selectedSkills.any(
+  //                 (s) => s['name'] == skill['name'],
+  //               );
+  //               return _buildCompactSkillChip(skill, isSelected);
+  //             }).toList(),
+  //           ),
+  //         ),
+  //       ),
 
-        Text(
-          'Showcase your best work (Optional)',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondaryColor(context),
-          ),
-        ),
+  //       // Grid
+  //       GridView.builder(
+  //         shrinkWrap: true,
+  //         physics: NeverScrollableScrollPhysics(),
+  //         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+  //           crossAxisCount: 3,
+  //           crossAxisSpacing: 3,
+  //           mainAxisSpacing: 3,
+  //         ),
+  //         itemCount: _workImages.length < 10
+  //             ? _workImages.length + 1
+  //             : _workImages.length,
+  //         itemBuilder: (context, index) {
+  //           if (index == _workImages.length && _workImages.length < 10) {
+  //             return _buildAddMoreButton();
+  //           }
 
-        SizedBox(height: 32),
-
-        // Work Images Grid
-        if (_workImages.isEmpty)
-          _buildEmptyWorkState()
-        else
-          _buildWorkImagesGrid(),
-      ],
-    );
-  }
-
-  Widget _buildEmptyWorkState() {
-    return GestureDetector(
-      onTap: _pickWorkImages,
-      child: Container(
-        height: 200,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              primaryColor.withValues(alpha: 0.05),
-              secondaryColor.withValues(alpha: 0.03),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: primaryColor.withValues(alpha: 0.3),
-            width: 2,
-            style: BorderStyle.solid,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    primaryColor.withValues(alpha: 0.1),
-                    secondaryColor.withValues(alpha: 0.05),
-                  ],
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.add_photo_alternate,
-                size: 50,
-                color: primaryColor,
-              ),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Add Work Photos',
-              style: TextStyle(
-                color: primaryColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Up to 10 photos',
-              style: TextStyle(
-                color: AppColors.textSecondaryColor(context),
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWorkImagesGrid() {
-    return Column(
-      children: [
-        // Images Count
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                primaryColor.withValues(alpha: 0.1),
-                secondaryColor.withValues(alpha: 0.05),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.image, color: primaryColor, size: 20),
-              SizedBox(width: 8),
-              Text(
-                '${_workImages.length} / 10 photos added',
-                style: TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        SizedBox(height: 20),
-
-        // Grid
-        GridView.builder(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: _workImages.length < 10
-              ? _workImages.length + 1
-              : _workImages.length,
-          itemBuilder: (context, index) {
-            if (index == _workImages.length && _workImages.length < 10) {
-              return _buildAddMoreButton();
-            }
-
-            return _buildWorkImageCard(_workImages[index], index);
-          },
-        ),
-      ],
-    );
-  }
+  //           return _buildWorkImageCard(_workImages[index], index);
+  //         },
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildAddMoreButton() {
     return GestureDetector(
@@ -1400,25 +1633,25 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              primaryColor.withValues(alpha: 0.1),
-              secondaryColor.withValues(alpha: 0.05),
+              AppColors.primaryColor.withValues(alpha: 0.1),
+              AppColors.secondaryColor.withValues(alpha: 0.05),
             ],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: primaryColor.withValues(alpha: 0.3),
+            color: AppColors.primaryColor.withValues(alpha: 0.3),
             width: 2,
           ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add, size: 32, color: primaryColor),
+            Icon(Icons.add, size: 32, color: AppColors.primaryColor),
             SizedBox(height: 4),
             Text(
               'Add More',
               style: TextStyle(
-                color: primaryColor,
+                color: AppColors.primaryColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -1429,57 +1662,57 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
     );
   }
 
-  Widget _buildWorkImageCard(File image, int index) {
-    final hasUploadedUrl = _uploadedWorkUrls.length > index;
-    return Stack(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 8,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: hasUploadedUrl
-                ? Image.network(_uploadedWorkUrls[index]) // ✅ Uploaded
-                : Image.file(image), // ✅ Preview
-          ),
-        ),
-        Positioned(
-          top: 6,
-          right: 6,
-          child: GestureDetector(
-            onTap: () {
-              setState(() => _workImages.removeAt(index));
-            },
-            child: Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF6B6B), Color(0xFFEE5A6F)],
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.4),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.close, size: 16, color: Colors.white),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildWorkImageCard(File image, int index) {
+  //   final hasUploadedUrl = _uploadedWorkUrls.length > index;
+  //   return Stack(
+  //     children: [
+  //       Container(
+  //         decoration: BoxDecoration(
+  //           borderRadius: BorderRadius.circular(16),
+  //           boxShadow: [
+  //             BoxShadow(
+  //               color: Colors.black.withValues(alpha: 0.1),
+  //               blurRadius: 8,
+  //               offset: Offset(0, 4),
+  //             ),
+  //           ],
+  //         ),
+  //         child: ClipRRect(
+  //           borderRadius: BorderRadius.circular(16),
+  //           child: hasUploadedUrl
+  //               ? Image.network(_uploadedWorkUrls[index]) // ✅ Uploaded
+  //               : Image.file(image), // ✅ Preview
+  //         ),
+  //       ),
+  //       Positioned(
+  //         top: 6,
+  //         right: 6,
+  //         child: GestureDetector(
+  //           onTap: () {
+  //             setState(() => _workImages.removeAt(index));
+  //           },
+  //           child: Container(
+  //             padding: EdgeInsets.all(6),
+  //             decoration: BoxDecoration(
+  //               gradient: LinearGradient(
+  //                 colors: [Color(0xFFFF6B6B), Color(0xFFEE5A6F)],
+  //               ),
+  //               shape: BoxShape.circle,
+  //               boxShadow: [
+  //                 BoxShadow(
+  //                   color: Colors.red.withValues(alpha: 0.4),
+  //                   blurRadius: 8,
+  //                   offset: Offset(0, 2),
+  //                 ),
+  //               ],
+  //             ),
+  //             child: Icon(Icons.close, size: 16, color: Colors.white),
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildTestUploadButton() {
     return ElevatedButton(
@@ -1558,13 +1791,13 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    primaryColor.withValues(alpha: 0.1),
-                    secondaryColor.withValues(alpha: 0.05),
+                    AppColors.primaryColor.withValues(alpha: 0.1),
+                    AppColors.secondaryColor.withValues(alpha: 0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: primaryColor.withValues(alpha: 0.3),
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
                   width: 2,
                 ),
               ),
@@ -1579,14 +1812,18 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.arrow_back, color: primaryColor, size: 22),
+                        Icon(
+                          Icons.arrow_back,
+                          color: AppColors.primaryColor,
+                          size: 22,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Back',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: primaryColor,
+                            color: AppColors.primaryColor,
                           ),
                         ),
                       ],
@@ -1599,17 +1836,19 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
         if (_currentStep > 0) SizedBox(width: 12),
 
-        // Continue/Complete Button
+        // Continue/Complete
         Expanded(
           flex: _currentStep > 0 ? 2 : 1,
           child: Container(
             height: 56,
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [primaryColor, secondaryColor]),
+              gradient: LinearGradient(
+                colors: [AppColors.primaryColor, AppColors.secondaryColor],
+              ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.4),
+                  color: AppColors.primaryColor.withValues(alpha: 0.4),
                   blurRadius: 15,
                   offset: Offset(0, 8),
                 ),
