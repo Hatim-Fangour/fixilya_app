@@ -7,6 +7,7 @@ import "package:fixilya_app/data/controllers/theme_controller.dart";
 import "package:fixilya_app/data/controllers/user_controller.dart";
 import "package:fixilya_app/firebase_options.dart";
 import "package:fixilya_app/l10n/app_localizations.dart";
+import "package:fixilya_app/services/api_client.dart";
 import "package:fixilya_app/services/local_storage_service.dart";
 import "package:fixilya_app/services/service_locator.dart";
 import "package:fixilya_app/services/language_service.dart";
@@ -42,6 +43,9 @@ void main() async {
 
   // final firebaseImageService = FirebaseImageService();
   // ✅ Initialize local storage FIRST
+
+  // Initialize API client
+  ApiClient().initialize();
 
   runApp(const MyApp());
 }

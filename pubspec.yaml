@@ -33,6 +33,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  dio: ^5.4.0
   # Firebase
   firebase_core: ^4.3.0
   firebase_auth: ^6.1.3
