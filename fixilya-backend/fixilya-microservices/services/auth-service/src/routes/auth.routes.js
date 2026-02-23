@@ -7,14 +7,14 @@ const { authenticate } = require("../../../../shared/middleware/auth");
 
 // Validation rules
 const registerValidation = [
-  body("email").isEmail().withMessage("Valid email required"),
+  body("email").isEmail().withMessage("Valid email required").trim().toLowerCase(),
   body("password")
     .isLength({ min: 6 })
     .withMessage("Password must be 6+ characters"),
   body("fullName").notEmpty().withMessage("Full name required"),
   body("phone").isMobilePhone().withMessage("Valid phone required"),
   body("userType")
-    .isIn(["client", "handyman"])
+    .isIn(["client", "customer", "handyman"])
     .withMessage("Invalid user type"),
 ];
 

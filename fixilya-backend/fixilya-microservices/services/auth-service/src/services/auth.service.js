@@ -40,14 +40,15 @@ class AuthService {
   async register({ email, password, fullName, phone, userType }) {
     try {
       // Validate userType
-      const validUserTypes = ["customer", "handyman", "admin"];
+      const validUserTypes = ["client", "customer", "handyman", "admin"];
 
       if (!validUserTypes.includes(userType)) {
         throw new AppError("Invalid user type", 400);
       }
 
+      // Normalize: both "client" and "customer" become "client"
       const normalizedUserType =
-        userType.toLowerCase() === "customer"
+        userType.toLowerCase() === "customer" || userType.toLowerCase() === "client"
           ? "client"
           : userType.toLowerCase();
 

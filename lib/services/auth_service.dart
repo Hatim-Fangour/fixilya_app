@@ -79,7 +79,7 @@ class AuthService {
           'password': password,
           'fullName': fullName.trim(),
           'phone': phone.trim(),
-          'userType': userType == 'client' ? 'customer' : userType,
+          'userType': userType,
         },
       );
 
@@ -243,7 +243,7 @@ class AuthService {
           'uid': uid,
           'fullName': fullName,
           'phone': phone,
-          'userType': userType == 'client' ? 'customer' : userType,
+          'userType': userType,
         },
       );
 
