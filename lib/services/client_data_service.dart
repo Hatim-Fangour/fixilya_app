@@ -31,18 +31,16 @@ class ClientDataService {
       print('✅ Client profile loaded');
       print(clientData);
 
-      // Also get user document for name and email
-      // final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      // Get user document for email (stored in users collection, not clients)
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data() ?? {};
 
-      // final userData = userDoc.data() ?? {};
-
-      print(clientData);
       // Merge data
       return {
         ...clientData,
         'fullName': clientData['fullName'] ?? 'Client',
-        'email': clientDoc['email'] ?? user.email ?? '',
-        'phone': clientDoc['phone'] ?? '',
+        'email': userData['email'] ?? user.email ?? '',
+        'phone': clientData['phone'] ?? '',
         'uid': user.uid,
       };
     } catch (e) {
