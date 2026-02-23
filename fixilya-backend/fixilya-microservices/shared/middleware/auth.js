@@ -1,6 +1,4 @@
-const axios = require('axios');
-
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+const admin = require('../../shared/config/firebase');
 
 const authenticate = async (req, res, next) => {
   try {
