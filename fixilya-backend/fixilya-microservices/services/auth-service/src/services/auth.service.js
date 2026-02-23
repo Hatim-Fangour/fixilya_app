@@ -192,6 +192,9 @@ class AuthService {
       if (error.code === "auth/invalid-phone-number") {
         throw new AppError("Invalid phone number", 400);
       }
+      if (error.code === "auth/phone-number-already-exists") {
+        throw new AppError("Phone number already in use", 400);
+      }
       throw error;
     }
   }
