@@ -31,7 +31,7 @@ const loginValidation = [
   body('email')
     .isEmail()
     .withMessage('Please provide a valid email')
-    .normalizeEmail()
+    .trim()
     .toLowerCase(),
   body('password')
     .notEmpty()
