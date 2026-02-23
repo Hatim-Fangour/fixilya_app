@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/services/admin_notification_service.dart';
+import 'package:fixilya_app/services/api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -60,167 +62,156 @@ class _WelcomeAfterSignupState extends State<WelcomeAfterSignup>
     super.dispose();
   }
 
+  
   Future<void> _saveProfileWithSkip({required String userType}) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('User not found');
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User not found');
 
-      // ✅ Check if this is a first-time user
-      final adminNotificationService = AdminNotificationService();
-      final isNewUser = await adminNotificationService.isFirstTimeUser(
-        user.uid,
-      );
+    // ✅ CRITICAL: Verify token is ready and has correct claims
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    print('🔄 Verifying token readiness before API call...');
+    
+    await user.reload();
+    final freshUser = FirebaseAuth.instance.currentUser;
+    
+    if (freshUser != null) {
+      // Get token with force refresh
+      final token = await freshUser.getIdToken(true);
+      if (token == null) {
+        throw Exception('Failed to get authentication token');
+      }
+      
+      // Verify token has correct claims
+      final idTokenResult = await freshUser.getIdTokenResult(true);
+            print('📋 Token claims: ${idTokenResult.claims}');
+      print('   Email Verified: ${idTokenResult.claims?['email_verified']}');
+      print('   User Type: ${idTokenResult.claims?['userType']}');
+      
+      if (idTokenResult.claims?['email_verified'] != true) {
+        print('⚠️ Warning: email_verified claim is not true');
+      }
+      
+      // ✅ Wait for token to propagate
+      await Future.delayed(Duration(milliseconds: 500));
+      print('✅ Token verified and ready');
+    }
+    
+    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      // Show progress dialog
-      Get.dialog(
-        WillPopScope(
-          onWillPop: () async => false,
-          child: Center(
-            child: Container(
-              margin: EdgeInsets.symmetric(horizontal: 32),
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppColors.primaryColor,
-                    ),
+    // Show progress dialog
+    Get.dialog(
+      WillPopScope(
+        onWillPop: () async => false,
+        child: Center(
+          child: Container(
+            margin: EdgeInsets.symmetric(horizontal: 32),
+            padding: EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.primaryColor,
                   ),
-                  SizedBox(height: 20),
-                  Text(
-                    'Setting up your profile...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Setting up your profile...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
-        barrierDismissible: false,
-      );
+      ),
+      barrierDismissible: false,
+    );
 
-      final collection = userType.toLowerCase() == 'handyman'
-          ? 'handymen'
-          : 'clients';
+    // ✅ Call backend API
+    final api = ApiClient();
+    final response = await api.userDio.post(
+      '/users/complete-profile-skip',
+      data: {
+        'uid': user.uid,
+        'userType': userType == 'client' ? 'customer' : userType,
+      },
+    );
 
-      // Prepare profile data
-      Map<String, dynamic> profileData;
+    final data = response.data;
 
-      if (collection == 'handymen') {
-        profileData = {
-          'city': '',
-          'experience': '0',
-          'hourlyRate': 0,
-          'bio': '',
-          'skills': [],
-          'profilePicture': '',
-          'workImages': [],
-          'profileCompleted': false,
-          'approved': false,
-          'rejected': false,
-          'suspended': false,
-          'reviewStatus': 'pending',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-      } else {
-        profileData = {
-          'city': '',
-          'profilePicture': '',
-          'approved': false,
-          'suspended': false,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-      }
+    // Close dialog
+    if (Get.isDialogOpen ?? false) {
+      Get.back();
+    }
 
-      // Save to collection
-      await FirebaseFirestore.instance
-          .collection(collection)
-          .doc(user.uid)
-          .set(profileData, SetOptions(merge: true));
-
-      // Update users collection
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'profileCompleted': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // ✅ NOTIFY ADMIN (only for new handymen)
-      if (collection == 'handymen' && isNewUser) {
-        // Get handyman data for notification
-        final handymanDoc = await FirebaseFirestore.instance
-            .collection('handymen')
-            .doc(user.uid)
-            .get();
-
-        final userData = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        if (handymanDoc.exists && userData.exists) {
-          final userInfo = userData.data()!;
-
-          await adminNotificationService.notifyAdminOfNewHandyman(
-            handymanId: user.uid,
-            handymanName: userInfo['fullName'] ?? 'Unknown',
-            email: userInfo['email'] ?? user.email ?? '',
-            phone: userInfo['phone'] ?? '',
-            profileCompleted: false, // Skipped profile
-          );
-        }
-      }
-
-      // Close dialog
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-
+    if (data['success']) {
       // Show success
       Get.snackbar(
         'Success!',
-        collection == 'handymen'
-            ? 'Your profile has been created. Complete it later from settings to get approved.'
-            : 'Your profile has been created successfully.',
+        data['message'],
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.success,
         colorText: Colors.white,
         icon: Icon(Icons.check_circle, color: Colors.white),
         margin: EdgeInsets.all(16),
         borderRadius: 12,
-        duration: Duration(seconds: 3),
+        duration: Duration(seconds: 2),
       );
 
       await Future.delayed(Duration(milliseconds: 500));
       AppRoutes.toHome();
-    } catch (e) {
-      if (Get.isDialogOpen ?? false) {
-        Get.back();
-      }
-
-      Get.snackbar(
-        'Error',
-        'Failed to save profile. Please check your connection and try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
-        icon: Icon(Icons.error_outline, color: Colors.white),
-        margin: EdgeInsets.all(16),
-        borderRadius: 12,
-        duration: Duration(seconds: 4),
-      );
+    } else {
+      throw Exception(data['message'] ?? 'Failed to save profile');
     }
+  } on DioException catch (e) {
+    if (Get.isDialogOpen ?? false) {
+      Get.back();
+    }
+
+    print('❌ DioException: ${e.response?.statusCode}');
+    print('❌ Response: ${e.response?.data}');
+
+    Get.snackbar(
+      'Error',
+      e.response?.data['message'] ??
+          'Failed to save profile. Please try again.',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: AppColors.error,
+      colorText: Colors.white,
+      icon: Icon(Icons.error_outline, color: Colors.white),
+      margin: EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: Duration(seconds: 4),
+    );
+  } catch (e) {
+    if (Get.isDialogOpen ?? false) {
+      Get.back();
+    }
+
+    print('❌ Exception: $e');
+
+    Get.snackbar(
+      'Error',
+      'Failed to save profile. Please check your connection and try again.',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: AppColors.error,
+      colorText: Colors.white,
+      icon: Icon(Icons.error_outline, color: Colors.white),
+      margin: EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: Duration(seconds: 4),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

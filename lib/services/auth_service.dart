@@ -1,15 +1,21 @@
 // lib/core/services/auth_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
 import 'package:fixilya_app/data/controllers/theme_controller.dart';
+import 'package:fixilya_app/services/api_client.dart';
 import 'dart:io';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
+  // ✅ ADD: Base URL for your backend
+  static const String _baseUrl = 'http://localhost:3001/api/auth';
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final _api = ApiClient(); // ✅ USE ApiClient
 
   // ✅ ADD THIS: Auth state stream for GetX binding
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -25,6 +31,7 @@ class AuthService {
   }
 
   // ✅ UPDATED: Don't create Firestore docs on signup
+  // ✅ UPDATED: Sign up with backend API using ApiClient
   Future<Map<String, dynamic>> signUpWithEmail({
     required String email,
     required String password,
@@ -34,7 +41,7 @@ class AuthService {
   }) async {
     try {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📝 STARTING SIGNUP');
+      print('📝 STARTING SIGNUP WITH BACKEND');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       print('Email: $email');
       print('Full Name: $fullName');
@@ -63,148 +70,125 @@ class AuthService {
         };
       }
 
-      final cleanEmail = email.trim().toLowerCase();
+      // ✅ Call backend registration API using ApiClient
+      print('🌐 Calling backend API...');
+      final response = await _api.dio.post(
+        '/auth/register',
+        data: {
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'fullName': fullName.trim(),
+          'phone': phone.trim(),
+          'userType': userType == 'client' ? 'customer' : userType,
+        },
+      );
 
-      // ✅ Validate email format before calling Firebase
-      if (!cleanEmail.contains('@') || !cleanEmail.contains('.')) {
-        return {'success': false, 'message': 'Invalid email format'};
-      }
+      final data = response.data;
+      print('📥 Backend response: $data');
 
-      // ✅ Validate password length
-      if (password.length < 6) {
-        return {
-          'success': false,
-          'message': 'Password must be at least 6 characters',
-        };
-      }
+      if (response.statusCode == 201 && data['success'] == true) {
+        print('✅ Backend registration successful');
 
-      print('🔐 Creating Firebase Auth user...');
-
-      // Create the use in Authentication section
-
-      // ✅ Add timeout to createUser
-      final UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: cleanEmail, password: password)
-          .timeout(
-            const Duration(seconds: 15),
-            onTimeout: () {
-              throw FirebaseAuthException(
-                code: 'timeout',
-                message: 'Request timed out. Please try again.',
-              );
-            },
-          );
-
-      final User? user = userCredential.user;
-
-      if (user == null) {
-        print('❌ User creation returned null');
-        return {
-          'success': false,
-          'message': 'Failed to create account. Please try again.',
-        };
-      }
-
-      print('✅ Firebase Auth user created: ${user.uid}');
-
-      // ✅ Send verification email (don’t fail signup if it fails)
-      try {
-        print('📧 Sending verification email...');
-        await user.sendEmailVerification().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            print('⏱️ Email verification timeout - continuing anyway');
-            return;
-          },
-        );
-        print('✅ Verification email sent');
-      } catch (e) {
-        print('⚠️ Failed to send verification email: $e');
-      }
-
-      // ✅ Save to Firestore with timeout
-      print('💾 Saving user data to Firestore...');
-      final collection = userType.toLowerCase() == 'handyman'
-          ? 'handymen'
-          : 'clients';
-      try {
-        // Create the use in Users Collection
-        await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .set({
-              'email': cleanEmail,
-              'userType': userType.toLowerCase(),
-              'createdAt': FieldValue.serverTimestamp(),
-            })
+        // ✅ Sign in to Firebase (to get the user object)
+        print('🔐 Signing in to Firebase...');
+        final userCredential = await _auth
+            .signInWithEmailAndPassword(
+              email: email.trim().toLowerCase(),
+              password: password,
+            )
             .timeout(
-              const Duration(seconds: 10),
-              onTimeout: () => throw Exception('Firestore save timeout'),
+              const Duration(seconds: 15),
+              onTimeout: () {
+                throw FirebaseAuthException(
+                  code: 'timeout',
+                  message: 'Firebase sign-in timed out. Please try again.',
+                );
+              },
             );
 
-        print('✅ Users collection updated');
+        final user = userCredential.user;
+        print('✅ Firebase sign-in successful: ${user?.uid}');
 
-        // final collection = userType.toLowerCase() == 'handyman'
-        //     ? 'handymen'
-        //     : 'clients';
-
-        // Create the use in handymen/client Collection
-        await _firestore
-            .collection(collection)
-            .doc(user.uid)
-            .set({
-              'approved': false,
-              'suspended': false,
-              'createdAt': FieldValue.serverTimestamp(),
-            })
-            .timeout(
-              const Duration(seconds: 10),
-              onTimeout: () => throw Exception('Firestore save timeout'),
-            );
-
-        print('✅ $collection collection initialized');
-      } catch (e) {
-        print('❌ Firestore save failed: $e');
-
-        // Rollback auth user if Firestore fails
-        try {
-          await user.delete();
-          await _firestore
-              .collection(collection)
-              .doc(user.uid)
-              .delete()
-              .timeout(
-                const Duration(seconds: 30),
-                onTimeout: () => throw Exception('Firestore delete timeout'),
+        // ✅ CRITICAL: Force token refresh and wait for it to be ready
+        if (user != null) {
+          print('🔄 Forcing token refresh...');
+          try {
+            await user.reload();
+            final token = await user.getIdToken(true); // Force refresh
+            if (token != null) {
+              print(
+                '✅ Token refreshed and ready: ${token.substring(0, 20)}...',
               );
-          await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .delete()
-              .timeout(
-                const Duration(seconds: 30),
-                onTimeout: () => throw Exception('Firestore delete timeout'),
-              );
-          print('🗑️ Auth user deleted due to Firestore failure');
-        } catch (deleteError) {
-          print('⚠️ Could not delete auth user: $deleteError');
+            } else {
+              print('⚠️ Warning: Token is null after refresh');
+            }
+          } catch (e) {
+            print('⚠️ Token refresh warning: $e');
+          }
         }
 
+        // ✅ Send verification email
+        // try {
+        //   print('📧 Sending verification email...');
+        //   await user?.sendEmailVerification().timeout(
+        //     const Duration(seconds: 10),
+        //     onTimeout: () {
+        //       print('⏱️ Email verification timeout - continuing anyway');
+        //       return;
+        //     },
+        //   );
+        //   print('✅ Verification email sent');
+        // } catch (e) {
+        //   print('⚠️ Failed to send verification email: $e');
+        // }
+
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('✅ SIGNUP SUCCESSFUL');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Account created successfully',
+          'userId': data['data']['uid'],
+          'verificationLink': data['data']['verificationLink'],
+          'emailSent': data['data']['emailSent'] ?? false,
+        };
+      } else {
         return {
           'success': false,
-          'message': 'Failed to save user data. Please try again.',
+          'message': data['message'] ?? 'Registration failed',
         };
       }
-
+    } on DioException catch (e) {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('✅ SIGNUP SUCCESSFUL');
+      print('❌ BACKEND API ERROR');
+      print('Status Code: ${e.response?.statusCode}');
+      print('Message: ${e.message}');
+      print('Response: ${e.response?.data}');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      return {
-        'success': true,
-        'message': 'Account created successfully',
-        'userId': user.uid,
-      };
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Registration failed',
+        };
+      } else if (e.type == DioExceptionType.connectionTimeout) {
+        return {
+          'success': false,
+          'message': 'Connection timeout. Please try again.',
+        };
+      } else if (e.type == DioExceptionType.receiveTimeout) {
+        return {
+          'success': false,
+          'message': 'Server timeout. Please try again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your connection.',
+        };
+      }
     } on FirebaseAuthException catch (e) {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       print('❌ FIREBASE AUTH ERROR');
@@ -223,8 +207,6 @@ class AuthService {
         'network-request-failed' =>
           'Network error. Please check your internet connection.',
         'timeout' => 'Request timed out. Please try again.',
-        'UNKNOWN' || 'internal-error' =>
-          'Internal error (Code: 26). Please try again in a moment.',
         _ => 'Signup failed: ${e.message ?? "Unknown error"}',
       };
 
@@ -243,7 +225,137 @@ class AuthService {
     }
   }
 
-  // Get user type from custom claims
+  // ✅ NEW: Complete registration after email verification
+  Future<Map<String, dynamic>> completeRegistration({
+    required String uid,
+    required String fullName,
+    required String phone,
+    required String userType,
+  }) async {
+    try {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📝 COMPLETING REGISTRATION');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      final response = await _api.dio.post(
+        '/auth/complete-registration',
+        data: {
+          'uid': uid,
+          'fullName': fullName,
+          'phone': phone,
+          'userType': userType == 'client' ? 'customer' : userType,
+        },
+      );
+
+      final data = response.data;
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        print('✅ Registration completed successfully');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        return {
+          'success': true,
+          'message': data['message'],
+          'userData': data['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to complete registration',
+        };
+      }
+    } on DioException catch (e) {
+      print('❌ Backend Error: ${e.message}');
+
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Failed to complete registration',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Network error. Please try again.',
+        };
+      }
+    } catch (e) {
+      print('❌ Error: $e');
+      return {
+        'success': false,
+        'message': 'An error occurred: ${e.toString()}',
+      };
+    }
+  }
+
+  // ✅ NEW: Check email verification status (backend)
+  Future<Map<String, dynamic>> checkEmailVerificationBackend(String uid) async {
+    try {
+      final response = await _api.dio.get('/auth/check-verification/$uid');
+
+      final data = response.data;
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'verified': data['data']['verified']};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to check verification',
+        };
+      }
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data['message'] ?? 'Network error',
+      };
+    }
+  }
+
+  // ✅ UPDATED: Resend verification email (backend)
+  Future<Map<String, dynamic>> resendVerificationEmail() async {
+    try {
+      final user = _auth.currentUser;
+
+      if (user == null) {
+        return {'success': false, 'message': 'No user logged in'};
+      }
+
+      if (user.emailVerified) {
+        return {'success': false, 'message': 'Email already verified'};
+      }
+
+      // ✅ Call backend API
+      final response = await _api.dio.post(
+        '/auth/resend-verification',
+        data: {'uid': user.uid},
+      );
+
+      final data = response.data;
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Verification email sent',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to send verification email',
+        };
+      }
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data['message'] ?? 'Network error',
+      };
+    } on FirebaseAuthException catch (e) {
+      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  // ✅ Keep existing: Get user type from Firestore
   Future<String?> getUserType() async {
     try {
       final user = _auth.currentUser;
@@ -251,7 +363,7 @@ class AuthService {
 
       print('🔍 Getting user type for: ${user.uid}');
 
-      // ✅ Check users collection FIRST
+      // Check users collection FIRST
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
       if (userDoc.exists) {
@@ -284,12 +396,12 @@ class AuthService {
         return 'client';
       }
 
-      // ✅ Default to CLIENT (not handyman!)
+      // Default to CLIENT
       print('⚠️ User type not found, defaulting to client');
       return 'client';
     } catch (e) {
       print('❌ Error: $e');
-      return 'client'; // ✅ Safer default
+      return 'client';
     }
   }
 
@@ -320,119 +432,58 @@ class AuthService {
     }
   }
 
-  // ✅ NEW: Create Firestore documents after email verification
-  Future<Map<String, dynamic>> createUserDocuments({
-    required String fullName,
-    required String phone,
-    required String userType,
-  }) async {
-    try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        return {'success': false, 'message': 'No user found'};
-      }
-
-      // Create type-specific document
-      final typeCollection = userType == 'handyman' ? 'handymen' : 'clients';
-
-      // Continuer fill in the handymen/clients document after Email verification
-      await _firestore.collection(typeCollection).doc(user.uid).set({
-        'uid': user.uid,
-        'email': user.email,
-        'fullName': fullName,
-        'phone': phone,
-        'profileCompleted': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!user.emailVerified) {
-        return {'success': false, 'message': 'Email not verified'};
-      }
-
-      // Continuer fill in the Users document after Email verification
-      // Create users document
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'userType': userType,
-        'emailVerified': true,
-        'isActive': false,
-        'suspended': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      return {
-        'success': true,
-        'message': 'User documents created successfully',
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error creating documents: ${e.toString()}',
-      };
-    }
-  }
-
-  // Sign in with email
+  // ✅ UPDATED: Sign in with email using backend
   Future<Map<String, dynamic>> signInWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      final UserCredential userCredential = await _auth
-          .signInWithEmailAndPassword(email: email, password: password);
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🔐 STARTING LOGIN WITH BACKEND');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      final User? user = userCredential.user;
+      // ✅ Call backend login API
+      final response = await _api.dio.post(
+        '/auth/login',
+        data: {'email': email.trim().toLowerCase(), 'password': password},
+      );
 
-      if (user != null) {
-        // ✅ Reload user to get latest verification status
-        await user.reload();
-        final refreshedUser = _auth.currentUser;
+      final data = response.data;
 
-        // ✅ Check if email is verified
-        if (refreshedUser == null || !refreshedUser.emailVerified) {
-          // await _auth.signOut();
-          // ✅ Get user data to pass to verification screen
-          final userDoc = await _firestore
-              .collection('users')
-              .doc(refreshedUser!.uid)
-              .get();
+      if (response.statusCode == 200 && data['success'] == true) {
+        print('✅ Backend login successful');
 
-          final userData = userDoc.data();
-          final userType = userData?['userType'] ?? 'client';
-          return {
-            'success': false,
-            'needsVerification': true,
-            'message': 'Please verify your email before signing in.',
-            'userType': userType,
-            'email': refreshedUser.email,
-            'userId': refreshedUser.uid,
-          };
-        }
+        // ✅ Sign in to Firebase with custom token
+        final customToken = data['data']['accessToken'];
+        await _auth.signInWithCustomToken(customToken);
 
-        // Get user type from Firestore
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(refreshedUser.uid)
-            .get();
-
-        if (!userDoc.exists) {
-          await _auth.signOut();
-          return {
-            'success': false,
-            'message': 'User data not found. Please contact support.',
-          };
-        }
+        print('✅ Firebase sign-in successful');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return {
           'success': true,
-          'message': 'Login successful',
-          'userType': userDoc.data()?['userType'] ?? 'client',
-          'userData': userDoc.data(),
+          'message': data['message'],
+          'userType': data['data']['userType'],
+          'userData': data['data'],
+        };
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Login failed'};
+      }
+    } on DioException catch (e) {
+      print('❌ Backend Login Error: ${e.message}');
+
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Login failed',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your connection.',
         };
       }
-
-      return {'success': false, 'message': 'Login failed'};
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': _getAuthErrorMessage(e.code)};
     } catch (e) {
@@ -440,7 +491,7 @@ class AuthService {
     }
   }
 
-  // Sign in with Google
+  // ✅ Keep existing: Sign in with Google (no backend needed for now)
   Future<Map<String, dynamic>> signInWithGoogle(String userType) async {
     try {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -804,14 +855,14 @@ class AuthService {
     }
   }
 
-  // Sign out
+  // ✅ Keep existing: Sign out
   Future<void> signOut() async {
     try {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       print('🚪 STARTING LOGOUT PROCESS');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      // ✅ Step 1: Reset theme to system mode
+      // Reset theme to system mode
       try {
         final themeController = Get.find<ThemeController>();
         await themeController.resetThemeToSystem();
@@ -820,16 +871,11 @@ class AuthService {
         print('⚠️ ThemeController not found or reset failed: $e');
       }
 
-      // ✅ Step 2: Clear local storage (optional - keeps some settings)
-      // If you want to clear ALL local data:
-      // final localStorage = LocalStorageService();
-      // await localStorage.clearAll();
-
-      // ✅ Step 3: Sign out from Firebase Auth
+      // Sign out from Firebase Auth
       await _auth.signOut();
       print('✅ Signed out from Firebase Auth');
 
-      // ✅ Step 4: Sign out from Google
+      // Sign out from Google
       try {
         await _googleSignIn.signOut();
         print('✅ Signed out from Google');
@@ -842,12 +888,11 @@ class AuthService {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (e) {
       print('❌ Error during sign out: $e');
-      // Still throw to let caller handle
       rethrow;
     }
   }
 
-  // Reset password
+  // ✅ Keep existing: Reset password (can use backend later)
   Future<Map<String, dynamic>> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
@@ -862,32 +907,7 @@ class AuthService {
     }
   }
 
-  // ✅ IMPROVED: Resend verification email
-  Future<Map<String, dynamic>> resendVerificationEmail() async {
-    try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        return {'success': false, 'message': 'No user logged in'};
-      }
-
-      if (user.emailVerified) {
-        return {'success': false, 'message': 'Email already verified'};
-      }
-
-      await user.sendEmailVerification();
-      return {
-        'success': true,
-        'message': 'Verification email sent to ${user.email}',
-      };
-    } on FirebaseAuthException catch (e) {
-      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
-    }
-  }
-
-  // ✅ NEW: Check if email is verified (with reload)
+  // ✅ Keep existing: Check if email is verified
   Future<bool> isEmailVerified() async {
     final user = _auth.currentUser;
     if (user == null) return false;
@@ -897,12 +917,12 @@ class AuthService {
     return refreshedUser?.emailVerified ?? false;
   }
 
-  // Get current user
+  // ✅ Keep existing: Get current user
   User? getCurrentUser() {
     return _auth.currentUser;
   }
 
-  // Get user data
+  // ✅ Keep existing: Get user data
   Future<Map<String, dynamic>?> getUserData() async {
     final user = _auth.currentUser;
     if (user == null) return null;
@@ -916,7 +936,7 @@ class AuthService {
     }
   }
 
-  // ✅ NEW: Get user data stream (real-time updates)
+  // ✅ Keep existing: Get user data stream
   Stream<Map<String, dynamic>?> getUserDataStream() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(null);
@@ -965,90 +985,94 @@ class AuthService {
     }
   }
 
-  // ✅ NEW: Delete user account
-  Future<Map<String, dynamic>> deleteAccount() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        return {'success': false, 'message': 'No user logged in'};
-      }
-
-      final uid = user.uid;
-
-      // Get user type before deleting
-      final userDoc = await _firestore.collection('users').doc(uid).get();
-      final userType = userDoc.data()?['userType'];
-
-      // Delete Firestore documents
-      await _firestore.collection('users').doc(uid).delete();
-
-      if (userType != null) {
-        final typeCollection = userType == 'handyman' ? 'handymen' : 'clients';
-        await _firestore.collection(typeCollection).doc(uid).delete();
-      }
-
-      // Delete Firebase Auth user
-      await user.delete();
-
-      return {'success': true, 'message': 'Account deleted successfully'};
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        return {
-          'success': false,
-          'message': 'Please login again to delete your account',
-          'requiresReauth': true,
-        };
-      }
-      return {'success': false, 'message': _getAuthErrorMessage(e.code)};
-    } catch (e) {
-      print('❌ Error deleting account: $e');
-      return {'success': false, 'message': e.toString()};
-    }
-  }
-
-  /// Change user password
-  Future<void> changePassword(
+  /// Change user password (via backend)
+  Future<Map<String, dynamic>> changePassword(
     String currentPassword,
     String newPassword,
   ) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('No user is currently signed in');
-      }
+      print('🔐 Changing password via backend...');
 
-      final email = user.email;
-      if (email == null) {
-        throw Exception('User email not found');
-      }
-
-      // Re-authenticate with current password (required by Firebase)
-      final credential = EmailAuthProvider.credential(
-        email: email,
-        password: currentPassword,
+      final response = await _api.dio.put(
+        '/auth/change-password',
+        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
       );
 
-      await user.reauthenticateWithCredential(credential);
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        print('✅ Password changed successfully');
+        return {
+          'success': true,
+          'message':
+              response.data['message'] ?? 'Password changed successfully',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': response.data['message'] ?? 'Failed to change password',
+        };
+      }
+    } on DioException catch (e) {
+      print('❌ Backend error: ${e.response?.data}');
 
-      // Update to new password
-      await user.updatePassword(newPassword);
-
-      print('✅ Password changed successfully');
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'wrong-password':
-          throw Exception('Current password is incorrect');
-        case 'weak-password':
-          throw Exception('New password is too weak (minimum 6 characters)');
-        case 'requires-recent-login':
-          throw Exception(
-            'Please logout and login again before changing password',
-          );
-        default:
-          throw Exception('Failed to change password: ${e.message}');
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Failed to change password',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your connection.',
+        };
       }
     } catch (e) {
-      throw Exception('Failed to change password: $e');
+      print('❌ Error: $e');
+      return {'success': false, 'message': 'An unexpected error occurred'};
+    }
+  }
+
+  /// Delete user account (via backend)
+  Future<Map<String, dynamic>> deleteAccount() async {
+    try {
+      print('🗑️ Deleting account via backend...');
+
+      final response = await _api.dio.delete('/auth/delete-account');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        print('✅ Account deleted successfully');
+
+        // Sign out locally
+        await signOut();
+
+        return {
+          'success': true,
+          'message': response.data['message'] ?? 'Account deleted successfully',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': response.data['message'] ?? 'Failed to delete account',
+        };
+      }
+    } on DioException catch (e) {
+      print('❌ Backend error: ${e.response?.data}');
+
+      if (e.response != null) {
+        final errorData = e.response!.data;
+        return {
+          'success': false,
+          'message': errorData['message'] ?? 'Failed to delete account',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your connection.',
+        };
+      }
+    } catch (e) {
+      print('❌ Error: $e');
+      return {'success': false, 'message': 'An unexpected error occurred'};
     }
   }
 }

@@ -7,17 +7,17 @@ import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/l10n/app_localizations.dart';
-import 'package:fixilya_app/services/admin_data_service.dart';
 // import 'package:fixilya_app/features/auth/presentation/screens/login_screen.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
+import 'package:fixilya_app/services/handyman_backend_service.dart';
 import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/profile_service.dart';
 import 'package:get/get.dart'; // ✅ Add this
 // import 'package:fixilya_app/data/controllers/theme_controller.dart'; // ✅ Add this
-import 'package:fixilya_app/services/handyman_data_service.dart';
+// import 'package:fixilya_app/services/handyman_data_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -56,7 +56,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // static const accentColor = Color.fromRGBO(147, 167, 255, 1);
 
   // ✅ ADD THESE NEW VARIABLES
-  final _handymanDataService = HandymanDataService();
+  final _handymanBackendService = HandymanBackendService();
   final bool _isLoadingData = true;
   Map<String, dynamic>? _profileData;
   StreamSubscription? _statsSubscription;
@@ -148,7 +148,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     setState(() => _isLoading = true);
 
     // ✅ ADD THIS LINE
-    _loadProfileData();
+    Future.delayed(Duration(milliseconds: 500), () {
+      _loadProfileData();
+    });
     // _checkAdminStatus();
   }
 
@@ -211,116 +213,106 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // ✅ ADD THIS NEW METHOD
   Future<void> _loadProfileData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true); // ✅ Set loading true
+    setState(() => _isLoading = true);
 
     try {
       final results = await Future.wait([
-        _handymanDataService.getHandymanProfile(),
-        // _handymanDataService.getAvailabilityStatus(),
-        _handymanDataService.getRatingStats(),
+        _handymanBackendService.getHandymanProfile(),
+        _handymanBackendService.getRatingStats(),
       ]);
-
-      _statsSubscription = _handymanDataService.streamHandymanStats().listen((
-        statsData,
-      ) {
-        if (!mounted) return;
-        setState(() {
-          _statsData = statsData;
-          _averageRating = statsData['rating'] ?? 0.0;
-          _reviewCount = statsData['totalReviews'] ?? 0;
-        });
-        // print('🔄 Stats updated live');
-      });
 
       if (results[0] != null && results[1] != null) {
         final profileData = results[0] as Map<String, dynamic>;
         final ratingStats = results[1] as Map<String, dynamic>;
-        final isAvailable = profileData['isAvailable'] as bool? ?? true;
 
-        // print('profileData : $profileData');
-        // print('ratingStats : $ratingStats');
+        // Load stats in background
+        _loadStats();
+
         if (!mounted) return;
         setState(() {
           _profileData = profileData;
-          // _statsData = statsData;
 
-          _averageRating = ratingStats['rating'] ?? 0.0;
+          // ✅ FIXED: Safely cast to double
+          _averageRating = (ratingStats['rating'] is int)
+              ? (ratingStats['rating'] as int).toDouble()
+              : (ratingStats['rating'] ?? 0.0);
           _reviewCount = ratingStats['reviewCount'] ?? 0;
 
           _name = profileData['fullName'] ?? 'Handyman';
           _email = profileData['email'] ?? '';
           _phone = profileData['phone'] ?? '';
           _city = profileData['city'] ?? '';
-          _experience = profileData['experience'] ?? '';
+
+          // ✅ FIXED: Safely convert to string
+          _experience = (profileData['experience'] is int)
+              ? (profileData['experience'] as int).toString()
+              : (profileData['experience'] ?? '').toString();
+
           _bio = profileData['bio'] ?? '';
+
+          // ✅ FIXED: Safely cast to double
           _hourlyRate = (profileData['hourlyRate'] is int)
               ? (profileData['hourlyRate'] as int).toDouble()
               : (profileData['hourlyRate'] ?? 0.0);
-          _isAvailable = isAvailable;
+
+          _isAvailable = profileData['isAvailable'] ?? true;
           _verifiedProfessional =
               profileData['approved'] == true &&
-                  profileData['profileCompleted'] == true &&
-                  profileData['experience'] != null &&
-                  profileData['skills'] != null &&
-                  (profileData['skills'] as List).isNotEmpty ??
-              false;
+              profileData['profileCompleted'] == true;
 
           selectedCity = profileData['city'];
 
           // Load skills
-          if (profileData['skills'] != null && profileData['skills'] is List) {
+          if (profileData['skills'] != null) {
             final skillsData = profileData['skills'] as List;
             skills = skillsData.map((skillItem) {
               if (skillItem is String) {
                 return {'name': skillItem, 'icon': _getSkillIcon(skillItem)};
-              } else if (skillItem is Map) {
-                final skillName = skillItem['name'] ?? '';
-                final hourlyRate = skillItem['hourlyRate'] ?? _hourlyRate;
-                return {
-                  'name': skillName,
-                  'icon': _getSkillIcon(skillName),
-                  'price': (hourlyRate is int)
-                      ? hourlyRate
-                      : (hourlyRate as double).toInt(),
-                };
-              } else {
-                return {
-                  'name': 'Unknown',
-                  'icon': _getSkillIcon('Unknown'),
-                  'price': _hourlyRate.toInt(),
-                };
               }
+              return {'name': 'Unknown', 'icon': _getSkillIcon('Unknown')};
             }).toList();
           }
 
           // Load work images
-          if (profileData['workImages'] != null &&
-              profileData['workImages'] is List) {
+          if (profileData['workImages'] != null) {
             final workImageUrls = profileData['workImages'] as List;
-            previousWork = workImageUrls
-                .asMap()
-                .entries
-                .map<Map<String, dynamic>>((entry) {
-                  return <String, dynamic>{
-                    'id': 'image_${entry.key}',
-                    'image': entry.value as String,
-                  };
-                })
-                .toList();
+            previousWork = workImageUrls.asMap().entries.map((entry) {
+              return {
+                'id': 'image_${entry.key}',
+                'image': entry.value as String,
+              };
+            }).toList();
           }
 
           _profileCompletion = _calculateProfileCompletion();
-          _isLoading = false; // ✅ Set loading false
+          _isLoading = false;
         });
-
-        if (!mounted) return;
-
-        // print('✅ Profile loaded with ${previousWork.length} images');
       }
     } catch (e) {
       if (!mounted) return;
-      // print('❌ Error: $e');
-      setState(() => _isLoading = false); // ✅ Set loading false on error
+      print('❌ Error: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // ✅ NEW: Load stats separately
+  Future<void> _loadStats() async {
+    try {
+      final stats = await _handymanBackendService.getHandymanStats();
+      if (stats != null && mounted) {
+        setState(() {
+          _statsData = stats;
+
+          // ✅ FIXED: Safely cast to double
+          _averageRating = (stats['rating'] is int)
+              ? (stats['rating'] as int).toDouble()
+              : (stats['rating'] ?? 0.0);
+
+          _reviewCount = stats['totalReviews'] ?? 0;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading stats: $e');
     }
   }
 
@@ -341,44 +333,42 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   }
 
   // ✅ ADD THIS METHOD TO SAVE TO FIREBASE
+  // ✅ UPDATED: Save profile to backend
   Future<void> _saveProfileToFirebase() async {
     try {
-      // print('💾 Saving profile to Firebase...');
+      print('💾 Saving profile to backend...');
+      print('📋 Current values:');
+      print('   Name: $_name');
+      print('   Email: $_email');
+      print('   Phone: $_phone');
+      print('   City: $selectedCity');
+      print('   Experience: $_experience');
+      print('   Hourly Rate: $_hourlyRate');
+      print('   Bio: $_bio');
+      print('   Skills: ${skills.map((s) => s['name']).toList()}');
 
-      // print('skills : ${skills}');
-      // Convert skills
       final skillsData = skills.map((s) => s['name']).toList();
 
-      // print('skillsData : ${skillsData}');
-
-      // ✅ Convert portfolio to Firebase format
-      final portfolioData = previousWork
-          .map(
-            (project) => {
-              'id': project['id'],
-              'title': project['title'],
-              'clientName': project['client'],
-              'date': project['date'],
-              'imageUrl': project['image'],
-              'description': project['description'] ?? '',
-              'createdAt': FieldValue.serverTimestamp(),
-            },
-          )
-          .toList();
-
-      final success = await _handymanDataService.updateHandymanProfile({
+      final updateData = {
         'fullName': _name,
         'email': _email,
         'phone': _phone,
         'city': selectedCity,
-        'experience': _experience,
-        'hourlyRate': _hourlyRate,
+        'experience': _experience, // ✅ This is now a string
+        'hourlyRate': _hourlyRate, // ✅ This is now a double
         'bio': _bio,
         'skills': skillsData,
-        'portfolio': portfolioData, // ✅ Save portfolio
-      });
+      };
+
+      print('📤 Sending to backend: $updateData');
+
+      final success = await _handymanBackendService.updateHandymanProfile(
+        updateData,
+      );
 
       if (success) {
+        print('✅ Backend confirmed update');
+
         Get.snackbar(
           'Success',
           'Profile updated successfully!',
@@ -389,13 +379,13 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
           borderRadius: 12,
           icon: Icon(Icons.check_circle, color: Colors.white),
         );
-        // print('✅ Profile saved to Firebase successfully');
-        // print('   Portfolio projects: ${portfolioData.length}');
       } else {
-        // print('⚠️ Profile save returned false');
+        print('⚠️ Backend returned false');
+        throw Exception('Update failed');
       }
-    } catch (e) {
-      // print('❌ Error saving profile: $e');
+    } catch (e, stackTrace) {
+      print('❌ Error saving profile: $e');
+      print('Stack trace: $stackTrace');
 
       Get.snackbar(
         'Error',
@@ -407,12 +397,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
         borderRadius: 12,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving profile: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      rethrow;
     }
   }
 
@@ -1308,6 +1293,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                             Get.find<CloudinaryService>();
 
                                         // ✅ Upload all images
+                                        // Upload images to Cloudinary
                                         for (var imageFile in selectedImages) {
                                           final imageUrl =
                                               await cloudinaryService
@@ -1329,32 +1315,28 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                         );
 
                                         if (uploadedUrls.isNotEmpty) {
-                                          // ✅ STEP 1: Add to local list
+                                          // Add to local list
                                           for (var url in uploadedUrls) {
                                             previousWork.add({
-                                              // 'id': "234",
                                               'id':
                                                   'image_${DateTime.now().millisecondsSinceEpoch}_${previousWork.length}',
                                               'image': url,
                                             });
                                           }
 
-                                          // ✅ STEP 2: Save to Firebase
+                                          // ✅ Save to backend instead of Firestore
                                           final workImages = previousWork
                                               .map(
                                                 (work) =>
                                                     work['image'] as String,
                                               )
                                               .toList();
-
-                                          await _handymanDataService
+                                          await _handymanBackendService
                                               .updateHandymanProfile({
                                                 'workImages': workImages,
                                               });
 
                                           Get.back();
-
-                                          // ✅ STEP 3: Trigger rebuild
                                           setState(() {});
 
                                           Get.snackbar(
@@ -1363,12 +1345,6 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                             snackPosition: SnackPosition.BOTTOM,
                                             backgroundColor: Colors.green,
                                             colorText: Colors.white,
-                                            margin: EdgeInsets.all(16),
-                                            borderRadius: 12,
-                                            icon: Icon(
-                                              Icons.check_circle,
-                                              color: Colors.white,
-                                            ),
                                           );
                                         }
                                       } catch (e) {
@@ -2263,12 +2239,13 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                         _buildGlassButton(
                           icon: _isEditing ? Icons.check : Icons.edit,
                           onPressed: () async {
-                            setState(() {
-                              if (_isEditing &&
-                                  _formKey.currentState!.validate()) {
+                            if (_isEditing) {
+                              if (_formKey.currentState!.validate()) {
+                                // ✅ SAVE FORM VALUES
                                 _formKey.currentState!.save();
-                                // ✅ ADD THIS LINE
-                                _saveProfileToFirebase();
+
+                                // ✅ SAVE TO BACKEND
+                                await _saveProfileToFirebase();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Row(
@@ -2288,10 +2265,18 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                     ),
                                   ),
                                 );
-                              }
 
-                              _isEditing = !_isEditing;
-                            });
+                                // ✅ ONLY THEN TOGGLE EDIT MODE
+                                setState(() {
+                                  _isEditing = false;
+                                });
+                              }
+                            } else {
+                              // ✅ ENTERING EDIT MODE
+                              setState(() {
+                                _isEditing = true;
+                              });
+                            }
                           },
                         ),
                       ],
@@ -2366,6 +2351,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                               label: 'Email',
                               icon: Icons.email_outlined,
                               initialValue: _email,
+                              readOnly: true,
                               keyboardType: TextInputType.emailAddress,
                               onSaved: (value) => _email = value!,
                             ),
@@ -3096,6 +3082,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     required IconData icon,
     required String initialValue,
     TextInputType? keyboardType,
+    bool readOnly = false,
     required Function(String?) onSaved,
   }) {
     return Row(
@@ -3115,8 +3102,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
         ),
         SizedBox(width: 14),
         Expanded(
-          child: _isEditing
+          child: _isEditing && !readOnly
               ? TextFormField(
+                  readOnly: true,
                   initialValue: initialValue,
                   keyboardType: keyboardType,
                   style: TextStyle(
@@ -3646,12 +3634,11 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                         previousWork.removeAt(index);
                       });
 
-                      // Update Firebase
+                      // ✅ Update backend instead of Firestore
                       final workImages = previousWork
                           .map((work) => work['image'] as String)
                           .toList();
-
-                      await _handymanDataService.updateHandymanProfile({
+                      await _handymanBackendService.updateHandymanProfile({
                         'workImages': workImages,
                       });
 
@@ -3755,7 +3742,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
           Switch(
             value: _isAvailable,
             onChanged: (value) async {
-              final success = await _handymanDataService
+              final success = await _handymanBackendService
                   .updateAvailabilityStatus(value);
               if (success) {
                 setState(() => _isAvailable = value);
@@ -4024,8 +4011,8 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
 
                         print('skillsData : $skillsData');
 
-                        // ✅ Save to Firebase
-                        final success = await _handymanDataService
+                        // ✅ Save to backend
+                        final success = await _handymanBackendService
                             .updateHandymanProfile({'skills': skillsData});
 
                         // Close loading dialog

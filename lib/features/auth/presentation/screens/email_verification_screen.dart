@@ -44,6 +44,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
 
   bool _isVerifying = false;
   bool _canResend = true;
+  bool _isResending = false;
   int _resendCountdown = 0;
   Timer? _countdownTimer;
 
@@ -123,13 +124,26 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null && !user.emailVerified) {
-        await user.sendEmailVerification();
 
-        // ✅ Use GetX snackbar
+      if (user == null) {
         Get.snackbar(
-          'Email Sent',
-          'Verification email sent successfully!',
+          'Error',
+          'No user logged in',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AppColors.error,
+          colorText: Colors.white,
+          icon: Icon(Icons.error_outline, color: Colors.white),
+          margin: EdgeInsets.all(16),
+          borderRadius: 12,
+        );
+        setState(() => _canResend = true);
+        return;
+      }
+
+      if (user.emailVerified) {
+        Get.snackbar(
+          'Already Verified',
+          'Your email is already verified!',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.success,
           colorText: Colors.white,
@@ -137,22 +151,43 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
           margin: EdgeInsets.all(16),
           borderRadius: 12,
         );
+        setState(() => _canResend = true);
+        return;
+      }
 
-        // Start countdown
-        setState(() => _resendCountdown = 60);
-        _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-          setState(() {
-            if (_resendCountdown > 0) {
-              _resendCountdown--;
-            } else {
-              _canResend = true;
-              timer.cancel();
-            }
+      if (!user.emailVerified) {
+        // ✅ Call backend API to resend verification email
+        final result = await _authService.resendVerificationEmail();
+
+        if (result['success']) {
+          Get.snackbar(
+            'Email Sent',
+            result['message'] ?? 'Verification email sent successfully!',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: AppColors.success,
+            colorText: Colors.white,
+            icon: Icon(Icons.check_circle, color: Colors.white),
+            margin: EdgeInsets.all(16),
+            borderRadius: 12,
+          );
+
+          // Start countdown
+          setState(() => _resendCountdown = 60);
+          _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+            setState(() {
+              if (_resendCountdown > 0) {
+                _resendCountdown--;
+              } else {
+                _canResend = true;
+                timer.cancel();
+              }
+            });
           });
-        });
+        }
       }
     } catch (e) {
       // ✅ Use GetX snackbar for errors
+
       Get.snackbar(
         'Error',
         'Failed to send email: ${e.toString()}',
@@ -615,32 +650,31 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     );
   }
 
-  Future<void> _handleVerification() async {
+  /// Check email verification status via backend
+  Future<void> _checkVerificationStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     setState(() => _isVerifying = true);
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📧 CHECKING EMAIL VERIFICATION STATUS');
+      print('User ID: ${user.uid}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      if (user == null) {
-        Get.snackbar(
-          'Session Expired',
-          'Please sign in again',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.white,
-          icon: Icon(Icons.error_outline, color: AppColors.white),
-          margin: EdgeInsets.all(16),
-          borderRadius: 12,
-        );
-        setState(() => _isVerifying = false);
-        return;
+      // ✅ Call backend to check verification status
+      final result = await _authService.checkEmailVerificationBackend(user.uid);
+
+      if (!result['success']) {
+        throw Exception(result['message'] ?? 'Failed to check verification');
       }
 
-      // Reload user
-      await user.reload();
-      final updatedUser = FirebaseAuth.instance.currentUser;
+      final isVerified = result['verified'] ?? false;
+      print('📊 Email verified: $isVerified');
 
-      if (updatedUser == null || !updatedUser.emailVerified) {
+      if (!isVerified) {
+        print('⚠️ Email not yet verified');
         Get.snackbar(
           'Not Verified',
           'Please check your inbox and click the verification link',
@@ -656,26 +690,15 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         return;
       }
 
-      // Create Firestore documents
-      final result = await _authService.createUserDocuments(
-        fullName: widget.fullName,
-        phone: widget.phone,
-        userType: widget.userType,
-      );
-
-      if (!result['success']) {
-        throw Exception(result['message']);
-      }
-
-      // ✅ Navigate with GetX
-      AppRoutes.toWelcomeAfterSignup(
-        userType: widget.userType,
-        userName: widget.userName,
-      );
+      // ✅ Email is verified - complete registration
+      await _completeRegistration(user.uid);
     } catch (e) {
+      print('❌ Error checking verification: $e');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
       Get.snackbar(
         'Error',
-        e.toString(),
+        'Failed to check verification status: ${e.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: AppColors.error,
         colorText: AppColors.white,
@@ -687,4 +710,180 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       setState(() => _isVerifying = false);
     }
   }
+
+  /// Complete registration via backend
+  Future<void> _completeRegistration(String uid) async {
+    try {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📝 COMPLETING REGISTRATION VIA BACKEND');
+      print('User ID: $uid');
+      print('User Type: ${widget.userType}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // ✅ Call backend to complete registration
+      final result = await _authService.completeRegistration(
+        uid: uid,
+        fullName: widget.fullName,
+        phone: widget.phone,
+        userType: widget.userType,
+      );
+
+      if (!result['success']) {
+        throw Exception(result['message'] ?? 'Failed to complete registration');
+      }
+
+      print('✅ Backend registration completed successfully');
+
+      // ✅ CRITICAL: Force user reload and token refresh to get updated custom claims
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🔄 Forcing Firebase user reload and token refresh...');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Force reload to get latest user state
+        await user.reload();
+
+        // Get fresh user reference
+        final freshUser = FirebaseAuth.instance.currentUser;
+        if (freshUser != null) {
+          // Force token refresh to get updated custom claims
+          final token = await freshUser.getIdToken(
+            true,
+          ); // true = force refresh
+          if (token != null) {
+            print('✅ Fresh token obtained: ${token.substring(0, 20)}...');
+
+            // Verify token has correct claims
+            final idTokenResult = await freshUser.getIdTokenResult(true);
+            print('📋 Token claims: ${idTokenResult.claims}');
+            print(
+              '   Email Verified: ${idTokenResult.claims?['email_verified']}',
+            );
+            print('   User Type: ${idTokenResult.claims?['userType']}');
+            print('   Role: ${idTokenResult.claims?['role']}');
+
+            // ✅ Wait for token to propagate (important!)
+            await Future.delayed(Duration(milliseconds: 2000));
+            print('✅ Token refresh complete and propagated');
+          } else {
+            print('⚠️ Warning: Token is null after refresh');
+          }
+        }
+      }
+
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('✅ REGISTRATION FULLY COMPLETE');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // ✅ Show success message
+      Get.snackbar(
+        'Success',
+        'Your account has been verified!',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.success,
+        colorText: Colors.white,
+        icon: Icon(Icons.check_circle, color: Colors.white),
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: Duration(seconds: 2),
+      );
+
+      // ✅ Wait for user to see message
+      await Future.delayed(Duration(milliseconds: 1500));
+
+      // ✅ Navigate to welcome screen
+      if (mounted) {
+        AppRoutes.toWelcomeAfterSignup(
+          userType: widget.userType,
+          userName: widget.userName,
+        );
+      }
+    } catch (e) {
+      print('❌ Error completing registration: $e');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      Get.snackbar(
+        'Error',
+        'Failed to complete registration: ${e.toString()}',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+        icon: Icon(Icons.error_outline, color: AppColors.white),
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: Duration(seconds: 4),
+      );
+      setState(() => _isVerifying = false);
+    }
+  }
+
+  /// Manual verification check
+  Future<void> _handleVerification() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      Get.snackbar(
+        'Session Expired',
+        'Please sign in again',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.error,
+        colorText: AppColors.white,
+        icon: Icon(Icons.error_outline, color: AppColors.white),
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+      );
+      return;
+    }
+
+    await _checkVerificationStatus();
+  }
+
+  /// Resend verification email via backend
+  // Future<void> _handleResendEmail() async {
+  //   setState(() => _isResending = true);
+
+  //   try {
+  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  //     print('📧 RESENDING VERIFICATION EMAIL');
+  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  //     // ✅ Call backend to resend email
+  //     final result = await _authService.resendVerificationEmail();
+
+  //     if (!result['success']) {
+  //       throw Exception(result['message'] ?? 'Failed to resend email');
+  //     }
+
+  //     print('✅ Verification email resent successfully');
+  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  //     Get.snackbar(
+  //       'Email Sent',
+  //       'Verification email has been sent. Please check your inbox.',
+  //       snackPosition: SnackPosition.BOTTOM,
+  //       backgroundColor: AppColors.success,
+  //       colorText: Colors.white,
+  //       icon: Icon(Icons.check_circle, color: Colors.white),
+  //       margin: EdgeInsets.all(16),
+  //       borderRadius: 12,
+  //       duration: Duration(seconds: 3),
+  //     );
+  //   } catch (e) {
+  //     print('❌ Error resending email: $e');
+  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  //     Get.snackbar(
+  //       'Error',
+  //       e.toString(),
+  //       snackPosition: SnackPosition.BOTTOM,
+  //       backgroundColor: AppColors.error,
+  //       colorText: AppColors.white,
+  //       icon: Icon(Icons.error_outline, color: AppColors.white),
+  //       margin: EdgeInsets.all(16),
+  //       borderRadius: 12,
+  //       duration: Duration(seconds: 4),
+  //     );
+  //   } finally {
+  //     setState(() => _isResending = false);
+  //   }
+  // }
 }

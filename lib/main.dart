@@ -45,7 +45,7 @@ void main() async {
   // ✅ Initialize local storage FIRST
 
   // Initialize API client
-  ApiClient().initialize();
+  ApiClient().init();
 
   runApp(const MyApp());
 }

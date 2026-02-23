@@ -7,6 +7,7 @@ const path = require('path');
 
 // Import shared utilities
 const logger = require(path.join(__dirname, '../../../shared/utils/logger'));
+const { AppError } = require(path.join(__dirname, '../../../shared/utils/appError')); // ✅ Import AppError
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,12 +34,26 @@ app.get('/health', (req, res) => {
 const authRoutes = require('./routes/auth.routes');
 app.use('/api/auth', authRoutes);
 
-// Error handler
+// ✅ FIXED: Error handler that respects AppError statusCode
 app.use((err, req, res, next) => {
+  // Log the error
   logger.error('Error:', err);
-  res.status(err.statusCode || 500).json({
+  
+  // ✅ Check if it's an AppError (operational error)
+  if (err.isOperational && err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      message: err.message,
+      statusCode: err.statusCode,
+    });
+  }
+
+  // ✅ Handle other errors (programming errors)
+  console.error('Unexpected error:', err);
+  res.status(500).json({
     success: false,
-    message: err.message || 'Internal server error',
+    message: 'Internal server error',
+    statusCode: 500,
   });
 });
 

@@ -3,34 +3,33 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
-const path = require('path');
-
-const logger = require(path.join(__dirname, '../../../shared/utils/logger'));
+const bookingRoutes = require('./routes/booking.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
 
+// Middleware
 app.use(helmet());
 app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use(morgan('combined', {
-  stream: { write: (message) => logger.info(message.trim()) },
-}));
+app.use(morgan('combined'));
 
+// Health check
 app.get('/health', (req, res) => {
   res.json({
     service: 'booking-service',
     status: 'healthy',
     port: PORT,
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Use your existing booking routes
-const bookingRoutes = require('../../../routes/bookingRoutes'); // Your existing file
+// Routes
 app.use('/api/bookings', bookingRoutes);
 
+// Error handler
 app.use((err, req, res, next) => {
-  logger.error('Error:', err);
+  console.error('Error:', err);
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Internal server error',
@@ -38,7 +37,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  logger.info(`📅 Booking Service running on port ${PORT}`);
   console.log(`📅 Booking Service running on port ${PORT}`);
 });
 

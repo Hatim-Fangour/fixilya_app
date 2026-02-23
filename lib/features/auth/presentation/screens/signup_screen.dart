@@ -28,11 +28,15 @@ class _SignUpScreenState extends State<SignUpScreen>
   late Animation<Offset> _slideAnimation;
 
   // Controllers
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController(); // ✅ NEW
+  final _nameController = TextEditingController(text: 'handy Hatim');
+  final _emailController = TextEditingController(
+    text: 'ing.hatim.fangour@gmail.com',
+  );
+  final _phoneController = TextEditingController(text: '+212666666666');
+  final _passwordController = TextEditingController(text: '123ewq');
+  final _confirmPasswordController = TextEditingController(
+    text: '123ewq',
+  ); // ✅ NEW
 
   bool _agreePersonalData = true;
   bool _isLoading = false;
@@ -103,6 +107,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     await Future.delayed(const Duration(milliseconds: 80));
 
     try {
+      // ✅ STEP 1: Register user (creates auth + minimal Firestore docs)
       final result = await _authService.signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -111,18 +116,7 @@ class _SignUpScreenState extends State<SignUpScreen>
         userType: widget.userType,
       );
 
-      final result2 = await _authService.createUserDocuments(
-        fullName: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-        userType: widget.userType,
-      );
-
-      print('Sign-up result: $result');
-      print('Create user documents result: $result2');
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
 
       if (result['success']) {
         if (mounted) {

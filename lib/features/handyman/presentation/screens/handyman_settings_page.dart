@@ -7,6 +7,7 @@ import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
 import 'package:fixilya_app/services/handyman_data_service.dart';
 import 'package:fixilya_app/services/language_service.dart';
+import 'package:fixilya_app/services/settings_backend_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -24,7 +25,7 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
   static const accentColor = Color.fromRGBO(147, 167, 255, 1);
 
-  final _handymanDataService = HandymanDataService();
+  final _settingsBackendService = SettingsBackendService(); // ✅ NEW
   final _authService = AuthService();
 
   bool _isLoading = true;
@@ -64,14 +65,15 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
     setState(() => _isLoading = true);
 
     try {
-      final profileData = await _handymanDataService.getHandymanProfile();
+      // ✅ USE BACKEND SERVICE
+      final settingsData = await _settingsBackendService.getHandymanSettings();
 
-      if (profileData != null) {
+      if (settingsData != null) {
         setState(() {
-          _profileData = profileData; // ✅ Already a Map, not a List
-          _pushNotifications = profileData['pushNotifications'] ?? true;
-          _emailNotifications = profileData['emailNotifications'] ?? false;
-          _smsNotifications = profileData['smsNotifications'] ?? true;
+          _profileData = settingsData; // ✅ Already a Map, not a List
+          _pushNotifications = settingsData['pushNotifications'] ?? true;
+          _emailNotifications = settingsData['emailNotifications'] ?? false;
+          _smsNotifications = settingsData['smsNotifications'] ?? true;
           _isLoading = false;
         });
       } else {
@@ -85,7 +87,10 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
 
   Future<void> _updateSettings(Map<String, dynamic> updates) async {
     try {
-      await _handymanDataService.updateHandymanProfile(updates);
+      // ✅ USE BACKEND SERVICE
+      final success = await _settingsBackendService.updateHandymanSettings(
+        updates,
+      );
 
       // if (success) {
       //   Get.snackbar(
@@ -108,6 +113,128 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
         backgroundColor: Colors.red,
         colorText: Colors.white,
         margin: EdgeInsets.all(16),
+        borderRadius: 16,
+      );
+    }
+  }
+
+  Future<void> _updateProfileInfo(Map<String, dynamic> updates) async {
+    try {
+      // ✅ USE BACKEND SERVICE
+      final success = await _settingsBackendService.updateProfileInfo(updates);
+
+      if (success) {
+        // Reload settings
+        await _loadSettings();
+
+        Get.snackbar(
+          'Success',
+          'Profile updated successfully!',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          margin: EdgeInsets.all(16),
+          borderRadius: 16,
+          icon: Icon(Icons.check_circle_rounded, color: Colors.white),
+          duration: Duration(seconds: 2),
+        );
+      } else {
+        throw Exception('Update failed');
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to update profile',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        margin: EdgeInsets.all(16),
+        borderRadius: 16,
+      );
+    }
+  }
+
+  Future<void> _changeProfilePicture() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+
+      if (image == null) return;
+
+      Get.dialog(
+        Center(
+          child: Container(
+            padding: EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 30,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                  strokeWidth: 3,
+                ),
+                SizedBox(height: 24),
+                Text(
+                  'Uploading...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      // ✅ UPLOAD TO CLOUDINARY
+      final cloudinaryService = Get.find<CloudinaryService>();
+      final imageUrl = await cloudinaryService.uploadImage(
+        imageFile: File(image.path),
+        folder: 'profiles',
+        isProfilePicture: true, // ✅ Enable face detection
+      );
+
+      Get.back(); // Close loading
+
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        // ✅ UPDATE VIA BACKEND
+        final updatedUrl = await _settingsBackendService.updateProfilePicture(
+          imageUrl,
+        );
+
+        if (updatedUrl != null) {
+          await _loadSettings(); // Reload to get new picture
+
+          Get.snackbar(
+            'Success',
+            'Profile picture updated!',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            margin: EdgeInsets.all(16),
+            borderRadius: 16,
+            icon: Icon(Icons.check_circle, color: Colors.white),
+          );
+        }
+      }
+    } catch (e) {
+      if (Get.isDialogOpen ?? false) Get.back();
+      Get.snackbar(
+        'Error',
+        'Failed to upload image',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
         borderRadius: 16,
       );
     }
@@ -1455,61 +1582,81 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                                   return;
                                                 }
 
-                                                // Show loading
-                                                Get.dialog(
-                                                  Center(
-                                                    child: Container(
-                                                      padding: EdgeInsets.all(
-                                                        32,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.white,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              24,
-                                                            ),
-                                                        boxShadow: [
-                                                          BoxShadow(
-                                                            color: Colors.black
-                                                                .withValues(
-                                                                  alpha: 0.2,
-                                                                ),
-                                                            blurRadius: 30,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      child: Column(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          CircularProgressIndicator(
-                                                            valueColor:
-                                                                AlwaysStoppedAnimation<
-                                                                  Color
-                                                                >(primaryColor),
-                                                            strokeWidth: 3,
-                                                          ),
-                                                          SizedBox(height: 24),
-                                                          Text(
-                                                            'Updating profile...',
-                                                            style: TextStyle(
-                                                              fontSize: 16,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                              color: Colors
-                                                                  .black87,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
+                                                // ✅ SHOW LOADING - Store the dialog context
+                                                showDialog(
+                                                  context: context,
                                                   barrierDismissible: false,
+                                                  builder: (BuildContext dialogContext) {
+                                                    return WillPopScope(
+                                                      onWillPop: () async =>
+                                                          false,
+                                                      child: Center(
+                                                        child: Container(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                32,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.white,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  24,
+                                                                ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: Colors
+                                                                    .black
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.2,
+                                                                    ),
+                                                                blurRadius: 30,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          child: Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              CircularProgressIndicator(
+                                                                valueColor:
+                                                                    AlwaysStoppedAnimation<
+                                                                      Color
+                                                                    >(
+                                                                      primaryColor,
+                                                                    ),
+                                                                strokeWidth: 3,
+                                                              ),
+                                                              SizedBox(
+                                                                height: 24,
+                                                              ),
+                                                              Text(
+                                                                'Updating profile...',
+                                                                style: TextStyle(
+                                                                  fontSize: 16,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color: Colors
+                                                                      .black87,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
                                                 );
 
                                                 try {
-                                                  await _updateSettings({
+                                                  print(
+                                                    '🚀 Starting profile update...',
+                                                  );
+
+                                                  // ✅ UPDATE PROFILE
+                                                  await _updateProfileInfo({
                                                     'fullName': nameController
                                                         .text
                                                         .trim(),
@@ -1520,19 +1667,21 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                                         .trim(),
                                                   });
 
-                                                  // Close loading
-                                                  if (Get.isDialogOpen ??
-                                                      false) {
-                                                    Get.back();
-                                                  }
+                                                  print(
+                                                    '✅ Profile updated successfully',
+                                                  );
 
-                                                  // Close edit dialog
-                                                  Get.back();
+                                                  // ✅ CLOSE LOADING DIALOG - Use Navigator with context
+                                                  Navigator.of(
+                                                    context,
+                                                  ).pop(); // Close loading dialog
 
-                                                  // Reload data
-                                                  await _loadSettings();
+                                                  // ✅ CLOSE EDIT DIALOG
+                                                  Navigator.of(
+                                                    context,
+                                                  ).pop(); // Close edit dialog
 
-                                                  // Success message
+                                                  // ✅ SHOW SUCCESS
                                                   Get.snackbar(
                                                     'Success',
                                                     'Profile updated successfully!',
@@ -1553,25 +1702,34 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                                                     ),
                                                   );
                                                 } catch (e) {
-                                                  // Close loading
-                                                  if (Get.isDialogOpen ??
-                                                      false) {
-                                                    Get.back();
-                                                  }
+                                                  print(
+                                                    '❌ Error updating profile: $e',
+                                                  );
 
-                                                  // Error message
+                                                  // ✅ CLOSE LOADING DIALOG
+                                                  Navigator.of(context).pop();
+
+                                                  // ✅ SHOW ERROR
                                                   Get.snackbar(
                                                     'Error',
-                                                    'Failed to update profile',
+                                                    'Failed to update profile: ${e.toString()}',
                                                     snackPosition:
                                                         SnackPosition.BOTTOM,
                                                     backgroundColor: Colors.red,
                                                     colorText: Colors.white,
                                                     margin: EdgeInsets.all(16),
                                                     borderRadius: 16,
+                                                    icon: Icon(
+                                                      Icons.error_outline,
+                                                      color: Colors.white,
+                                                    ),
+                                                    duration: Duration(
+                                                      seconds: 3,
+                                                    ),
                                                   );
                                                 }
                                               },
+
                                               child: Center(
                                                 child: Row(
                                                   mainAxisAlignment:
@@ -1756,73 +1914,6 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
     );
   }
 
-  Future<void> _changeProfilePicture() async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
-
-      if (image == null) return;
-
-      Get.dialog(
-        Center(
-          child: Container(
-            padding: EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 30,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                  strokeWidth: 3,
-                ),
-                SizedBox(height: 24),
-                Text(
-                  'Uploading...',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        ),
-        barrierDismissible: false,
-      );
-
-      final cloudinaryService = Get.find<CloudinaryService>();
-      final imageUrl = await cloudinaryService.uploadImage(
-        imageFile: File(image.path),
-        folder: 'profiles',
-      );
-
-      Get.back();
-
-      if (imageUrl != null && imageUrl.isNotEmpty) {
-        await _updateSettings({'profilePicture': imageUrl});
-        _loadSettings();
-      }
-    } catch (e) {
-      if (Get.isDialogOpen ?? false) Get.back();
-      Get.snackbar(
-        'Error',
-        'Failed to upload image',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        borderRadius: 16,
-      );
-    }
-  }
-
   void _showChangePasswordDialog() {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -1936,22 +2027,86 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                     backgroundColor: Colors.red,
                     colorText: Colors.white,
                     borderRadius: 16,
+                    margin: EdgeInsets.all(16),
                   );
                   return;
                 }
+
+                if (newPasswordController.text.length < 6) {
+                  Get.snackbar(
+                    'Error',
+                    'New password must be at least 6 characters',
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                    borderRadius: 16,
+                    margin: EdgeInsets.all(16),
+                  );
+                  return;
+                }
+
+                // Show loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext dialogContext) {
+                    return Center(
+                      child: Container(
+                        padding: EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                primaryColor,
+                              ),
+                            ),
+                            SizedBox(height: 24),
+                            Text(
+                              'Changing password...',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
                 try {
-                  await _authService.changePassword(
+                  final result = await _authService.changePassword(
                     currentPasswordController.text,
                     newPasswordController.text,
                   );
-                  Get.back();
-                  Get.snackbar(
-                    'Success',
-                    'Password changed successfully',
-                    backgroundColor: Colors.green,
-                    colorText: Colors.white,
-                    borderRadius: 16,
-                  );
+
+                  if (result['success'] == true) {
+                    // Close change password dialog
+                    Navigator.of(context).pop();
+
+                    Get.snackbar(
+                      'Success',
+                      result['message'] ?? 'Password changed successfully',
+                      backgroundColor: Colors.green,
+                      colorText: Colors.white,
+                      borderRadius: 16,
+                      margin: EdgeInsets.all(16),
+                      icon: Icon(Icons.check_circle, color: Colors.white),
+                    );
+                  } else {
+                    Get.snackbar(
+                      'Error',
+                      result['message'] ?? 'Failed to change password',
+                      backgroundColor: Colors.red,
+                      colorText: Colors.white,
+                      borderRadius: 16,
+                      margin: EdgeInsets.all(16),
+                    );
+                  }
                 } catch (e) {
                   Get.snackbar(
                     'Error',

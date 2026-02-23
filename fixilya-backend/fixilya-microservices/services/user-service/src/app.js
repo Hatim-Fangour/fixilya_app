@@ -1,45 +1,44 @@
 require('dotenv').config();
 const express = require('express');
-const helmet = require('helmet');
 const cors = require('cors');
-const morgan = require('morgan');
-const path = require('path');
-
-const logger = require(path.join(__dirname, '../../../shared/utils/logger'));
+const helmet = require('helmet');
+const logger = require('../../../shared/utils/logger');
+const userRoutes = require('./routes/user.routes');
 
 const app = express();
-const PORT = process.env.PORT || 3003;
 
+// Middleware
 app.use(helmet());
-app.use(cors({ origin: '*' }));
+app.use(cors());
 app.use(express.json());
-app.use(morgan('combined', {
-  stream: { write: (message) => logger.info(message.trim()) },
-}));
 
+// Routes
+app.use('/api/users', userRoutes);
+
+// Health check
 app.get('/health', (req, res) => {
-  res.json({
-    service: 'booking-service',
-    status: 'healthy',
-    port: PORT,
-  });
+  res.json({ status: 'healthy', service: 'user-service' });
 });
 
-// Use your existing booking routes
-const bookingRoutes = require('../../../routes/bookingRoutes'); // Your existing file
-app.use('/api/bookings', bookingRoutes);
-
+// Error handling
 app.use((err, req, res, next) => {
-  logger.error('Error:', err);
-  res.status(err.statusCode || 500).json({
+  logger.error(err.stack);
+  
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Internal server error';
+
+  res.status(statusCode).json({
     success: false,
-    message: err.message || 'Internal server error',
+    message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
+
+const PORT = process.env.PORT || 3002;
 
 app.listen(PORT, () => {
-  logger.info(`📅 Booking Service running on port ${PORT}`);
-  console.log(`📅 Booking Service running on port ${PORT}`);
+  logger.info(`👤 User Service running on port ${PORT}`);
+  console.log(`👤 User Service running on port ${PORT}`);
 });
 
 module.exports = app;

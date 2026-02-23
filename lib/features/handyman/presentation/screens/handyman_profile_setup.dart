@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/services/admin_notification_service.dart';
+import 'package:fixilya_app/services/api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
@@ -174,6 +177,10 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       print('✅ User: ${user.uid}');
 
+      // ✅ Variables for image URLs
+      String? profilePictureUrl;
+      List<String> workImageUrls = [];
+
       // Show progress dialog
       String currentStep = 'Initializing...';
 
@@ -272,8 +279,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         }
       }
 
-      // ✅ Upload profile picture with FACE DETECTION
-      String? profilePictureUrl;
+      // ✅ STEP 1: Upload profile picture to Cloudinary FROM FLUTTER
       if (_profileImage != null) {
         updateProgress(
           'Uploading profile picture...\nOptimizing with face detection',
@@ -284,35 +290,29 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
             imageFile: _profileImage!,
             folder: 'profiles',
             publicId: 'profile_${user.uid}',
-            isProfilePicture: true, // ✅ Enable face detection & cropping
+            isProfilePicture: true,
             timeoutSeconds: 60,
             maxRetries: 2,
           );
 
           if (profilePictureUrl != null) {
-            print('✅ Profile picture uploaded with face detection');
-            print('🔗 Optimized URL: $profilePictureUrl');
+            print('✅ Profile picture uploaded to Cloudinary');
+            print('🔗 URL: $profilePictureUrl');
 
             if (mounted) {
               setState(() {
                 _uploadedProfileUrl = profilePictureUrl;
               });
             }
-            await _firebaseImageService.saveProfileImageUrl(
-              userId: user.uid,
-              imageUrl: profilePictureUrl,
-              userType: 'handymen',
-            );
           } else {
-            print('⚠️ Profile picture upload failed, continuing...');
+            print('⚠️ Profile picture upload failed');
           }
         } catch (e) {
           print('❌ Profile picture error: $e');
         }
       }
 
-      // ✅ Upload work images with AUTO COMPRESSION
-      List<String> workImageUrls = [];
+      // ✅ STEP 2: Upload work images to Cloudinary FROM FLUTTER
       if (_workImages.isNotEmpty) {
         updateProgress(
           'Uploading work images (0/${_workImages.length})...\nCloudinary is compressing...',
@@ -331,18 +331,16 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           );
 
           if (workImageUrls.isNotEmpty) {
-            print('✅ Work images uploaded: ${workImageUrls.length}');
+            print(
+              '✅ ${workImageUrls.length} work images uploaded to Cloudinary',
+            );
+            print('🔗 URLs: $workImageUrls');
 
             if (mounted) {
               setState(() {
                 _uploadedWorkUrls = workImageUrls;
               });
             }
-            await _firebaseImageService.saveWorkImages(
-              userId: user.uid,
-              imageUrls: workImageUrls,
-              userType: 'handymen',
-            );
           } else {
             print('⚠️ No work images uploaded');
           }
@@ -351,72 +349,30 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         }
       }
 
-      // ✅ Save to Firestore
-      updateProgress('Saving profile data...');
+      // ✅ STEP 3: Send Cloudinary URLs to backend to save in Firebase
+      updateProgress('Saving profile data to server...');
       print('📋 _selectedSkills Data: $_selectedSkills');
-      final profileData = {
-        'city': _cityController.value ?? '',
-        'experience': _experienceController.text.trim(),
-        'hourlyRate': double.tryParse(_hourlyRateController.text) ?? 0,
-        'bio': _bioController.text.trim(),
-        'skills': _selectedSkills.map((s) => s['name']).toList(),
-        'profilePicture':
-            profilePictureUrl ?? '', // ✅ Face-detected & cropped URL
-        'workImages': workImageUrls, // ✅ Compressed & optimized URLs
-        'profileCompleted': true,
-        'approved': false,
-        'suspended': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
 
-      print('📝 Saving to Firestore...');
+      final api = ApiClient();
 
-      await FirebaseFirestore.instance
-          .collection('handymen')
-          .doc(user.uid)
-          .set(profileData, SetOptions(merge: true));
-
-      print('✅ Handymen collection updated');
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'profileCompleted': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      print('✅ Users collection updated');
-
-      // ✅ NOTIFY ADMIN (only for new users)
-      final adminNotificationService = AdminNotificationService();
-      final isNewUser = await adminNotificationService.isFirstTimeUser(
-        user.uid,
+      final response = await api.userDio.post(
+        '/users/complete-profile',
+        data: {
+          'uid': user.uid,
+          'userType': 'handyman',
+          'fullName': user.displayName ?? '',
+          'phone': user.phoneNumber ?? '',
+          'city': _cityController.value ?? '',
+          'experience': _experienceController.text.trim(),
+          'hourlyRate': double.tryParse(_hourlyRateController.text) ?? 0,
+          'bio': _bioController.text.trim(),
+          'skills': _selectedSkills.map((s) => s['name']).toList(),
+          'profilePicture': profilePictureUrl ?? '', // ✅ Cloudinary URL
+          'workImages': workImageUrls, // ✅ Cloudinary URLs
+        },
       );
 
-      if (isNewUser) {
-        print('📧 Sending admin notification for new handyman...');
-
-        // Get user data for notification
-        final userData = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        if (userData.exists) {
-          final userInfo = userData.data()!;
-
-          await adminNotificationService.notifyAdminOfNewHandyman(
-            handymanId: user.uid,
-            handymanName: userInfo['fullName'] ?? 'Unknown',
-            email: userInfo['email'] ?? user.email ?? '',
-            phone: userInfo['phone'] ?? '',
-            profileCompleted: true, // Completed profile
-          );
-
-          print('✅ Admin notified of new handyman (profile completed)');
-        }
-      } else {
-        print('ℹ️ Existing user updating profile - no admin notification');
-      }
+      final responseData = response.data;
 
       // ✅ Close dialog
       if (Get.isDialogOpen ?? false) {
@@ -425,32 +381,66 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       setState(() => _isLoading = false);
 
-      // ✅ Show success
+      // ✅ Check response
+      if (responseData['success'] == true) {
+        print('✅ Backend response successful!');
+
+        final data = responseData['data'];
+        final isNewUser = data['isNewUser'] ?? false;
+
+        print('✅ Profile setup complete!');
+        print('   Profile Picture: ${profilePictureUrl ?? "None"}');
+        print('   Work Images: ${workImageUrls.length} images');
+        print(
+          '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
+        );
+
+        // ✅ Show success
+        Get.snackbar(
+          'Success!',
+          responseData['message'] ?? 'Profile created successfully!',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AppColors.success,
+          colorText: Colors.white,
+          icon: Icon(Icons.check_circle, color: Colors.white),
+          margin: EdgeInsets.all(16),
+          borderRadius: 12,
+          duration: Duration(seconds: 3),
+        );
+
+        await Future.delayed(Duration(milliseconds: 500));
+        AppRoutes.toHome();
+      } else {
+        throw Exception(responseData['message'] ?? 'Failed to save profile');
+      }
+    } on DioException catch (e) {
+      setState(() => _isLoading = false);
+
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      print('❌ DIO ERROR: ${e.type}');
+      print('   Status: ${e.response?.statusCode}');
+      print('   Response: ${e.response?.data}');
+
+      String errorMessage = 'Failed to save profile. Please try again.';
+
+      if (e.response?.data != null && e.response!.data is Map) {
+        errorMessage = e.response!.data['message'] ?? errorMessage;
+      }
+
       Get.snackbar(
-        'Success!',
-        isNewUser
-            ? 'Your profile is under review. You\'ll be notified once approved.'
-            : 'Your profile has been updated successfully.',
+        'Error',
+        errorMessage,
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.success,
+        backgroundColor: AppColors.error,
         colorText: Colors.white,
-        icon: Icon(Icons.check_circle, color: Colors.white),
+        icon: Icon(Icons.error_outline, color: Colors.white),
         margin: EdgeInsets.all(16),
         borderRadius: 12,
-        duration: Duration(seconds: 3),
+        duration: Duration(seconds: 4),
       );
-
-      print('✅ Profile setup complete!');
-      print(
-        '   Profile Picture: ${profilePictureUrl != null ? "✅ Face-detected" : "❌ None"}',
-      );
-      print('   Work Images: ${workImageUrls.length} optimized images');
-      print(
-        '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
-      );
-
-      await Future.delayed(Duration(milliseconds: 500));
-      AppRoutes.toHome();
     } catch (e, stackTrace) {
       setState(() => _isLoading = false);
 
@@ -1426,68 +1416,68 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
     );
   }
 
-  Widget _buildPremiumSkillChip(Map<String, dynamic> skill, bool isSelected) {
-    return GestureDetector(
-      onTap: () => _toggleSkill(skill),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [AppColors.primaryColor, AppColors.secondaryColor],
-                )
-              : null,
-          color: isSelected ? null : AppColors.cardColor(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryColor : Colors.grey.shade300,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primaryColor.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 5,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaIcon(
-              skill['icon'],
-              size: 20,
-              color: isSelected ? Colors.white : AppColors.primaryColor,
-            ),
-            SizedBox(width: 10),
-            Text(
-              skill['name'],
-              style: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : AppColors.textPrimaryColor(context),
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-            if (isSelected) ...[
-              SizedBox(width: 8),
-              Icon(Icons.check_circle, color: Colors.white, size: 18),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  // Widget _buildPremiumSkillChip(Map<String, dynamic> skill, bool isSelected) {
+  //   return GestureDetector(
+  //     onTap: () => _toggleSkill(skill),
+  //     child: AnimatedContainer(
+  //       duration: Duration(milliseconds: 200),
+  //       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+  //       decoration: BoxDecoration(
+  //         gradient: isSelected
+  //             ? LinearGradient(
+  //                 colors: [AppColors.primaryColor, AppColors.secondaryColor],
+  //               )
+  //             : null,
+  //         color: isSelected ? null : AppColors.cardColor(context),
+  //         borderRadius: BorderRadius.circular(16),
+  //         border: Border.all(
+  //           color: isSelected ? AppColors.primaryColor : Colors.grey.shade300,
+  //           width: isSelected ? 2 : 1,
+  //         ),
+  //         boxShadow: isSelected
+  //             ? [
+  //                 BoxShadow(
+  //                   color: AppColors.primaryColor.withValues(alpha: 0.3),
+  //                   blurRadius: 10,
+  //                   offset: Offset(0, 4),
+  //                 ),
+  //               ]
+  //             : [
+  //                 BoxShadow(
+  //                   color: Colors.black.withValues(alpha: 0.03),
+  //                   blurRadius: 5,
+  //                   offset: Offset(0, 2),
+  //                 ),
+  //               ],
+  //       ),
+  //       child: Row(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           FaIcon(
+  //             skill['icon'],
+  //             size: 20,
+  //             color: isSelected ? Colors.white : AppColors.primaryColor,
+  //           ),
+  //           SizedBox(width: 10),
+  //           Text(
+  //             skill['name'],
+  //             style: TextStyle(
+  //               color: isSelected
+  //                   ? Colors.white
+  //                   : AppColors.textPrimaryColor(context),
+  //               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+  //               fontSize: 14,
+  //             ),
+  //           ),
+  //           if (isSelected) ...[
+  //             SizedBox(width: 8),
+  //             Icon(Icons.check_circle, color: Colors.white, size: 18),
+  //           ],
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   // Widget _buildEmptyWorkState() {
   //   return GestureDetector(
@@ -1626,41 +1616,41 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   //   );
   // }
 
-  Widget _buildAddMoreButton() {
-    return GestureDetector(
-      onTap: _pickWorkImages,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primaryColor.withValues(alpha: 0.1),
-              AppColors.secondaryColor.withValues(alpha: 0.05),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.primaryColor.withValues(alpha: 0.3),
-            width: 2,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add, size: 32, color: AppColors.primaryColor),
-            SizedBox(height: 4),
-            Text(
-              'Add More',
-              style: TextStyle(
-                color: AppColors.primaryColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Widget _buildAddMoreButton() {
+  //   return GestureDetector(
+  //     onTap: _pickWorkImages,
+  //     child: Container(
+  //       decoration: BoxDecoration(
+  //         gradient: LinearGradient(
+  //           colors: [
+  //             AppColors.primaryColor.withValues(alpha: 0.1),
+  //             AppColors.secondaryColor.withValues(alpha: 0.05),
+  //           ],
+  //         ),
+  //         borderRadius: BorderRadius.circular(16),
+  //         border: Border.all(
+  //           color: AppColors.primaryColor.withValues(alpha: 0.3),
+  //           width: 2,
+  //         ),
+  //       ),
+  //       child: Column(
+  //         mainAxisAlignment: MainAxisAlignment.center,
+  //         children: [
+  //           Icon(Icons.add, size: 32, color: AppColors.primaryColor),
+  //           SizedBox(height: 4),
+  //           Text(
+  //             'Add More',
+  //             style: TextStyle(
+  //               color: AppColors.primaryColor,
+  //               fontSize: 12,
+  //               fontWeight: FontWeight.w600,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   // Widget _buildWorkImageCard(File image, int index) {
   //   final hasUploadedUrl = _uploadedWorkUrls.length > index;
@@ -1714,71 +1704,71 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   //   );
   // }
 
-  Widget _buildTestUploadButton() {
-    return ElevatedButton(
-      onPressed: () async {
-        print('🧪 TESTING CLOUDINARY UPLOAD...');
+  // Widget _buildTestUploadButton() {
+  //   return ElevatedButton(
+  //     onPressed: () async {
+  //       print('🧪 TESTING CLOUDINARY UPLOAD...');
 
-        try {
-          // Test 1: Check if service is loaded
-          print('📋 Test 1: Service loaded?');
-          print('   Cloud Name: ${_cloudinaryService.cloudName}');
-          print('   Upload Preset: ${_cloudinaryService.uploadPreset}');
+  //       try {
+  //         // Test 1: Check if service is loaded
+  //         print('📋 Test 1: Service loaded?');
+  //         print('   Cloud Name: ${_cloudinaryService.cloudName}');
+  //         print('   Upload Preset: ${_cloudinaryService.uploadPreset}');
 
-          // Test 2: Pick an image
-          print('📋 Test 2: Picking test image...');
-          final testImage = await _cloudinaryService.pickImage();
+  //         // Test 2: Pick an image
+  //         print('📋 Test 2: Picking test image...');
+  //         final testImage = await _cloudinaryService.pickImage();
 
-          if (testImage == null) {
-            print('❌ No image picked');
-            return;
-          }
+  //         if (testImage == null) {
+  //           print('❌ No image picked');
+  //           return;
+  //         }
 
-          print('✅ Image picked: ${testImage.path}');
-          print('   File exists: ${await testImage.exists()}');
-          print('   File size: ${await testImage.length()} bytes');
+  //         print('✅ Image picked: ${testImage.path}');
+  //         print('   File exists: ${await testImage.exists()}');
+  //         print('   File size: ${await testImage.length()} bytes');
 
-          // Test 3: Try uploading
-          print('📋 Test 3: Attempting upload...');
-          final url = await _cloudinaryService.uploadImage(
-            imageFile: testImage,
-            folder: 'test_uploads',
-            publicId: 'test_${DateTime.now().millisecondsSinceEpoch}',
-          );
+  //         // Test 3: Try uploading
+  //         print('📋 Test 3: Attempting upload...');
+  //         final url = await _cloudinaryService.uploadImage(
+  //           imageFile: testImage,
+  //           folder: 'test_uploads',
+  //           publicId: 'test_${DateTime.now().millisecondsSinceEpoch}',
+  //         );
 
-          if (url != null) {
-            print('✅✅✅ SUCCESS! Upload worked!');
-            print('🔗 URL: $url');
-            Get.snackbar(
-              'Success!',
-              'Upload test passed! URL: $url',
-              backgroundColor: Colors.green,
-              colorText: Colors.white,
-              duration: Duration(seconds: 5),
-            );
-          } else {
-            print('❌ Upload returned null');
-            Get.snackbar(
-              'Failed',
-              'Upload returned null - check console for errors',
-              backgroundColor: Colors.red,
-              colorText: Colors.white,
-            );
-          }
-        } catch (e, stack) {
-          print('❌ TEST FAILED: $e');
-          print('Stack trace: $stack');
-          Get.snackbar(
-            'Error',
-            'Test failed: $e',
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-        }
-      },
-      child: Text('🧪 Test Cloudinary Upload'),
-    );
-  }
+  //         if (url != null) {
+  //           print('✅✅✅ SUCCESS! Upload worked!');
+  //           print('🔗 URL: $url');
+  //           Get.snackbar(
+  //             'Success!',
+  //             'Upload test passed! URL: $url',
+  //             backgroundColor: Colors.green,
+  //             colorText: Colors.white,
+  //             duration: Duration(seconds: 5),
+  //           );
+  //         } else {
+  //           print('❌ Upload returned null');
+  //           Get.snackbar(
+  //             'Failed',
+  //             'Upload returned null - check console for errors',
+  //             backgroundColor: Colors.red,
+  //             colorText: Colors.white,
+  //           );
+  //         }
+  //       } catch (e, stack) {
+  //         print('❌ TEST FAILED: $e');
+  //         print('Stack trace: $stack');
+  //         Get.snackbar(
+  //           'Error',
+  //           'Test failed: $e',
+  //           backgroundColor: Colors.red,
+  //           colorText: Colors.white,
+  //         );
+  //       }
+  //     },
+  //     child: Text('🧪 Test Cloudinary Upload'),
+  //   );
+  // }
 
   Widget _buildNavigationButtons() {
     return Row(
