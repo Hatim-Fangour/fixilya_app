@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contain secrets — never commit)
+.env
+
+# Lock file (auto-generated, not committed in this monorepo)
+package-lock.json
+
+# Logs
+logs/
+*.log
