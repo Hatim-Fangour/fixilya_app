@@ -1,10 +1,16 @@
-// ignore_for_file: unused_field
-
 import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/features/call/presentation/widgets/call_listener.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/bookings_service.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_notifications_page.dart';
+import 'package:fixilya_app/features/handyman/presentation/screens/handyman_reviews_page.dart';
+import 'package:fixilya_app/services/bookings_api_service.dart';
+import 'package:fixilya_app/services/notification_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fixilya_app/features/call/presentation/screens/call_screen.dart';
+import 'package:fixilya_app/services/call_service.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/handyman_data_service.dart';
@@ -24,8 +30,10 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   bool _isAvailable = true;
 
   // Services
-  final _handymanDataService = HandymanDataService();
+  final _handymanDataService = HandymanApiService();
   final _bookingsService = BookingsService();
+  final _api = BookingsApiService();
+  final _notificationApi = NotificationApiService();
 
   bool _isLoadingData = true;
   Map<String, dynamic>? _profileData;
@@ -38,6 +46,14 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   double _rating = 0.0;
   int _totalReviews = 0;
 
+  // Stable Firestore stream references — created once in initState,
+  // never recreated on rebuild, so StreamBuilders never reset to waiting.
+  late final Stream<List<Map<String, dynamic>>> _activeBookingsStream;
+  late final Stream<List<Map<String, dynamic>>> _newRequestsStream;
+  late final Stream<List<Map<String, dynamic>>> _declinedBookingsStream;
+  late final Stream<List<Map<String, dynamic>>> _recentActivityStream;
+  late final Stream<int> _unreadNotificationsStream;
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +62,123 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       vsync: this,
     );
     _animationController.forward();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final db = FirebaseFirestore.instance;
+
+    _activeBookingsStream = db
+        .collection('bookings')
+        .where('handymanId', isEqualTo: uid)
+        .where('status', whereIn: ['confirmed', 'in_progress'])
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+              .toList(),
+        );
+
+    _newRequestsStream = db
+        .collection('bookings')
+        .where('handymanId', isEqualTo: uid)
+        .where('status', isEqualTo: 'pending')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+              .toList(),
+        );
+
+    _declinedBookingsStream = db
+        .collection('bookings')
+        .where('handymanId', isEqualTo: uid)
+        .where('status', isEqualTo: 'declined')
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+              .toList(),
+        );
+
+    _recentActivityStream = db
+        .collection('activity')
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+              .toList(),
+        );
+
+    _unreadNotificationsStream = db
+        .collection('notifications')
+        .where('userId', isEqualTo: uid)
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs.length);
+
     _loadHandymanData();
+  }
+
+  Future<void> _callClient(BuildContext context, Map<String, dynamic> booking) async {
+    final clientId   = booking['clientId']   as String?;
+    final clientName = booking['clientName'] as String? ?? 'Client';
+
+    if (clientId == null || clientId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Client information not available')),
+      );
+      return;
+    }
+
+    // Close the detail sheet before showing the loading dialog
+    Navigator.of(context).pop();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryColor),
+      ),
+    );
+
+    try {
+      final result = await CallService().initiateCall(
+        calleeId:   clientId,
+        calleeName: clientName,
+        callerName: _handymanName,
+      );
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId:     result['callId']!,
+            remoteUid:  clientId,
+            remoteName: clientName,
+            isCaller:   true,
+            agoraToken: result['token'],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // dismiss loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not start call. No active booking found.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -61,54 +193,64 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     setState(() => _isLoadingData = true);
 
     try {
-      // print('🔍 Loading handyman data...');
-
       final results = await Future.wait([
         _handymanDataService.getHandymanProfile(),
         _handymanDataService.getHandymanStats(),
-        // _handymanDataService.getAvailabilityStatus(),
       ]);
-
-      // print('results : $results');
-      // print('\n\n');
-      // print('results[0] : ${results[0]}');
-      // print('\n\n');
-      // print('results[1] : ${results[1]}');
-      // print('\n\n');
-      // // print('results[2] : ${results[2]}');
-      // print('\n\n');
 
       if (!mounted) return;
 
-      if (results[0] != null && results[1] != null) {
-        final profileData = results[0] as Map<String, dynamic>;
-        final statsData = results[1] as Map<String, dynamic>;
-        final isAvailable = profileData['isAvailable'] as bool? ?? true;
-        // final isAvailable = results[2] as bool;
-        if (!mounted) return;
-        setState(() {
+      final profileData = results[0];
+      final statsData = results[1];
+
+      setState(() {
+        if (profileData != null) {
           _profileData = profileData;
-          _statsData = statsData;
           _handymanName = profileData['fullName'] ?? 'Handyman';
+          _isAvailable = profileData['isAvailable'] as bool? ?? true;
+        }
+        if (statsData != null) {
+          _statsData = statsData;
           _activeBookings = statsData['activeBookings'] ?? 0;
           _pendingRequests = statsData['pendingRequests'] ?? 0;
           _rating = (statsData['rating'] ?? 0.0).toDouble();
           _totalReviews = statsData['totalReviews'] ?? 0;
-          _isAvailable = isAvailable;
-          _isLoadingData = false; // ✅ Combined with other updates
-        });
-
-        // print('✅ Handyman data loaded successfully');
-      } else {
-        // print('⚠️ No handyman data found');
-        if (!mounted) return;
-        setState(() => _isLoadingData = false);
-      }
+        }
+        _isLoadingData = false;
+      });
     } catch (e) {
-      // print('❌ Error loading handyman data: $e');
       if (!mounted) return;
       setState(() => _isLoadingData = false);
     }
+  }
+
+  Widget _buildProfileAvatar() {
+    final url = _profileData?['profilePicture']?.toString() ?? '';
+    if (url.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: url,
+        imageBuilder: (context, imageProvider) => CircleAvatar(
+          backgroundColor: AppColors.textSecondaryColor(context),
+          backgroundImage: imageProvider,
+        ),
+        placeholder: (context, _) => CircleAvatar(
+          backgroundColor: AppColors.surfaceColor(context),
+          child: const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        errorWidget: (context, _, __) => CircleAvatar(
+          backgroundColor: AppColors.surfaceColor(context),
+          child: Icon(Icons.person, color: AppColors.primaryColor, size: 28),
+        ),
+      );
+    }
+    return CircleAvatar(
+      backgroundColor: AppColors.surfaceColor(context),
+      child: Icon(Icons.person, color: AppColors.primaryColor, size: 28),
+    );
   }
 
   @override
@@ -121,78 +263,108 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       );
     }
 
-    return Scaffold(
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: () {
-      //     Navigator.push(
-      //       context,
-      //       MaterialPageRoute(builder: (context) => BookingDiagnosticTool()),
-      //     );
-      //   },
-      //   icon: Icon(Icons.bug_report),
-      //   label: Text('Debug'),
-      //   backgroundColor: Colors.orange,
-      // ),
-      backgroundColor: AppColors.surfaceColor(context),
-      body: CustomScrollView(
-        slivers: [
-          _buildPremiumAppBar(),
-          SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _animationController,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildAvailabilityCard(),
-                    // SizedBox(height: 20),
-                    // _buildEarningsSummary(),
-                    SizedBox(height: 20),
-                    _buildQuickStats(),
-                    SizedBox(height: 24),
+    return CallListener(
+      child: Scaffold(
+        // floatingActionButton: FloatingActionButton.extended(
+        //   onPressed: () {
+        //     Navigator.push(
+        //       context,
+        //       MaterialPageRoute(builder: (context) => BookingDiagnosticTool()),
+        //     );
+        //   },
+        //   icon: Icon(Icons.bug_report),
+        //   label: Text('Debug'),
+        //   backgroundColor: Colors.orange,
+        // ),
+        backgroundColor: AppColors.surfaceColor(context),
+        body: CustomScrollView(
+          slivers: [
+            _buildPremiumAppBar(),
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _animationController,
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildAvailabilityCard(),
+                      // SizedBox(height: 20),
+                      // _buildEarningsSummary(),
+                      SizedBox(height: 20),
+                      _buildQuickStats(),
+                      SizedBox(height: 24),
 
-                    // ACTIVE BOOKINGS
-                    _buildSectionHeader('Active Bookings', Icons.work_outline),
-                    SizedBox(height: 12),
-                    _buildActiveBookingsStream(),
+                      // ACTIVE BOOKINGS
+                      _buildSectionHeader(
+                        'Active Bookings',
+                        Icons.work_outline,
+                      ),
+                      SizedBox(height: 12),
+                      _buildActiveBookingsStream(),
 
-                    SizedBox(height: 24),
+                      SizedBox(height: 24),
 
-                    // NEW REQUESTS
-                    _buildSectionHeader(
-                      'New Requests',
-                      Icons.notifications_active,
-                    ),
-                    SizedBox(height: 12),
-                    _buildNewRequestsStream(),
+                      // NEW REQUESTS
+                      _buildSectionHeader(
+                        'New Requests',
+                        Icons.notifications_active,
+                      ),
+                      SizedBox(height: 12),
+                      _buildNewRequestsStream(),
 
-                    SizedBox(height: 24),
+                      SizedBox(height: 24),
 
-                    // DECLINED BOOKINGS - ✅ ADDED SECTION HEADER
-                    _buildSectionHeader(
-                      'Declined Bookings',
-                      Icons.cancel_outlined,
-                    ),
-                    SizedBox(height: 12),
-                    _buildDeclinedBookingsStream(),
+                      // DECLINED BOOKINGS - ✅ ADDED SECTION HEADER
+                      _buildSectionHeader(
+                        'Declined Bookings',
+                        Icons.cancel_outlined,
+                      ),
+                      SizedBox(height: 12),
+                      _buildDeclinedBookingsStream(),
 
-                    SizedBox(height: 24),
+                      SizedBox(height: 24),
 
-                    // RECENT ACTIVITY
-                    _buildSectionHeader('Recent Activity', Icons.history),
-                    SizedBox(height: 12),
-                    _buildRecentActivityStream(),
+                      // RECENT ACTIVITY
+                      _buildSectionHeader('Recent Activity', Icons.history),
+                      SizedBox(height: 12),
+                      _buildRecentActivityStream(),
 
-                    SizedBox(height: 40),
-                  ],
+                      SizedBox(height: 24),
+
+                      // REVIEWS
+                      _buildSectionHeader(
+                        'Reviews',
+                        Icons.star_rounded,
+                        trailing: TextButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const HandymanReviewsPage(),
+                            ),
+                          ),
+                          child: Text(
+                            'See all',
+                            style: TextStyle(
+                              color: AppColors.primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      _buildReviewsPreview(),
+
+                      SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      ), // Scaffold
+    ); // CallListener
   }
 
   // Keeping all your existing widget methods...
@@ -468,7 +640,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   Widget _buildActiveBookingsStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _bookingsService.streamActiveBookings(),
+      stream: _activeBookingsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -504,7 +676,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   Widget _buildNewRequestsStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _bookingsService.streamBookingRequests(),
+      stream: _newRequestsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -540,7 +712,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   Widget _buildDeclinedBookingsStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _bookingsService.streamDeclinedBookings(),
+      stream: _declinedBookingsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -576,7 +748,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   Widget _buildRecentActivityStream() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _bookingsService.streamRecentActivity(),
+      stream: _recentActivityStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -616,178 +788,132 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   Widget _buildBookingCard(Map<String, dynamic> booking) {
     final isInProgress = booking['status'] == 'in_progress';
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showBookingDetailsSheet(booking),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isInProgress
-              ? AppColors.textPrimaryColor(context)
-              : AppColors.inputFillColor(context),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor(context),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ElevatedButton.icon(
-          //   onPressed: () async {
-          //     final clientLat = booking['clientLatitude'];
-          //     final clientLon = booking['clientLongitude'];
-
-          //     if (clientLat != null && clientLon != null) {
-          //       await LocationService().openGoogleMapsNavigation(
-          //         clientLat,
-          //         clientLon,
-          //       );
-          //     } else {
-          //       Get.snackbar(
-          //         'Location Not Available',
-          //         'Client location not found',
-          //         backgroundColor: Colors.orange,
-          //         colorText: Colors.white,
-          //       );
-          //     }
-          //   },
-          //   icon: Icon(Icons.navigation),
-          //   label: Text('Navigate to Client'),
-          //   style: ElevatedButton.styleFrom(
-          //     backgroundColor: Colors.green,
-          //     minimumSize: Size(double.infinity, 50),
-          //   ),
-          // ),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primaryColor.withValues(alpha: 0.2),
-                      AppColors.secondaryColor.withValues(alpha: 0.1),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.person,
-                  color: AppColors.textPrimaryColor(context),
-                  size: 20,
-                ),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isInProgress
+                  ? AppColors.textPrimaryColor(context)
+                  : AppColors.inputFillColor(context),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor(context),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      booking['clientName'] ?? 'Client',
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primaryColor.withValues(alpha: 0.2),
+                          AppColors.secondaryColor.withValues(alpha: 0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.person,
+                      color: AppColors.textPrimaryColor(context),
+                      size: 20,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          booking['clientName'] ?? 'Client',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimaryColor(context),
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          booking['service'] ?? 'Service',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isInProgress
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      booking['status'] == 'confirmed'
+                          ? 'Scheduled'
+                          : 'In Progress',
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimaryColor(context),
+                        color: isInProgress ? Colors.green : Colors.orange,
                       ),
                     ),
-                    SizedBox(height: 2),
-                    Text(
-                      booking['service'] ?? 'Service',
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Divider(height: 1, color: AppColors.dividerColor(context)),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: AppColors.iconColor(context),
+                  ),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      booking['location'] ?? 'Location',
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.primaryColor,
-                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondaryColor(context),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isInProgress
-                      ? Colors.green.withValues(alpha: 0.1)
-                      : Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  booking['status'] == 'confirmed'
-                      ? 'Scheduled'
-                      : 'In Progress',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isInProgress ? Colors.green : Colors.orange,
                   ),
-                ),
+                  // Text(
+                  //   '${(booking['amount'] ?? 0).toStringAsFixed(0)} DH',
+                  //   style: TextStyle(
+                  //     fontSize: 16,
+                  //     fontWeight: FontWeight.bold,
+                  //     color: AppColors.primaryColor,
+                  //   ),
+                  // ),
+                ],
               ),
             ],
           ),
-          SizedBox(height: 12),
-          Divider(height: 1, color: AppColors.dividerColor(context)),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(
-                Icons.location_on,
-                size: 16,
-                color: AppColors.iconColor(context),
-              ),
-              SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  booking['location'] ?? 'Location',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondaryColor(context),
-                  ),
-                ),
-              ),
-              // Text(
-              //   '${(booking['amount'] ?? 0).toStringAsFixed(0)} DH',
-              //   style: TextStyle(
-              //     fontSize: 16,
-              //     fontWeight: FontWeight.bold,
-              //     color: AppColors.primaryColor,
-              //   ),
-              // ),
-            ],
-          ),
-          if (isInProgress) ...[
-            SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _showMarkCompleteDialog(booking),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle_outline, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Mark as Complete',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -797,7 +923,9 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     String timeAgo = 'Just now';
 
     if (createdAt != null) {
-      final timestamp = (createdAt).toDate();
+      final timestamp = createdAt is DateTime
+          ? createdAt
+          : (createdAt as Timestamp).toDate();
       final difference = DateTime.now().difference(timestamp);
 
       if (difference.inMinutes < 60) {
@@ -809,291 +937,312 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       }
     }
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showBookingDetailsSheet(request),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.inputFillColor(context)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor(context),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.notifications_active,
-                  color: Colors.orange,
-                  size: 16,
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request['clientName'] ?? 'Client',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      request['service'] ?? 'Service',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondaryColor(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                timeAgo,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondaryColor(context),
-                ),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.inputFillColor(context)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor(context),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
             ],
           ),
-          SizedBox(height: 12),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.location_on,
-                size: 14,
-                color: AppColors.iconColor(context),
-              ),
-              SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  request['location'] ?? 'Location',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondaryColor(context),
-                  ),
-                ),
-              ),
-              // Text(
-              //   '${(request['amount'] ?? 0).toStringAsFixed(0)} DH',
-              //   style: TextStyle(
-              //     fontSize: 15,
-              //     fontWeight: FontWeight.bold,
-              //     color: AppColors.primaryColor,
-              //   ),
-              // ),
-            ],
-          ),
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _declineRequest(request),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.errorColor(context),
-                    side: BorderSide(color: AppColors.errorColor(context)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.notifications_active,
+                      color: Colors.orange,
+                      size: 16,
                     ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.cancel,
-                        color: AppColors.errorColor(context),
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Text('Decline'),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: () => _acceptRequest(request),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.mainButtonColor(context),
-
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Container(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.check_circle, color: Colors.white, size: 20),
-                        SizedBox(width: 10),
                         Text(
-                          'Accept',
+                          request['clientName'] ?? 'Client',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          request['service'] ?? 'Service',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondaryColor(context),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeclinedCard(Map<String, dynamic> booking) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.errorColor(context)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowLightColor(context),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.cancel, color: Colors.red, size: 20),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      booking['clientName'] ?? 'Client',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Text(
+                    timeAgo,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondaryColor(context),
                     ),
-                    Text(
-                      booking['service'] ?? 'Service',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondaryColor(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.errorColor(context).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Declined',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          if (booking['declineReason'] != null) ...[
-            SizedBox(height: 12),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.grey100Color(context),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
+              SizedBox(height: 12),
+              Row(
                 children: [
                   Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: AppColors.textSecondaryColor(context),
+                    Icons.location_on,
+                    size: 14,
+                    color: AppColors.iconColor(context),
                   ),
-                  SizedBox(width: 8),
+                  SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Reason: ${booking['declineReason']}',
+                      request['location'] ?? 'Location',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondaryColor(context),
                       ),
                     ),
                   ),
+                  // Text(
+                  //   '${(request['amount'] ?? 0).toStringAsFixed(0)} DH',
+                  //   style: TextStyle(
+                  //     fontSize: 15,
+                  //     fontWeight: FontWeight.bold,
+                  //     color: AppColors.primaryColor,
+                  //   ),
+                  // ),
                 ],
               ),
-            ),
-          ],
-          SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(
-                Icons.location_on,
-                size: 14,
-                color: AppColors.textSecondaryColor(context),
-              ),
-              SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  booking['location'] ?? 'Location',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondaryColor(context),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _declineRequest(request),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.errorColor(context),
+                        side: BorderSide(color: AppColors.errorColor(context)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.cancel,
+                            color: AppColors.errorColor(context),
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Decline'),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () => _acceptRequest(request),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.mainButtonColor(context),
+
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Container(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Accept',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              // Text(
-              //   '${(booking['amount'] ?? 0).toStringAsFixed(0)} DH',
-              //   style: TextStyle(
-              //     fontSize: 14,
-              //     fontWeight: FontWeight.bold,
-              //     color: Colors.grey[700],
-              //   ),
-              // ),
             ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeclinedCard(Map<String, dynamic> booking) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showBookingDetailsSheet(booking),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.errorColor(context)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowLightColor(context),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.cancel, color: Colors.red, size: 20),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          booking['clientName'] ?? 'Client',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          booking['service'] ?? 'Service',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondaryColor(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorColor(
+                        context,
+                      ).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Declined',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if ((booking['declineReason'] ?? booking['cancellationReason']) !=
+                  null) ...[
+                SizedBox(height: 12),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.grey100Color(context),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: AppColors.textSecondaryColor(context),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reason: ${booking['declineReason'] ?? booking['cancellationReason']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryColor(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 14,
+                    color: AppColors.textSecondaryColor(context),
+                  ),
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      booking['location'] ?? 'Location',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryColor(context),
+                      ),
+                    ),
+                  ),
+                  // Text(
+                  //   '${(booking['amount'] ?? 0).toStringAsFixed(0)} DH',
+                  //   style: TextStyle(
+                  //     fontSize: 14,
+                  //     fontWeight: FontWeight.bold,
+                  //     color: Colors.grey[700],
+                  //   ),
+                  // ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1128,7 +1277,9 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     String timeAgo = 'Just now';
 
     if (createdAt != null) {
-      final timestamp = (createdAt).toDate();
+      final timestamp = createdAt is DateTime
+          ? createdAt
+          : (createdAt as Timestamp).toDate();
       final difference = DateTime.now().difference(timestamp);
 
       if (difference.inHours < 24) {
@@ -1138,52 +1289,74 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       }
     }
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
+    final bookingId = activity['bookingId'] as String?;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: bookingId != null
+            ? () async {
+                final doc = await FirebaseFirestore.instance
+                    .collection('bookings')
+                    .doc(bookingId)
+                    .get();
+                if (doc.exists && mounted) {
+                  _showBookingDetailsSheet({'id': doc.id, ...doc.data()!});
+                }
+              }
+            : null,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.inputFillColor(context)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 18),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(context),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.inputFillColor(context)),
           ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activity['title'] ?? 'Activity',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  activity['description'] ?? '',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondaryColor(context),
-                  ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activity['title'] ?? 'Activity',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      activity['description'] ?? '',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryColor(context),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Text(
+                timeAgo,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondaryColor(context),
+                ),
+              ),
+            ],
           ),
-          Text(
-            timeAgo,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondaryColor(context),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1353,7 +1526,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   }
 
   void _acceptRequest(Map<String, dynamic> request) async {
-    final success = await _bookingsService.acceptBooking(request['id']);
+    final success = await _api.acceptBooking(request['id']);
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1366,7 +1539,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   }
 
   void _declineRequest(Map<String, dynamic> request) async {
-    final success = await _bookingsService.declineBooking(request['id']);
+    final success = await _api.declineBooking(request['id']);
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1378,34 +1551,315 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     }
   }
 
-  void _showMarkCompleteDialog(Map<String, dynamic> booking) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Complete Job?'),
-        content: Text('Mark this job as completed?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final success = await _bookingsService.completeBooking(
-                booking['id'],
-              );
+  String _formatTimestamp(dynamic raw) {
+    if (raw == null) return 'N/A';
+    DateTime dt;
+    if (raw is DateTime) {
+      dt = raw;
+    } else if (raw is Timestamp) {
+      dt = raw.toDate();
+    } else if (raw is String) {
+      dt = DateTime.tryParse(raw) ?? DateTime.now();
+    } else {
+      return 'N/A';
+    }
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
 
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Job completed!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            child: Text('Complete'),
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Colors.green;
+      case 'confirmed':
+      case 'in_progress':
+        return Colors.blue;
+      case 'pending':
+        return Colors.orange;
+      case 'cancelled':
+      case 'declined':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  void _showBookingDetailsSheet(Map<String, dynamic> booking) {
+    final status = booking['status'] ?? 'pending';
+    final statusColor = _getStatusColor(status);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: BoxDecoration(
+          color: AppColors.cardColor(context),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
+        ),
+        child: Column(
+          children: [
+            SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.primaryColor,
+                              AppColors.secondaryColor,
+                            ],
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: FaIcon(
+                          FontAwesomeIcons.clipboardList,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Center(
+                      child: Text(
+                        booking['service'] ?? 'Booking Details',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimaryColor(context),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Center(
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 32),
+                    _buildDetailRow('Client', booking['clientName'] ?? 'N/A'),
+                    _buildDetailRow('Service', booking['service'] ?? 'N/A'),
+                    _buildDetailRow('Phone', booking['clientPhone'] ?? 'N/A'),
+                    _buildDetailRow('Address', booking['address'] ?? 'N/A'),
+                    _buildDetailRow('City', booking['city'] ?? 'N/A'),
+                    _buildDetailRow('Location', booking['location'] ?? 'N/A'),
+                    _buildDetailRow(
+                      'Scheduled',
+                      _formatTimestamp(
+                        booking['scheduledDate'] ?? booking['scheduledAt'],
+                      ),
+                    ),
+                    _buildDetailRow(
+                      'Booked At',
+                      _formatTimestamp(booking['createdAt']),
+                    ),
+                    if (booking['acceptedAt'] != null)
+                      _buildDetailRow(
+                        'Accepted At',
+                        _formatTimestamp(booking['acceptedAt']),
+                      ),
+                    if (booking['declinedAt'] != null)
+                      _buildDetailRow(
+                        'Declined At',
+                        _formatTimestamp(booking['declinedAt']),
+                      ),
+                    if ((booking['declineReason'] ??
+                            booking['cancellationReason']) !=
+                        null)
+                      _buildDetailRow(
+                        'Decline Reason',
+                        booking['declineReason'] ??
+                            booking['cancellationReason'],
+                      ),
+                    if (booking['description'] != null &&
+                        (booking['description'] as String).isNotEmpty) ...[
+                      SizedBox(height: 16),
+                      Text(
+                        'Description',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondaryColor(context),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        booking['description'],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textPrimaryColor(context),
+                        ),
+                      ),
+                    ],
+                    // ── Call client (only for active bookings) ────────────
+                    if (status == 'confirmed' || status == 'in_progress') ...[
+                      SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.phone, color: Colors.white),
+                          label: const Text(
+                            'Call Client',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () => _callClient(context, booking),
+                        ),
+                      ),
+                    ],
+                    // ── Client review (visible once booking is completed) ──
+                    if (status == 'completed' && booking['rating'] != null) ...[
+                      SizedBox(height: 20),
+                      _buildReviewCard(
+                        rating: (booking['rating'] as num).toInt(),
+                        comment: booking['reviewComment'] as String? ?? '',
+                        clientName:
+                            booking['clientName'] as String? ?? 'Client',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewCard({
+    required int rating,
+    required String comment,
+    required String clientName,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star_rounded, size: 18, color: Colors.amber.shade700),
+              SizedBox(width: 6),
+              Text(
+                'Review from $clientName',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.amber.shade800,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Row(
+            children: List.generate(
+              5,
+              (i) => Icon(
+                i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: Colors.amber,
+                size: 22,
+              ),
+            ),
+          ),
+          if (comment.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Text(
+              comment,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.amber.shade900,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryColor(context),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimaryColor(context),
+              ),
+            ),
           ),
         ],
       ),
@@ -1444,31 +1898,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
                             width: 2,
                           ),
                         ),
-                        child:
-                            _profileData != null &&
-                                _profileData!.isNotEmpty &&
-                                _profileData!['profilePicture'] != null &&
-                                _profileData!['profilePicture']
-                                    .toString()
-                                    .isNotEmpty
-                            ? CircleAvatar(
-                                backgroundColor: AppColors.textSecondaryColor(
-                                  context,
-                                ),
-                                backgroundImage: CachedNetworkImageProvider(
-                                  _profileData!['profilePicture'],
-                                ),
-                              )
-                            : CircleAvatar(
-                                backgroundColor: AppColors.surfaceColor(
-                                  context,
-                                ),
-                                child: Icon(
-                                  Icons.person,
-                                  color: AppColors.primaryColor,
-                                  size: 28,
-                                ),
-                              ),
+                        child: _buildProfileAvatar(),
                       ),
                       SizedBox(width: 12),
                       Expanded(
@@ -1494,8 +1924,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
                         ),
                       ),
                       StreamBuilder<int>(
-                        stream: _bookingsService
-                            .streamUnreadNotificationsCount(),
+                        stream: _unreadNotificationsStream,
                         builder: (context, snapshot) {
                           final unreadCount = snapshot.data ?? 0;
 
@@ -1656,7 +2085,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
             onChanged: (value) async {
               final success = await _handymanDataService
                   .updateAvailabilityStatus(value);
-              if (success && mounted) {
+              if (mounted) {
                 setState(() => _isAvailable = value);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1817,10 +2246,10 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   Widget _buildQuickStats() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _bookingsService.streamActiveBookings(),
+      stream: _activeBookingsStream,
       builder: (context, activeSnapshot) {
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: _bookingsService.streamBookingRequests(),
+          stream: _newRequestsStream,
           builder: (context, requestsSnapshot) {
             final activeCount = activeSnapshot.data?.length ?? 0;
             final requestsCount = requestsSnapshot.data?.length ?? 0;
@@ -1905,7 +2334,151 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
+  Widget _buildReviewsPreview() {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('reviews')
+          .where('handymanId', isEqualTo: uid)
+          .orderBy('createdAt', descending: true)
+          .limit(3)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+
+        final docs = snap.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.cardColor(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderColor(context)),
+            ),
+            child: Center(
+              child: Text(
+                'No reviews yet',
+                style: TextStyle(
+                  color: AppColors.textSecondaryColor(context),
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          children: docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final rating = (data['rating'] as num?)?.toInt() ?? 0;
+            final comment = data['comment'] as String? ?? '';
+            final clientName = data['clientName'] as String? ?? 'Client';
+            final ts = data['createdAt'];
+            final date = ts is Timestamp ? _formatTimestamp(ts) : '';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.cardColor(context),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.borderColor(context)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.primaryColor.withValues(
+                          alpha: 0.15,
+                        ),
+                        child: Text(
+                          clientName.isNotEmpty
+                              ? clientName[0].toUpperCase()
+                              : 'C',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.primaryColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              clientName,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppColors.textPrimaryColor(context),
+                              ),
+                            ),
+                            if (date.isNotEmpty)
+                              Text(
+                                date,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondaryColor(context),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        children: List.generate(
+                          5,
+                          (i) => Icon(
+                            i < rating
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (comment.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      comment,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondaryColor(context),
+                        height: 1.4,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, {Widget? trailing}) {
     return Row(
       children: [
         Container(
@@ -1923,14 +2496,17 @@ class _HandymanHomePageState extends State<HandymanHomePage>
           ),
         ),
         SizedBox(width: 10),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimaryColor(context),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimaryColor(context),
+            ),
           ),
         ),
+        if (trailing != null) trailing,
       ],
     );
   }
