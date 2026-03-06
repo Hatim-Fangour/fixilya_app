@@ -1,10 +1,13 @@
-import 'package:fixilya_app/core/config/app_config.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
+import 'package:fixilya_app/features/call/presentation/screens/call_screen.dart';
 import 'package:fixilya_app/features/client/presentation/widgets/booking_dialog.dart';
 import 'package:fixilya_app/features/handyman/presentation/widgets/info_chip.dart';
+import 'package:fixilya_app/services/call_service.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -14,29 +17,100 @@ class HandymanCard extends StatelessWidget {
 
   const HandymanCard({super.key, required this.job});
 
-  void print(job) {
-    print('--- Handyman Card Data ---');
-    print('Name: ${job['name']}');
-    print('Category: ${job['category']}');
-    print('Rating: ${job['rating']}');
-    print('Reviews: ${job['reviews']}');
-    print('City: ${job['city']}');
-    print('Completed Jobs: ${job['completedJobs']}');
-    print('Experience: ${job['experience']}');
-    print('Phone: ${job['phone']}');
-    print('Verified: ${job['verified']}');
-    print('Image URL: ${job['image']}');
+  // ─── In-app voice call ───────────────────────────────────────────────────
+
+  Future<void> _startCall(BuildContext context) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to make calls')),
+      );
+      return;
+    }
+
+    if (kDebugMode) debugPrint("job : ${job}");
+    final handymanId = job['uid'] as String?;
+
+    if (handymanId == null || handymanId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot reach this handyman right now')),
+      );
+      return;
+    }
+
+    // Resolve caller display name from Firestore, fall back to FirebaseAuth
+    String callerName = currentUser.displayName ?? 'Client';
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        callerName =
+            data?['fullName'] as String? ??
+            data?['name'] as String? ??
+            callerName;
+      }
+    } catch (_) {}
+
+    final handymanName = job['fullName'] as String? ?? 'Handyman';
+    final handymanPicture = job['profilePicture'] as String?;
+
+    // Show loading while Firestore doc is created
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryColor),
+      ),
+    );
+
+    try {
+      final result = await CallService().initiateCall(
+        calleeId:   handymanId,
+        calleeName: handymanName,
+        callerName: callerName,
+      );
+
+      final callId = result['callId'] ?? '';
+      final agoraToken = result['token'];
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: callId,
+            remoteUid: handymanId,
+            remoteName: handymanName,
+            remotePicture: handymanPicture,
+            isCaller: true,
+            agoraToken: agoraToken,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // dismiss loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Call failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
-  Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
-    await launchUrl(launchUri);
-  }
+  // ─── Build ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      // surfaceTintColor: AppColors.surfaceColor(context),
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(2),
       decoration: BoxDecoration(
@@ -95,11 +169,11 @@ class HandymanCard extends StatelessWidget {
                               job['profilePicture'],
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
-                                return _buildAvatarFallback(job['name']);
+                                return _buildAvatarFallback(job['fullName']);
                               },
                             ),
                           )
-                        : _buildAvatarFallback(job['name']),
+                        : _buildAvatarFallback(job['fullName']),
                   ),
 
                   SizedBox(width: 15),
@@ -113,7 +187,8 @@ class HandymanCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                job['name'],
+                                job['fullName'] ?? 'Unnamed Handyman',
+
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -124,7 +199,7 @@ class HandymanCard extends StatelessWidget {
                               ),
                             ),
                             // Verified = Approved
-                            if (job['verified'])
+                            if (job['approved'] == true)
                               Container(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: 6,
@@ -169,7 +244,11 @@ class HandymanCard extends StatelessWidget {
                         SizedBox(height: 3),
 
                         Text(
-                          job['category'],
+                          job['category'] ??
+                              (job['skills'] is List &&
+                                      (job['skills'] as List).isNotEmpty
+                                  ? (job['skills'] as List).first.toString()
+                                  : 'Handyman'),
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.primaryColor,
@@ -233,14 +312,15 @@ class HandymanCard extends StatelessWidget {
                       ),
                       InfoChip(
                         icon: FontAwesomeIcons.clock,
-                        label: job['experience'],
+                        label: job['experience'] ?? '—',
                         color: AppColors.experience,
                       ),
                     ],
                   ),
 
                   Spacer(),
-                  // Phone/ Book Handyman
+
+                  // In-app Call button
                   Container(
                     height: 34,
                     decoration: BoxDecoration(
@@ -251,11 +331,7 @@ class HandymanCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: IconButton(
-                      onPressed: () {
-                        _makePhoneCall(AppConfig.supportPhone);
-                        // _makePhoneCall(job['phone']);
-                        print('Calling ${job['phone']}');
-                      },
+                      onPressed: () => _startCall(context),
                       icon: FaIcon(FontAwesomeIcons.phone, size: 14),
                       color: AppColors.infoColor(context),
                       padding: EdgeInsets.symmetric(horizontal: 12),
@@ -310,55 +386,6 @@ class HandymanCard extends StatelessWidget {
                   ),
                 ],
               ),
-
-              // SizedBox(height: 10),
-
-              // // Price and Actions Row
-              // Row(
-              //   children: [
-              //     // Price
-              //     // Container(
-              //     //   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              //     //   decoration: BoxDecoration(
-              //     //     gradient: LinearGradient(
-              //     //       colors: [
-              //     //         AppColors.primaryColor.withValues(alpha: 0.1),
-              //     //         AppColors.secondaryColor.withValues(alpha: 0.1),
-              //     //       ],
-              //     //     ),
-              //     //     borderRadius: BorderRadius.circular(8),
-              //     //     border: Border.all(
-              //     //       color: AppColors.primaryColor.withValues(alpha: 0.2),
-              //     //       width: 1,
-              //     //     ),
-              //     //   ),
-              //     //   child: Row(
-              //     //     mainAxisSize: MainAxisSize.min,
-              //     //     children: [
-              //     //       FaIcon(
-              //     //         FontAwesomeIcons.moneyBill,
-              //     //         size: 12,
-              //     //         color: AppColors.primaryColor,
-              //     //       ),
-              //     //       SizedBox(width: 5),
-              //     //       // Text(
-              //     //       //   '${job['hourlyRate']} DH/h',
-              //     //       //   style: TextStyle(
-              //     //       //     fontSize: 13,
-              //     //       //     fontWeight: FontWeight.bold,
-              //     //       //     color: AppColors.primaryColor,
-              //     //       //   ),
-              //     //       // ),
-              //     //     ],
-              //     //   ),
-              //     // ),
-              //     Spacer(),
-
-              //     // Call Button
-
-              //     // Book Button
-              //   ],
-              // ),
             ],
           ),
         ),
@@ -367,7 +394,6 @@ class HandymanCard extends StatelessWidget {
   }
 
   Widget _buildAvatarFallback(String name) {
-    // Get first letter of name
     String initial = name.isNotEmpty ? name[0].toUpperCase() : 'H';
 
     return Center(
