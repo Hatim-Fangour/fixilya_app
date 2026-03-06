@@ -120,27 +120,34 @@ class CallService {
       throw new AppError('Agora is not configured on this server', 503);
     }
 
-    const callSnap = await db.collection(CALLS_COLLECTION).doc(callId).get();
-    if (!callSnap.exists) {
-      throw new AppError('Call not found', 404);
-    }
+    const callRef = db.collection(CALLS_COLLECTION).doc(callId);
 
-    const call = callSnap.data();
+    let calleeToken;
 
-    if (call.calleeId !== calleeUid) {
-      throw new AppError('Forbidden', 403);
-    }
+    await db.runTransaction(async (tx) => {
+      const callSnap = await tx.get(callRef);
 
-    if (call.status !== 'ringing') {
-      throw new AppError(`Call is already ${call.status}`, 409);
-    }
+      if (!callSnap.exists) {
+        throw new AppError('Call not found', 404);
+      }
 
-    // Generate a fresh callee token — never stored in Firestore
-    const calleeToken = buildRtcToken(appId, appCert, callId, 0, ROLE_PUBLISHER, TOKEN_TTL);
+      const call = callSnap.data();
 
-    await db.collection(CALLS_COLLECTION).doc(callId).update({
-      status:    'active',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      if (call.calleeId !== calleeUid) {
+        throw new AppError('Forbidden', 403);
+      }
+
+      if (call.status !== 'ringing') {
+        throw new AppError(`Call is already ${call.status}`, 409);
+      }
+
+      // Generate token inside transaction — only reaches here if status was 'ringing'
+      calleeToken = buildRtcToken(appId, appCert, callId, 0, ROLE_PUBLISHER, TOKEN_TTL);
+
+      tx.update(callRef, {
+        status:    'active',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
 
     logger.info(`[CallService.acceptCall] callId=${callId} callee=${calleeUid} → active`);
