@@ -136,8 +136,15 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       return;
     }
 
-    // Close the detail sheet before showing the loading dialog
+    // Capture root navigator and scaffold messenger BEFORE popping the sheet,
+    // so we can use them safely after the sheet's context is deactivated.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final messenger     = ScaffoldMessenger.of(context);
+
+    // Close the detail sheet
     Navigator.of(context).pop();
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -155,9 +162,9 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       );
 
       if (!context.mounted) return;
-      Navigator.of(context).pop(); // dismiss loading
+      rootNavigator.pop(); // dismiss loading
 
-      await Navigator.of(context).push(
+      await rootNavigator.push(
         MaterialPageRoute(
           builder: (_) => CallScreen(
             callId:     result['callId']!,
@@ -170,8 +177,8 @@ class _HandymanHomePageState extends State<HandymanHomePage>
       );
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
+        rootNavigator.pop(); // dismiss loading
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Could not start call. No active booking found.'),
             backgroundColor: Colors.red,

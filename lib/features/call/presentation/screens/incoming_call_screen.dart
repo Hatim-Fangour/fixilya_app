@@ -82,11 +82,24 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     final calleeToken = await _callService.acceptCall(widget.callId);
 
     if (!mounted) return;
+
+    // If token fetch failed (network error, 403, 409), do not join a token-enforced channel with empty string.
+    if (calleeToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not connect to call. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => CallScreen(
           callId: widget.callId,
-          remoteUid: '', // caller's uid — not needed for audio
+          remoteUid: '',
           remoteName: widget.callerName,
           remotePicture: widget.callerPicture,
           isCaller: false,
