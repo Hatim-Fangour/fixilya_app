@@ -108,7 +108,7 @@ services:
       - fixilya-network
     restart: unless-stopped
 
-  # Media Service  
+  # Media Service
   media-service:
     build:
       context: ./services/media-service
@@ -122,6 +122,24 @@ services:
       - "3006:3006"
     depends_on:
       - auth-service
+    networks:
+      - fixilya-network
+    restart: unless-stopped
+
+  # Call Service
+  call-service:
+    build:
+      context: ./services/call-service
+    container_name: call-service
+    environment:
+      - PORT=3007
+      - NODE_ENV=production
+    env_file:
+      - ./services/call-service/.env
+    ports:
+      - "3007:3007"
+    depends_on:
+      - redis
     networks:
       - fixilya-network
     restart: unless-stopped
@@ -142,6 +160,7 @@ services:
       - payment-service
       - notification-service
       - media-service
+      - call-service
     networks:
       - fixilya-network
     restart: unless-stopped
