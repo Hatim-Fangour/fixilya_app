@@ -11,6 +11,56 @@ class AppConfig {
   static const String apiVersion = 'v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
+  // ─── Microservice URLs ─────────────────────────────────────────────────
+  // Pass via --dart-define for each environment:
+  //   flutter run --dart-define=AUTH_SERVICE_URL=https://auth.fixilya.ma/api
+  // Defaults target the Android emulator loopback for local dev.
+  static const String authServiceUrl = String.fromEnvironment(
+    'AUTH_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:3001/api',
+  );
+  static const String userServiceUrl = String.fromEnvironment(
+    'USER_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:3002/api',
+  );
+  static const String bookingServiceUrl = String.fromEnvironment(
+    'BOOKING_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:3003',
+  );
+  static const String notificationServiceUrl = String.fromEnvironment(
+    'NOTIFICATION_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:3005',
+  );
+  static const String callServiceUrl = String.fromEnvironment(
+    'CALL_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:3007/api',
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ─── Agora RTC ───────────────────────────────────────────────────────────
+  /// Agora App ID — get from console.agora.io
+  /// In production, load from --dart-define=AGORA_APP_ID=xxx
+  static const String agoraAppId = String.fromEnvironment(
+    'AGORA_APP_ID',
+    defaultValue: '100dfbc4a86d4affbe7eaabe0808a6d8', // dev fallback only
+  );
+
+  /// Backend endpoint to obtain per-call Agora RTC tokens securely.
+  /// The backend uses the Agora RTC Token Builder library.
+  static const String agoraTokenEndpoint = '/agora/token';
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ─── Cloudinary ──────────────────────────────────────────────────────
+  static const String cloudinaryCloudName = String.fromEnvironment(
+    'CLOUDINARY_CLOUD_NAME',
+    defaultValue: 'dbz3wtlbj',
+  );
+  static const String cloudinaryUploadPreset = String.fromEnvironment(
+    'CLOUDINARY_UPLOAD_PRESET',
+    defaultValue: 'fixilya_app',
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Firebase Configuration
   static const String firebaseProjectId = 'fixilya-app';
 
