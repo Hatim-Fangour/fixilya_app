@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 
-const stream           = require('../controllers/booking.streams.controller');
+const stream           = require('../controllers/Booking.streams.controller');
 const { authenticate } = require('../../../../shared/middleware/auth');
 
 // All SSE routes require authentication

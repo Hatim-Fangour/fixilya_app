@@ -1,4 +1,4 @@
-const admin = require('../config/firebase');
+const admin = require('../../../../shared/config/firebase');
 const db = admin.firestore();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
