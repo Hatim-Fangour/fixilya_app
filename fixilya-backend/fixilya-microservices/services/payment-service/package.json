@@ -16,7 +16,8 @@
     "redis": "^4.6.11",
     "winston": "^3.11.0",
     "express-validator": "^7.0.1",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "stripe": "^14.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

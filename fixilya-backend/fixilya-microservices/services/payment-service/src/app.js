@@ -1,6 +1,7 @@
 require('dotenv').config();
-const validateEnv = require('../../../shared/config/validateEnv');
-validateEnv(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']);
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn('⚠️  STRIPE_SECRET_KEY not set — payment endpoints will not work until configured.');
+}
 
 const express = require('express');
 const helmet = require('helmet');

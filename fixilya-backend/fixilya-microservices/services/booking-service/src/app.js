@@ -6,17 +6,9 @@
 // → path goes up 2 levels: src/ → booking-service/
 // ─────────────────────────────────────────────
 const path = require('path');
-const fs   = require('fs');
 
-const ENV_PATH = path.resolve(__dirname, '..', '.env');
-
-if (!fs.existsSync(ENV_PATH)) {
-  console.error(`\n❌  .env file not found at: ${ENV_PATH}`);
-  console.error('    Run:  copy .env.example .env   then fill in your Firebase credentials.\n');
-  process.exit(1);
-}
-
-require('dotenv').config({ path: ENV_PATH });
+// Load .env for local development; in Docker, env vars come from the container environment.
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 const express   = require('express');
 const cors      = require('cors');
