@@ -5,7 +5,7 @@ node_modules/
 # .env
 
 # Lock file (auto-generated, not committed in this monorepo)
-package-lock.json
+# package-lock.json
 
 # Logs
 logs/
