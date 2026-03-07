@@ -219,11 +219,11 @@ AUTH_SERVICE_URL=http://auth-service:3001
 
 ```bash
 # Get certificate (port 80 must be free)
-certbot certonly --standalone -d api.fixilya.ma
+certbot certonly --standalone -d api.fixilya.pro
 
 # Certificates will be saved at:
-# /etc/letsencrypt/live/api.fixilya.ma/fullchain.pem
-# /etc/letsencrypt/live/api.fixilya.ma/privkey.pem
+# /etc/letsencrypt/live/api.fixilya.pro/fullchain.pem
+# /etc/letsencrypt/live/api.fixilya.pro/privkey.pem
 ```
 
 The `nginx.conf` and `docker-compose.yml` in this repo are already configured to:

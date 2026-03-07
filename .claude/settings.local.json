@@ -12,7 +12,8 @@
       "Bash(xargs:*)",
       "Bash(grep:*)",
       "Bash(npm install:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(ls:*)"
     ]
   }
 }
