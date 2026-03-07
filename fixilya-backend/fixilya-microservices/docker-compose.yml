@@ -18,7 +18,8 @@ services:
   # Auth Service
   auth-service:
     build:
-      context: ./services/auth-service
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     container_name: auth-service
     environment:
       - PORT=3001
@@ -36,7 +37,8 @@ services:
   # User Service
   user-service:
     build:
-      context: ./services/user-service
+      context: .
+      dockerfile: services/user-service/Dockerfile
     container_name: user-service
     environment:
       - PORT=3002
@@ -55,7 +57,8 @@ services:
   # Booking Service
   booking-service:
     build:
-      context: ./services/booking-service
+      context: .
+      dockerfile: services/booking-service/Dockerfile
     container_name: booking-service
     environment:
       - PORT=3003
@@ -75,7 +78,8 @@ services:
   # Payment Service
   payment-service:
     build:
-      context: ./services/payment-service
+      context: .
+      dockerfile: services/payment-service/Dockerfile
     container_name: payment-service
     environment:
       - PORT=3004
@@ -94,7 +98,8 @@ services:
   # Notification Service
   notification-service:
     build:
-      context: ./services/notification-service
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     container_name: notification-service
     environment:
       - PORT=3005
@@ -111,7 +116,8 @@ services:
   # Media Service
   media-service:
     build:
-      context: ./services/media-service
+      context: .
+      dockerfile: services/media-service/Dockerfile
     container_name: media-service
     environment:
       - PORT=3006
@@ -129,7 +135,8 @@ services:
   # Call Service
   call-service:
     build:
-      context: ./services/call-service
+      context: .
+      dockerfile: services/call-service/Dockerfile
     container_name: call-service
     environment:
       - PORT=3007

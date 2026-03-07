@@ -1,15 +1,7 @@
-FROM node:18-alpine
-
-WORKDIR /app
-
-# Copy package files first for layer caching
-COPY package.json ./
-
-RUN npm install --omit=dev
-
-# Copy source
-COPY src/ ./src/
-
-EXPOSE 3007
-
+FROM node:20-alpine
+WORKDIR /app/services/call-service
+COPY shared /app/shared
+COPY services/call-service/package*.json ./
+RUN npm ci --omit=dev
+COPY services/call-service/ .
 CMD ["node", "src/app.js"]
