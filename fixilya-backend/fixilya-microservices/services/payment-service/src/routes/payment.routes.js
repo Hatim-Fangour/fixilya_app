@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const paymentController = require('../controllers/payment.controller');
 const { body } = require('express-validator');
-const { validate } = require('../middleware/validate');
+const { validate } = require('../../../../shared/middleware/validate');
 
 // Validation
 const createPaymentValidation = [
