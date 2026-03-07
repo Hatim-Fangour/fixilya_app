@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fixilya_app/core/config/app_config.dart';
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
@@ -28,6 +30,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   List<Map<String, dynamic>> _reviews = [];
   bool _isLoadingReviews = true;
   final FavoritesService _favoritesService = FavoritesService();
+  List<String> _workImages = [];
 
   // Premium Colors
   static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
@@ -37,9 +40,10 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   @override
   void initState() {
     super.initState();
-    print('🚀 Handyman Details Page Initialized for: ${widget.handyman}');
+    if (kDebugMode) debugPrint('🚀 Handyman Details Page Initialized for: ${widget.handyman}');
     _checkIfFavorite();
     _loadReviews();
+    _loadWorkImages();
     _animationController = AnimationController(
       duration: Duration(milliseconds: 1200),
       vsync: this,
@@ -49,8 +53,8 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
       curve: Curves.easeOut,
     );
     _animationController.forward();
-    print('widget.handyman[reviews] ${widget.handyman['reviews']}');
-    print('widget.handyman ${widget.handyman}');
+    if (kDebugMode) debugPrint('widget.handyman[reviews] ${widget.handyman['reviews']}');
+    if (kDebugMode) debugPrint('widget.handyman ${widget.handyman}');
   }
 
   @override
@@ -60,7 +64,9 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   }
 
   Future<void> _checkIfFavorite() async {
-    final isFav = await _favoritesService.isFavorite(widget.handyman['id']);
+    final handymanId = widget.handyman['id'] ?? widget.handyman['uid'] ?? '';
+
+    final isFav = await _favoritesService.isFavorite(handymanId);
     if (mounted) {
       setState(() => _isFavorite = isFav);
     }
@@ -80,10 +86,38 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
         });
       }
     } catch (e) {
-      print('❌ Error loading reviews: $e');
+      if (kDebugMode) debugPrint('❌ Error loading reviews: $e');
       if (mounted) {
         setState(() => _isLoadingReviews = false);
       }
+    }
+  }
+
+  /// Load work images — uses the passed map first, then falls back to a
+  /// direct Firestore fetch. This makes the portfolio section work correctly
+  /// regardless of which navigation source (browse, map, favorites) opened
+  /// this page, and regardless of cache state.
+  Future<void> _loadWorkImages() async {
+    final fromMap = widget.handyman['workImages'];
+    if (fromMap is List && fromMap.isNotEmpty) {
+      if (mounted) setState(() => _workImages = List<String>.from(fromMap));
+      return;
+    }
+
+    final handymanId = widget.handyman['id'] ?? widget.handyman['uid'] ?? '';
+    if (handymanId.isEmpty) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('handymen')
+          .doc(handymanId)
+          .get();
+      if (doc.exists && mounted) {
+        final images = List<String>.from(doc.data()?['workImages'] ?? []);
+        setState(() => _workImages = images);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error loading work images: $e');
     }
   }
 
@@ -256,7 +290,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                 icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                 onPressed: () async {
                   final success = await _favoritesService.toggleFavorite(
-                    widget.handyman['id'],
+                    widget.handyman['id'] ?? widget.handyman['uid'] ?? '',
                   );
 
                   if (success) {
@@ -286,7 +320,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                 children: [
                   // Hero Image with Gradient Overlay
                   Hero(
-                    tag: 'handyman_${widget.handyman['name']}',
+                    tag: 'handyman_${widget.handyman['fullName']}',
                     child:
                         widget.handyman['profilePicture'] != null &&
                             widget.handyman['profilePicture'].isNotEmpty
@@ -331,7 +365,10 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                             children: [
                               Expanded(
                                 child: Text(
-                                  widget.handyman['name'],
+                                  widget.handyman['fullName'] ??
+                                      widget.handyman['name'] ??
+                                      'Unnamed Handyman',
+
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 26,
@@ -346,7 +383,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                                   ),
                                 ),
                               ),
-                              if (widget.handyman['verified'])
+                              if (widget.handyman['approved'] == true || widget.handyman['verified'] == true)
                                 Container(
                                   padding: EdgeInsets.symmetric(
                                     horizontal: 10,
@@ -498,7 +535,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                           child: _buildPremiumStatCard(
                             icon: FontAwesomeIcons.clock,
                             iconColor: AppColors.experience,
-                            title: widget.handyman['experience'],
+                            title: '${widget.handyman['experience'] ?? '—'}',
                             subtitle: 'Experience',
                             gradient: AppColors.experiencesCardGradientThemed(
                               context,
@@ -640,17 +677,24 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                     Icons.contact_phone,
                     child: Column(
                       children: [
-                        _buildPremiumContactCard(
-                          icon: FontAwesomeIcons.phone,
-                          iconColor: AppColors.green,
-                          title: 'Phone',
-                          subtitle: widget.handyman['phone'],
-                          gradient: AppColors.handymanPhoneCardThemed(context),
-                          onTap: () => {
-                            _makePhoneCall(AppConfig.supportPhone),
-                            // _makePhoneCall(widget.handyman['phone']),
-                          },
-                        ),
+                        if (widget.handyman['showPhoneNumber'] == true)
+                          _buildPremiumContactCard(
+                            icon: FontAwesomeIcons.phone,
+                            iconColor: AppColors.green,
+                            title: 'Phone',
+                            subtitle: widget.handyman['phone'] ?? '',
+                            gradient: AppColors.handymanPhoneCardThemed(context),
+                            onTap: () => _makePhoneCall(widget.handyman['phone'] ?? ''),
+                          )
+                        else
+                          _buildPremiumContactCard(
+                            icon: FontAwesomeIcons.lock,
+                            iconColor: AppColors.textSecondaryColor(context),
+                            title: 'Phone',
+                            subtitle: 'Hidden by handyman',
+                            gradient: AppColors.handymanPhoneCardThemed(context),
+                            onTap: () {},
+                          ),
                         SizedBox(height: 12),
                         _buildPremiumContactCard(
                           icon: FontAwesomeIcons.locationDot,
@@ -692,7 +736,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                       child: Text(
                         widget.handyman['bio'] != ""
                             ? widget.handyman['bio']
-                            : 'Premium ${widget.handyman['category'].toLowerCase()} professional with ${widget.handyman['experience']} of expertise in ${widget.handyman['city']}.',
+                            : 'Premium ${((widget.handyman['category'] ?? (widget.handyman['skills'] as List?)?.firstOrNull ?? 'handyman')).toString().toLowerCase()} professional...',
                         style: TextStyle(
                           fontSize: 14,
                           height: 1.6,
@@ -732,8 +776,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                     'Portfolio Gallery',
                     Icons.photo_library_outlined,
                     child:
-                        widget.handyman['portfolio'] != null &&
-                            widget.handyman['portfolio'].isNotEmpty
+                        _workImages.isNotEmpty
                         ? GridView.builder(
                             shrinkWrap: true,
                             physics: NeverScrollableScrollPhysics(),
@@ -743,17 +786,17 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                                   crossAxisSpacing: 10,
                                   mainAxisSpacing: 10,
                                 ),
-                            itemCount: widget.handyman['portfolio'].length,
+                            itemCount: _workImages.length,
                             itemBuilder: (context, index) {
                               return GestureDetector(
                                 onTap: () => _showImageDialog(
                                   context,
-                                  widget.handyman['portfolio'][index],
+                                  _workImages[index],
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(16),
                                   child: Image.network(
-                                    widget.handyman['portfolio'][index],
+                                    _workImages[index],
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stackTrace) {
                                       return Container(
@@ -942,12 +985,25 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => _makePhoneCall(widget.handyman['phone']),
+                          onTap: widget.handyman['showPhoneNumber'] == true
+                              ? () => _makePhoneCall(widget.handyman['phone'] ?? '')
+                              : () => Get.snackbar(
+                                    'Phone Hidden',
+                                    'This handyman has not shared their phone number yet',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                    margin: EdgeInsets.all(16),
+                                    borderRadius: 12,
+                                    duration: Duration(seconds: 2),
+                                  ),
                           borderRadius: BorderRadius.circular(16),
                           child: Center(
                             child: FaIcon(
-                              FontAwesomeIcons.phone,
-                              color: AppColors.primaryColor,
+                              widget.handyman['showPhoneNumber'] == true
+                                  ? FontAwesomeIcons.phone
+                                  : FontAwesomeIcons.lock,
+                              color: widget.handyman['showPhoneNumber'] == true
+                                  ? AppColors.primaryColor
+                                  : AppColors.textSecondaryColor(context),
                               size: 20,
                             ),
                           ),
@@ -1510,9 +1566,8 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   Widget _buildAvatarFallback() {
     // Get first letter of name
     String initial =
-        widget.handyman['name'] != null && widget.handyman['name'].isNotEmpty
-        ? widget.handyman['name'][0].toUpperCase()
-        : 'H';
+        widget.handyman['name'] ?? widget.handyman['fullName'] ?? '';
+    initial = initial.isNotEmpty ? initial[0].toUpperCase() : 'H';
 
     return Container(
       decoration: BoxDecoration(

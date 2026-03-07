@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -52,7 +53,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
         _loadTopCities(),
       ]);
     } catch (e) {
-      print('Error loading analytics: $e');
+      if (kDebugMode) debugPrint('Error loading analytics: $e');
     }
 
     setState(() => _isLoading = false);
@@ -96,7 +97,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
               ..sort((a, b) => a.x.compareTo(b.x));
       });
     } catch (e) {
-      print('Error loading revenue chart: $e');
+      if (kDebugMode) debugPrint('Error loading revenue chart: $e');
     }
   }
 
@@ -140,7 +141,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
         _handymenData = spots;
       });
     } catch (e) {
-      print('Error loading user growth chart: $e');
+      if (kDebugMode) debugPrint('Error loading user growth chart: $e');
     }
   }
 
@@ -180,7 +181,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
               ..sort((a, b) => a.x.compareTo(b.x));
       });
     } catch (e) {
-      print('Error loading bookings chart: $e');
+      if (kDebugMode) debugPrint('Error loading bookings chart: $e');
     }
   }
 
@@ -199,7 +200,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
         _bookingsByStatus = statusCount;
       });
     } catch (e) {
-      print('Error loading bookings by status: $e');
+      if (kDebugMode) debugPrint('Error loading bookings by status: $e');
     }
   }
 
@@ -222,7 +223,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
         _topCities = Map.fromEntries(sorted.take(5));
       });
     } catch (e) {
-      print('Error loading top cities: $e');
+      if (kDebugMode) debugPrint('Error loading top cities: $e');
     }
   }
 

@@ -1,4 +1,9 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geolocator_android/geolocator_android.dart';
+import 'package:geolocator_apple/geolocator_apple.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -34,18 +39,66 @@ class LocationService {
     try {
       bool hasPermission = await checkLocationPermission();
       if (!hasPermission) {
-        print('❌ Location permission denied');
+        if (kDebugMode) debugPrint('❌ Location permission denied');
         return null;
       }
 
+      // Use platform-specific settings for accurate GPS fix
+      late LocationSettings locationSettings;
+      if (Platform.isAndroid) {
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 0,
+          forceLocationManager: false, // use Google Play Services (FusedLocationProvider)
+        );
+      } else if (Platform.isIOS) {
+        locationSettings = AppleSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 0,
+          activityType: ActivityType.other,
+        );
+      } else {
+        locationSettings = const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 0,
+        );
+      }
+
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: locationSettings,
       );
 
-      print('✅ Current location: ${position.latitude}, ${position.longitude}');
+      if (kDebugMode) {
+        debugPrint(
+          '✅ Current location: ${position.latitude}, ${position.longitude}',
+        );
+      }
       return position;
     } catch (e) {
-      print('❌ Error getting location: $e');
+      if (kDebugMode) debugPrint('❌ Error getting location: $e');
+      return null;
+    }
+  }
+
+  /// ✅ GET CITY FROM CURRENT LOCATION
+  Future<String?> getCityFromCurrentLocation() async {
+    try {
+      final position = await getCurrentLocation();
+      if (position == null) return null;
+
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final city = placemarks.first.locality;
+        if (kDebugMode) debugPrint('✅ Detected city: $city');
+        return city?.isNotEmpty == true ? city : null;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error detecting city: $e');
       return null;
     }
   }
@@ -68,7 +121,7 @@ class LocationService {
 
       return 'Unknown location';
     } catch (e) {
-      print('❌ Error getting address: $e');
+      if (kDebugMode) debugPrint('❌ Error getting address: $e');
       return 'Unknown location';
     }
   }
@@ -86,9 +139,9 @@ class LocationService {
         'locationUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Client location saved');
+      if (kDebugMode) debugPrint('✅ Client location saved');
     } catch (e) {
-      print('❌ Error saving client location: $e');
+      if (kDebugMode) debugPrint('❌ Error saving client location: $e');
     }
   }
 
@@ -105,9 +158,9 @@ class LocationService {
         'locationUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Handyman location saved');
+      if (kDebugMode) debugPrint('✅ Handyman location saved');
     } catch (e) {
-      print('❌ Error saving handyman location: $e');
+      if (kDebugMode) debugPrint('❌ Error saving handyman location: $e');
     }
   }
 
@@ -130,20 +183,56 @@ class LocationService {
       for (var doc in snapshot.docs) {
         final data = doc.data();
 
-        if (data['latitude'] != null && data['longitude'] != null) {
-          double handymanLat = data['latitude'];
-          double handymanLon = data['longitude'];
+        // Security: skip unapproved or suspended handymen
+        // Firestore field names are 'approved' and 'suspended' (set by backend).
+        if (data['approved'] != true) continue;
+        if (data['suspended'] == true) continue;
 
-          double distance = calculateDistance(
-            userLat,
-            userLon,
-            handymanLat,
-            handymanLon,
-          );
+        final privacy = (data['locationPrivacy'] as String?) ?? 'city_only';
 
-          if (distance <= radiusKm) {
-            nearbyHandymen.add({...data, 'id': doc.id, 'distance': distance});
+        // 'on_booking_accept' → never shown on general map
+        if (privacy == 'on_booking_accept') continue;
+
+        double handymanLat;
+        double handymanLon;
+        bool isCityLevel = false;
+
+        if (privacy == 'city_only') {
+          // Use geocoded city centre instead of exact coords
+          final city = data['city'] as String?;
+          if (city == null || city.isEmpty) continue;
+          try {
+            final locations = await locationFromAddress(city);
+            if (locations.isEmpty) continue;
+            handymanLat = locations.first.latitude;
+            handymanLon = locations.first.longitude;
+            isCityLevel = true;
+          } catch (_) {
+            continue;
           }
+        } else {
+          // 'exact' or legacy null → use stored coords
+          if (data['latitude'] == null || data['longitude'] == null) continue;
+          handymanLat = (data['latitude'] as num).toDouble();
+          handymanLon = (data['longitude'] as num).toDouble();
+        }
+
+        final distance = calculateDistance(
+          userLat,
+          userLon,
+          handymanLat,
+          handymanLon,
+        );
+
+        if (distance <= radiusKm) {
+          nearbyHandymen.add({
+            ...data,
+            'id': doc.id,
+            'latitude': handymanLat,
+            'longitude': handymanLon,
+            'distance': distance,
+            if (isCityLevel) 'isCityLevel': true,
+          });
         }
       }
 
@@ -152,10 +241,11 @@ class LocationService {
         (a, b) => (a['distance'] as double).compareTo(b['distance'] as double),
       );
 
-      print('✅ Found ${nearbyHandymen.length} nearby handymen');
+      if (kDebugMode)
+        debugPrint('✅ Found ${nearbyHandymen.length} nearby handymen');
       return nearbyHandymen;
     } catch (e) {
-      print('❌ Error getting nearby handymen: $e');
+      if (kDebugMode) debugPrint('❌ Error getting nearby handymen: $e');
       return [];
     }
   }
@@ -172,10 +262,10 @@ class LocationService {
       if (await canLaunchUrl(Uri.parse(url))) {
         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       } else {
-        print('❌ Could not open Google Maps');
+        if (kDebugMode) debugPrint('❌ Could not open Google Maps');
       }
     } catch (e) {
-      print('❌ Error opening Google Maps: $e');
+      if (kDebugMode) debugPrint('❌ Error opening Google Maps: $e');
     }
   }
 }

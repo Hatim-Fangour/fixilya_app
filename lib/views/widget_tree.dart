@@ -9,6 +9,9 @@ import 'package:fixilya_app/features/handyman/presentation/screens/handyman_home
 import 'package:fixilya_app/features/client/presentation/screens/client_home_page.dart';
 import 'package:fixilya_app/shared/widgets/navbar_widget.dart';
 import 'package:fixilya_app/services/auth_service.dart';
+import 'package:fixilya_app/services/data_persistence_service.dart';
+import 'package:fixilya_app/services/location_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:fixilya_app/l10n/app_localizations.dart';
@@ -26,7 +29,8 @@ class _WidgetTreeState extends State<WidgetTree> {
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
 
   final _authService = AuthService();
-  String _userType = 'handyman'; // Default
+  final _cache = DataPersistenceService();
+  String? _userType; // null until resolved -- prevents wrong-screen flash
   bool _isLoading = true;
 
   @override
@@ -42,37 +46,107 @@ class _WidgetTreeState extends State<WidgetTree> {
 
   Future<void> _loadUserType() async {
     try {
-      // Get user type from AuthService or Firebase
+      // 1. Try cached user type first for instant display (no loading spinner)
+      final cachedType = _cache.getCachedString(
+        DataPersistenceService.keyUserType,
+        ttl: const Duration(days: 30),
+      );
+
+      if (cachedType != null && cachedType.isNotEmpty) {
+        if (kDebugMode) debugPrint('WidgetTree: instant display from cached userType: $cachedType');
+        if (mounted) {
+          setState(() {
+            _userType = cachedType.toLowerCase();
+            _isLoading = false;
+          });
+          selectedPageNotifier.value = 0;
+        }
+      }
+
+      // 2. Always fetch from network to confirm / update
       final userType = await _authService.getUserType();
+      if (!mounted) return;
 
-      setState(() {
-        _userType = userType?.toLowerCase() ?? 'handyman';
-        _isLoading = false;
+      if (userType == null || userType.isEmpty) {
+        if (kDebugMode) debugPrint('WidgetTree: userType is null -- defaulting to client');
+        // Only show snackbar if we had no cached data
+        if (cachedType == null) {
+          Get.snackbar(
+            'Profile Issue',
+            'Could not determine your account type. Showing client view.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            margin: const EdgeInsets.all(16),
+            borderRadius: 16,
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
+
+      final resolvedType = (userType ?? 'client').toLowerCase();
+
+      // 3. Cache the resolved user type for next app start
+      await _cache.cacheString(DataPersistenceService.keyUserType, resolvedType);
+
+      // 4. Update UI if type changed or if we were still loading
+      if (_userType != resolvedType || _isLoading) {
+        setState(() {
+          _userType = resolvedType;
+          _isLoading = false;
+        });
+        selectedPageNotifier.value = 0;
+      }
+
+      // Capture GPS on every app open for both user types
+      final locService = LocationService();
+      locService.getCurrentLocation().then((pos) {
+        if (pos == null) return;
+        if (_userType == 'handyman') {
+          locService.saveHandymanLocation(pos);
+        } else {
+          locService.saveClientLocation(pos);
+        }
+      }).catchError((e) {
+        if (kDebugMode) debugPrint('WidgetTree: background GPS capture failed: $e');
       });
-
-      // ✅ Reset to home after loading user type
-      selectedPageNotifier.value = 0;
-
-      print('✅ User type loaded: $_userType');
     } catch (e) {
-      print('❌ Error loading user type: $e');
+      if (kDebugMode) debugPrint('WidgetTree: _loadUserType error: $e');
+      if (!mounted) return;
+
+      // Fall back to cached type if available, otherwise default to client
+      final fallbackType = _cache.getCachedDataStale<String>(
+            DataPersistenceService.keyUserType,
+          ) ??
+          'client';
+
       setState(() {
-        _userType = 'handyman'; // Fallback
+        _userType = fallbackType;
         _isLoading = false;
       });
-
-      // ✅ Reset to home on error
       selectedPageNotifier.value = 0;
+
+      // Only show error if we truly have no data
+      if (_cache.getCachedDataStale<String>(DataPersistenceService.keyUserType) == null) {
+        Get.snackbar(
+          'Error',
+          'Could not load your profile. Please try logging in again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(16),
+          borderRadius: 16,
+        );
+      }
     }
   }
 
-  // ✅ Dynamic pages based on user type
+  // Pages based on resolved user type
   List<Widget> get _pages {
     if (_userType == 'client') {
-      return [ClientHomePage(), ClientProfilePage()];
-    } else {
-      return [HandymanHomePage(), HandymanProfilePage()];
+      return [const ClientHomePage(), ClientProfilePage()];
     }
+    return [const HandymanHomePage(), HandymanProfilePage()];
   }
 
   @override
@@ -206,7 +280,7 @@ class _WidgetTreeState extends State<WidgetTree> {
           return _pages.elementAt(safeIndex);
         },
       ),
-      bottomNavigationBar: NavBarWidget(userType: _userType),
+      bottomNavigationBar: NavBarWidget(userType: _userType ?? 'client'),
     );
   }
 }

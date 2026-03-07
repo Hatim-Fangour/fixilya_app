@@ -108,6 +108,11 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     try {
       // ✅ STEP 1: Register user (creates auth + minimal Firestore docs)
+      // The backend will handle creating the Firebase Auth user and Firestore docs
+      // ✅ STEP 2: Send email verification (handled by backend)
+      // ✅ STEP 3: USER_COLLECTION_NAME will be set in the backend based on userType, so we don't need to specify it here
+      // ✅ STEP 4: The backend will return success if registration and email sending were successful, or an error message if something went wrong
+
       final result = await _authService.signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,

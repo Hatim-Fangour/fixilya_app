@@ -25,7 +25,7 @@ class GlobalVariables {
   static const List<Map<String, dynamic>> fakeHandymen = [
     {
       'id': 'fake_1', // ✅ Add unique ID
-      'name': 'Siham',
+      'fullName': 'Siham',
       'skills': ['Cleaning'], // ✅ Changed to match Firebase structure
       'city': 'Nador',
       'rating': 0,
@@ -44,8 +44,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_2',
-      'name': 'Khaled EL OMRANI',
+      'uid': 'fake_2',
+      'fullName': 'Khaled EL OMRANI',
       'skills': ['Electricity'],
       'city': 'Nador',
       'rating': 4.9,
@@ -64,8 +64,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_3',
-      'name': 'Kamal',
+      'uid': 'fake_3',
+      'fullName': 'Kamal',
       'skills': ['Electricity'],
       'city': 'Nador',
       'rating': 4.7,
@@ -84,8 +84,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_4',
-      'name': 'Mohamed ASSILA',
+      'uid': 'fake_4',
+      'fullName': 'Mohamed ASSILA',
       'skills': ['Electricity'],
       'city': 'Nador',
       'rating': 4.6,
@@ -104,8 +104,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_5',
-      'name': 'Waeil WARIACHI',
+      'uid': 'fake_5',
+      'fullName': 'Waeil WARIACHI',
       'skills': ['Appliance Repair'],
       'city': 'Nador',
       'rating': 4.9,
@@ -124,8 +124,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_6',
-      'name': 'Mohamed IKKEN',
+      'uid': 'fake_6',
+      'fullName': 'Mohamed IKKEN',
       'skills': ['Facade coverings'],
       'city': 'Nador',
       'rating': 4.5,
@@ -144,8 +144,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_7',
-      'name': 'Soufian KOLIGHA',
+      'uid': 'fake_7',
+      'fullName': 'Soufian KOLIGHA',
       'skills': ['Painting'],
       'city': 'Nador',
       'rating': 4.5,
@@ -164,8 +164,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_8',
-      'name': 'Abdelhak KOLIGHA',
+      'uid': 'fake_8',
+      'fullName': 'Abdelhak KOLIGHA',
       'skills': ['Painting'],
       'city': 'Nador',
       'rating': 4.5,
@@ -184,8 +184,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_9',
-      'name': 'Abdelwahed',
+      'uid': 'fake_9',
+      'fullName': 'Abdelwahed',
       'skills': ['Welding'],
       'city': 'Nador',
       'rating': 4.5,
@@ -204,8 +204,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_10',
-      'name': 'Youssef',
+      'uid': 'fake_10',
+      'fullName': 'Youssef',
       'skills': ['Concrete'],
       'city': 'Nador',
       'rating': 4.5,
@@ -224,8 +224,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_11',
-      'name': 'Kroom',
+      'uid': 'fake_11',
+      'fullName': 'Kroom',
       'skills': ['Aluminum'],
       'city': 'Nador',
       'rating': 4.5,
@@ -244,8 +244,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_12',
-      'name': 'Zouhir',
+      'uid': 'fake_12',
+      'fullName': 'Zouhir',
       'skills': ['Zellige', 'Masonry'],
       'city': 'Nador',
       'rating': 4.5,
@@ -264,8 +264,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_13',
-      'name': 'Youssef',
+      'uid': 'fake_13',
+      'fullName': 'Youssef',
       'skills': ['Zellige', 'Masonry'],
       'city': 'Nador',
       'rating': 4.5,
@@ -284,8 +284,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_14',
-      'name': 'Soufian',
+      'uid': 'fake_14',
+      'fullName': 'Soufian',
       'skills': ['Plumbing'],
       'city': 'Nador',
       'rating': 4.5,
@@ -304,8 +304,8 @@ class GlobalVariables {
           'Experienced cleaner with 8 years of expertise in residential and commercial cleaning. Committed to delivering top-notch service and customer satisfaction. Available for regular cleaning, deep cleaning, and move-in/move-out cleaning services.',
     },
     {
-      'id': 'fake_15',
-      'name': 'Mosa',
+      'uid': 'fake_15',
+      'fullName': 'Mosa',
       'skills': ['Carpentry'],
       'city': 'Nador',
       'rating': 4.5,

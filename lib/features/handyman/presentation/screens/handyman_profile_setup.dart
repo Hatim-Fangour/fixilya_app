@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:convert';
@@ -15,6 +16,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
+import 'package:fixilya_app/services/location_service.dart';
+import 'package:fixilya_app/services/user_service.dart';
 
 class HandymanProfileSetup extends StatefulWidget {
   const HandymanProfileSetup({super.key});
@@ -38,6 +41,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   List<File> _workImages = [];
   final List<Map<String, dynamic>> _selectedSkills = [];
   bool _isLoading = false;
+  bool _isDetectingCity = false;
   int _currentStep = 0;
   static const double _maxStepWidth = 500.0;
   static const double _stepHeight = 550.0;
@@ -53,6 +57,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  final _userService = UserService();
+
   late final CloudinaryService _cloudinaryService;
   late final FirebaseImageService _firebaseImageService;
   @override
@@ -63,13 +69,13 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
       _cloudinaryService = Get.find<CloudinaryService>();
       _firebaseImageService = Get.find<FirebaseImageService>();
 
-      print('Cloud Name: ${_cloudinaryService.cloudName}');
-      print('✅ Services loaded successfully');
-      print('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
-      print('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
+      if (kDebugMode) debugPrint('Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode) debugPrint('✅ Services loaded successfully');
+      if (kDebugMode) debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode) debugPrint('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
     } catch (e) {
-      print('❌ ERROR: Services not found!');
-      print('Error: $e');
+      if (kDebugMode) debugPrint('❌ ERROR: Services not found!');
+      if (kDebugMode) debugPrint('Error: $e');
     }
     _fadeController = AnimationController(
       duration: Duration(milliseconds: 1000),
@@ -136,12 +142,12 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
   // ✅ Save Profile with Cloudinary Native Transformations
   Future<void> _saveProfile() async {
-    print('🚀 Starting profile save...');
+    if (kDebugMode) debugPrint('🚀 Starting profile save...');
 
     // Validation
     if (_currentStep == 1) {
       if (!_formKey.currentState!.validate()) {
-        print('❌ Form validation failed');
+        if (kDebugMode) debugPrint('❌ Form validation failed');
         return;
       }
     } else if (_currentStep > 1) {
@@ -175,7 +181,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not found');
 
-      print('✅ User: ${user.uid}');
+      if (kDebugMode) debugPrint('✅ User: ${user.uid}');
 
       // ✅ Variables for image URLs
       String? profilePictureUrl;
@@ -232,7 +238,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       void updateProgress(String step) {
         currentStep = step;
-        print('📍 $step');
+        if (kDebugMode) debugPrint('📍 $step');
         if (Get.isDialogOpen ?? false) {
           Get.back();
           Get.dialog(
@@ -296,8 +302,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           );
 
           if (profilePictureUrl != null) {
-            print('✅ Profile picture uploaded to Cloudinary');
-            print('🔗 URL: $profilePictureUrl');
+            if (kDebugMode) debugPrint('✅ Profile picture uploaded to Cloudinary');
+            if (kDebugMode) debugPrint('🔗 URL: $profilePictureUrl');
 
             if (mounted) {
               setState(() {
@@ -305,10 +311,10 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
               });
             }
           } else {
-            print('⚠️ Profile picture upload failed');
+            if (kDebugMode) debugPrint('⚠️ Profile picture upload failed');
           }
         } catch (e) {
-          print('❌ Profile picture error: $e');
+          if (kDebugMode) debugPrint('❌ Profile picture error: $e');
         }
       }
 
@@ -331,10 +337,10 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           );
 
           if (workImageUrls.isNotEmpty) {
-            print(
+            if (kDebugMode) debugPrint(
               '✅ ${workImageUrls.length} work images uploaded to Cloudinary',
             );
-            print('🔗 URLs: $workImageUrls');
+            if (kDebugMode) debugPrint('🔗 URLs: $workImageUrls');
 
             if (mounted) {
               setState(() {
@@ -342,37 +348,40 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
               });
             }
           } else {
-            print('⚠️ No work images uploaded');
+            if (kDebugMode) debugPrint('⚠️ No work images uploaded');
           }
         } catch (e) {
-          print('❌ Work images error: $e');
+          if (kDebugMode) debugPrint('❌ Work images error: $e');
         }
       }
 
       // ✅ STEP 3: Send Cloudinary URLs to backend to save in Firebase
-      updateProgress('Saving profile data to server...');
-      print('📋 _selectedSkills Data: $_selectedSkills');
+      updateProgress('Saving profile data ...');
+      if (kDebugMode) debugPrint('📋 _selectedSkills Data: $_selectedSkills');
 
-      final api = ApiClient();
-
-      final response = await api.userDio.post(
-        '/users/complete-profile',
-        data: {
-          'uid': user.uid,
-          'userType': 'handyman',
-          'fullName': user.displayName ?? '',
-          'phone': user.phoneNumber ?? '',
-          'city': _cityController.value ?? '',
-          'experience': _experienceController.text.trim(),
-          'hourlyRate': double.tryParse(_hourlyRateController.text) ?? 0,
-          'bio': _bioController.text.trim(),
-          'skills': _selectedSkills.map((s) => s['name']).toList(),
-          'profilePicture': profilePictureUrl ?? '', // ✅ Cloudinary URL
-          'workImages': workImageUrls, // ✅ Cloudinary URLs
-        },
+      final result = await _userService.completeProfile(
+        user: user,
+        userType: 'handyman',
+        fullName: user.displayName ?? '',
+        phone: user.phoneNumber ?? '',
+        city: _cityController.value ?? '',
+        experience: _experienceController.text.trim(),
+        bio: _bioController.text.trim(),
+        skills: _selectedSkills.map((s) => s['name']).toList(),
+        profilePictureUrl: profilePictureUrl ?? '', // ✅ Cloudinary URL
+        workImageUrls: workImageUrls, // ✅ Cloudinary URLs
       );
 
-      final responseData = response.data;
+      /*
+
+      result will be :
+      return {
+          'success': true,
+          'message': data['message'] ?? 'Profile completed successfully',
+          'userId': data['data']['uid'],
+        }; 
+        */
+
 
       // ✅ Close dialog
       if (Get.isDialogOpen ?? false) {
@@ -382,23 +391,23 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
       setState(() => _isLoading = false);
 
       // ✅ Check response
-      if (responseData['success'] == true) {
-        print('✅ Backend response successful!');
+      if (result['success'] == true) {
+        if (kDebugMode) debugPrint('✅ Backend response successful!');
 
-        final data = responseData['data'];
-        final isNewUser = data['isNewUser'] ?? false;
+        // final data = result['data'];
+        // final isNewUser = result['isNewUser'] ?? false;
 
-        print('✅ Profile setup complete!');
-        print('   Profile Picture: ${profilePictureUrl ?? "None"}');
-        print('   Work Images: ${workImageUrls.length} images');
-        print(
-          '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
-        );
+        if (kDebugMode) debugPrint('✅ Profile setup complete!');
+        if (kDebugMode) debugPrint('   Profile Picture: ${profilePictureUrl ?? "None"}');
+        if (kDebugMode) debugPrint('   Work Images: ${workImageUrls.length} images');
+        // print(
+        //   '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
+        // );
 
         // ✅ Show success
         Get.snackbar(
           'Success!',
-          responseData['message'] ?? 'Profile created successfully!',
+          result['message'] ?? 'Profile created successfully!',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: AppColors.success,
           colorText: Colors.white,
@@ -411,7 +420,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         await Future.delayed(Duration(milliseconds: 500));
         AppRoutes.toHome();
       } else {
-        throw Exception(responseData['message'] ?? 'Failed to save profile');
+        throw Exception(result['message'] ?? 'Failed to save profile');
       }
     } on DioException catch (e) {
       setState(() => _isLoading = false);
@@ -420,9 +429,9 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         Get.back();
       }
 
-      print('❌ DIO ERROR: ${e.type}');
-      print('   Status: ${e.response?.statusCode}');
-      print('   Response: ${e.response?.data}');
+      if (kDebugMode) debugPrint('❌ DIO ERROR: ${e.type}');
+      if (kDebugMode) debugPrint('   Status: ${e.response?.statusCode}');
+      if (kDebugMode) debugPrint('   Response: ${e.response?.data}');
 
       String errorMessage = 'Failed to save profile. Please try again.';
 
@@ -448,8 +457,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         Get.back();
       }
 
-      print('❌ ERROR: $e');
-      print('Stack: $stackTrace');
+      if (kDebugMode) debugPrint('❌ ERROR: $e');
+      if (kDebugMode) debugPrint('Stack: $stackTrace');
 
       Get.snackbar(
         'Error',
@@ -870,15 +879,82 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
                 SizedBox(height: 34),
 
-                GenericDropdown<String>(
-                  controller: _cityController,
-                  items: GlobalVariables.cities.skip(1).toList(),
-                  label: 'City',
-                  hint: 'Select your city',
-                  itemLabel: (city) => city,
-                  onChanged: (value) => print('Selected: $value'),
-                  validator: (value) =>
-                      value == null ? 'Please select a city' : null,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: GenericDropdown<String>(
+                        controller: _cityController,
+                        items: GlobalVariables.cities.skip(1).toList(),
+                        label: 'City',
+                        hint: 'Select your city',
+                        itemLabel: (city) => city,
+                        onChanged: (value) {
+                          if (kDebugMode) debugPrint('Selected: $value');
+                        },
+                        validator: (value) =>
+                            value == null ? 'Please select a city' : null,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _isDetectingCity
+                          ? SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : IconButton(
+                              icon: Icon(
+                                Icons.my_location,
+                                color: AppColors.primaryColor,
+                              ),
+                              tooltip: 'Auto-detect city',
+                              onPressed: () async {
+                                setState(() => _isDetectingCity = true);
+                                try {
+                                  final city = await LocationService()
+                                      .getCityFromCurrentLocation();
+                                  if (city != null && city.isNotEmpty) {
+                                    _cityController.setValue(city);
+                                  } else {
+                                    Get.snackbar(
+                                      'Location',
+                                      'Could not detect city. Please allow location access.',
+                                      snackPosition: SnackPosition.BOTTOM,
+                                      backgroundColor: Colors.orange,
+                                      colorText: Colors.white,
+                                    );
+                                  }
+                                } catch (_) {
+                                  Get.snackbar(
+                                    'Location',
+                                    'Location permission denied.',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => _isDetectingCity = false);
+                                  }
+                                }
+                              },
+                            ),
+                    ),
+                  ],
                 ),
 
                 SizedBox(height: 15),
@@ -1707,29 +1783,29 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   // Widget _buildTestUploadButton() {
   //   return ElevatedButton(
   //     onPressed: () async {
-  //       print('🧪 TESTING CLOUDINARY UPLOAD...');
+  //       if (kDebugMode) debugPrint('🧪 TESTING CLOUDINARY UPLOAD...');
 
   //       try {
   //         // Test 1: Check if service is loaded
-  //         print('📋 Test 1: Service loaded?');
-  //         print('   Cloud Name: ${_cloudinaryService.cloudName}');
-  //         print('   Upload Preset: ${_cloudinaryService.uploadPreset}');
+  //         if (kDebugMode) debugPrint('📋 Test 1: Service loaded?');
+  //         if (kDebugMode) debugPrint('   Cloud Name: ${_cloudinaryService.cloudName}');
+  //         if (kDebugMode) debugPrint('   Upload Preset: ${_cloudinaryService.uploadPreset}');
 
   //         // Test 2: Pick an image
-  //         print('📋 Test 2: Picking test image...');
+  //         if (kDebugMode) debugPrint('📋 Test 2: Picking test image...');
   //         final testImage = await _cloudinaryService.pickImage();
 
   //         if (testImage == null) {
-  //           print('❌ No image picked');
+  //           if (kDebugMode) debugPrint('❌ No image picked');
   //           return;
   //         }
 
-  //         print('✅ Image picked: ${testImage.path}');
-  //         print('   File exists: ${await testImage.exists()}');
-  //         print('   File size: ${await testImage.length()} bytes');
+  //         if (kDebugMode) debugPrint('✅ Image picked: ${testImage.path}');
+  //         if (kDebugMode) debugPrint('   File exists: ${await testImage.exists()}');
+  //         if (kDebugMode) debugPrint('   File size: ${await testImage.length()} bytes');
 
   //         // Test 3: Try uploading
-  //         print('📋 Test 3: Attempting upload...');
+  //         if (kDebugMode) debugPrint('📋 Test 3: Attempting upload...');
   //         final url = await _cloudinaryService.uploadImage(
   //           imageFile: testImage,
   //           folder: 'test_uploads',
@@ -1737,8 +1813,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   //         );
 
   //         if (url != null) {
-  //           print('✅✅✅ SUCCESS! Upload worked!');
-  //           print('🔗 URL: $url');
+  //           if (kDebugMode) debugPrint('✅✅✅ SUCCESS! Upload worked!');
+  //           if (kDebugMode) debugPrint('🔗 URL: $url');
   //           Get.snackbar(
   //             'Success!',
   //             'Upload test passed! URL: $url',
@@ -1747,7 +1823,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   //             duration: Duration(seconds: 5),
   //           );
   //         } else {
-  //           print('❌ Upload returned null');
+  //           if (kDebugMode) debugPrint('❌ Upload returned null');
   //           Get.snackbar(
   //             'Failed',
   //             'Upload returned null - check console for errors',
@@ -1756,8 +1832,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   //           );
   //         }
   //       } catch (e, stack) {
-  //         print('❌ TEST FAILED: $e');
-  //         print('Stack trace: $stack');
+  //         if (kDebugMode) debugPrint('❌ TEST FAILED: $e');
+  //         if (kDebugMode) debugPrint('Stack trace: $stack');
   //         Get.snackbar(
   //           'Error',
   //           'Test failed: $e',

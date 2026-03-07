@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'package:fixilya_app/core/constants/app_colors.dart';
@@ -54,13 +55,13 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
       _cloudinaryService = Get.find<CloudinaryService>();
       _firebaseImageService = Get.find<FirebaseImageService>();
 
-      print('Cloud Name: ${_cloudinaryService.cloudName}');
-      print('✅ Services loaded successfully');
-      print('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
-      print('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
+      if (kDebugMode) debugPrint('Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode) debugPrint('✅ Services loaded successfully');
+      if (kDebugMode) debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode) debugPrint('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
     } catch (e) {
-      print('❌ ERROR: Services not found!');
-      print('Error: $e');
+      if (kDebugMode) debugPrint('❌ ERROR: Services not found!');
+      if (kDebugMode) debugPrint('Error: $e');
     }
 
     _fadeController = AnimationController(
@@ -100,7 +101,7 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
   }
 
   Future<void> _saveProfile() async {
-    print('🚀 Starting profile save...');
+    if (kDebugMode) debugPrint('🚀 Starting profile save...');
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -108,14 +109,14 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        print('❌ No user found');
+        if (kDebugMode) debugPrint('❌ No user found');
         throw Exception('User not found');
       }
 
-      print('✅ User found: ${user.uid}');
-      print('📋 Profile data:');
-      print('   City: ${_cityController.text.trim()}');
-      print('   Address: ${_addressController.text.trim()}');
+      if (kDebugMode) debugPrint('✅ User found: ${user.uid}');
+      if (kDebugMode) debugPrint('📋 Profile data:');
+      if (kDebugMode) debugPrint('   City: ${_cityController.text.trim()}');
+      if (kDebugMode) debugPrint('   Address: ${_addressController.text.trim()}');
 
       // Show upload progress dialog
       Get.dialog(
@@ -167,13 +168,13 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
       // ✅ Upload profile picture to Cloudinary
       String? profileImageUrl;
 
-      print(
+      if (kDebugMode) debugPrint(
         _profileImage == null
             ? 'ℹ️ No profile image selected'
             : '📸 Profile image selected: ${_profileImage!.path}',
       );
       if (_profileImage != null) {
-        print('📤 Uploading profile image...');
+        if (kDebugMode) debugPrint('📤 Uploading profile image...');
 
         try {
           profileImageUrl = await _cloudinaryService
@@ -186,13 +187,13 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
               .timeout(
                 Duration(seconds: 35), // ✅ Extra safety
                 onTimeout: () {
-                  print('⏱️ Timed out');
+                  if (kDebugMode) debugPrint('⏱️ Timed out');
                   return null;
                 },
               );
 
           if (profileImageUrl != null) {
-            print('✅ Profile picture uploaded: $profileImageUrl');
+            if (kDebugMode) debugPrint('✅ Profile picture uploaded: $profileImageUrl');
 
             // Save URL to Firebase
             await _firebaseImageService.saveProfileImageUrl(
@@ -200,19 +201,19 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
               imageUrl: profileImageUrl,
               userType: 'clients',
             );
-            print('✅ Profile picture URL saved to Firebase');
+            if (kDebugMode) debugPrint('✅ Profile picture URL saved to Firebase');
           } else {
-            print('⚠️ Profile picture upload returned null');
+            if (kDebugMode) debugPrint('⚠️ Profile picture upload returned null');
           }
         } catch (e) {
-          print('❌ Profile picture upload failed: $e');
+          if (kDebugMode) debugPrint('❌ Profile picture upload failed: $e');
         }
       } else {
-        print('ℹ️ No profile picture to upload');
+        if (kDebugMode) debugPrint('ℹ️ No profile picture to upload');
       }
 
       // Save profile data to Firestore
-      print('💾 Saving profile to Firestore...');
+      if (kDebugMode) debugPrint('💾 Saving profile to Firestore...');
 
       final profileData = {
         'city': _cityController.text.trim(),
@@ -222,14 +223,14 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      print('📝 Profile data to save: $profileData');
+      if (kDebugMode) debugPrint('📝 Profile data to save: $profileData');
 
       await FirebaseFirestore.instance
           .collection('clients')
           .doc(user.uid)
           .set(profileData, SetOptions(merge: true));
 
-      print('✅ Client collection updated');
+      if (kDebugMode) debugPrint('✅ Client collection updated');
 
       // Also update users collection
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
@@ -237,7 +238,7 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      print('✅ Users collection updated');
+      if (kDebugMode) debugPrint('✅ Users collection updated');
 
       setState(() => _isLoading = false);
 
@@ -259,7 +260,7 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
         duration: Duration(seconds: 3),
       );
 
-      print('✅ Profile setup complete!');
+      if (kDebugMode) debugPrint('✅ Profile setup complete!');
 
       // Navigate to home
       await Future.delayed(Duration(milliseconds: 500));
@@ -272,8 +273,8 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
         Get.back();
       }
 
-      print('❌ ERROR saving profile: $e');
-      print('Stack trace: $stackTrace');
+      if (kDebugMode) debugPrint('❌ ERROR saving profile: $e');
+      if (kDebugMode) debugPrint('Stack trace: $stackTrace');
 
       Get.snackbar(
         'Error',

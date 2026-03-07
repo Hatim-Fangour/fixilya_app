@@ -3,6 +3,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
+const requestLogger = require('../../../shared/middleware/requestLogger');
 const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
@@ -10,8 +11,10 @@ const PORT = process.env.PORT || 3005;
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: '*' }));
+const corsOptions = require('../../../shared/config/cors');
+app.use(cors(corsOptions()));
 app.use(express.json());
+app.use(requestLogger('notification-service'));
 app.use(morgan('combined'));
 
 // Health check

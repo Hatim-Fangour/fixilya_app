@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminNotificationService {
@@ -12,9 +13,9 @@ class AdminNotificationService {
     required bool profileCompleted,
   }) async {
     try {
-      print('📧 Notifying admin of new handyman...');
+      if (kDebugMode) debugPrint('📧 Notifying admin of new handyman...');
 
-      await _firestore.collection('admin_notifications').add({
+      await _firestore.collection('adminNotifications').add({
         'type': 'new_handyman',
         'handymanId': handymanId,
         'handymanName': handymanName,
@@ -33,9 +34,9 @@ class AdminNotificationService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Admin notification created');
+      if (kDebugMode) debugPrint('✅ Admin notification created');
     } catch (e) {
-      print('❌ Error creating admin notification: $e');
+      if (kDebugMode) debugPrint('❌ Error creating admin notification: $e');
       // Don't throw - notification failure shouldn't block registration
     }
   }
@@ -62,7 +63,7 @@ class AdminNotificationService {
       // If created within last 2 minutes, consider it a new registration
       return difference.inMinutes < 2;
     } catch (e) {
-      print('❌ Error checking if first-time user: $e');
+      if (kDebugMode) debugPrint('❌ Error checking if first-time user: $e');
       return false; // Assume not first time on error
     }
   }

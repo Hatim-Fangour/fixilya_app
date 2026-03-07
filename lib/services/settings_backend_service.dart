@@ -1,94 +1,123 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:fixilya_app/services/api_client.dart';
 
+/// Handles all backend calls for [HandymanSettingsPage].
+///
+/// Every method maps 1-to-1 to an existing endpoint in handyman.routes.js.
+/// No direct Firestore writes — all mutations go through the API.
 class SettingsBackendService {
-  final ApiClient _apiClient = ApiClient();
+  final _api = ApiClient();
 
-  /// Get handyman settings
+  // ─────────────────────────────────────────────
+  // READ
+  // ─────────────────────────────────────────────
+
+  /// GET /users/handyman/settings
+  ///
+  /// Returns: { fullName, email, phone, city, profilePicture,
+  ///            pushNotifications, emailNotifications, smsNotifications }
   Future<Map<String, dynamic>?> getHandymanSettings() async {
     try {
-      print('🔍 Fetching handyman settings from backend...');
+      final response = await _api.userDio.get('/users/handyman/settings');
 
-      final response = await _apiClient.userDio.get('/users/handyman/settings');
-
-      if (response.data['success'] == true) {
-        print('✅ Settings loaded from backend');
-        return response.data['data'];
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data['data'] as Map<String, dynamic>;
       }
 
       return null;
     } on DioException catch (e) {
-      print('❌ Error fetching settings: ${e.response?.data}');
+      _logError('getHandymanSettings', e);
       return null;
     }
   }
 
-  /// Update handyman settings
+  // ─────────────────────────────────────────────
+  // NOTIFICATIONS
+  // ─────────────────────────────────────────────
+
+  /// PUT /users/handyman/settings
+  ///
+  /// Accepted keys: pushNotifications, emailNotifications, smsNotifications.
+  /// Any other keys are stripped by the backend (whitelist-based).
+  ///
+  /// Returns true on success.
   Future<bool> updateHandymanSettings(Map<String, dynamic> updates) async {
     try {
-      print('📝 Updating handyman settings via backend...');
-      print('   Updates: $updates');
-
-      final response = await _apiClient.userDio.put(
+      final response = await _api.userDio.put(
         '/users/handyman/settings',
         data: updates,
       );
 
-      if (response.data['success'] == true) {
-        print('✅ Settings updated successfully');
-        return true;
-      }
-
-      return false;
+      return response.statusCode == 200 && response.data['success'] == true;
     } on DioException catch (e) {
-      print('❌ Error updating settings: ${e.response?.data}');
+      _logError('updateHandymanSettings', e);
       return false;
     }
   }
 
-  /// Update profile picture
-  Future<String?> updateProfilePicture(String profilePictureUrl) async {
-    try {
-      print('📝 Updating profile picture via backend...');
-      print('   URL: $profilePictureUrl');
+  // ─────────────────────────────────────────────
+  // PROFILE INFO
+  // ─────────────────────────────────────────────
 
-      final response = await _apiClient.userDio.put(
-        '/users/handyman/profile-picture',
-        data: {'profilePicture': profilePictureUrl},
-      );
-
-      if (response.data['success'] == true) {
-        print('✅ Profile picture updated successfully');
-        return response.data['data']['profilePicture'];
-      }
-
-      return null;
-    } on DioException catch (e) {
-      print('❌ Error updating profile picture: ${e.response?.data}');
-      return null;
-    }
-  }
-
-  /// Update profile info (fullName, phone, city)
+  /// PUT /users/handyman/profile
+  ///
+  /// Accepted keys: fullName, phone, city, experience, bio, skills, workImages.
+  /// Protected fields (uid, email, approved, etc.) are stripped by the backend.
+  ///
+  /// Returns true on success.
   Future<bool> updateProfileInfo(Map<String, dynamic> updates) async {
     try {
-      print('📝 Updating profile info via backend...');
-      print('   Updates: $updates');
-
-      final response = await _apiClient.userDio.put(
+      final response = await _api.userDio.put(
         '/users/handyman/profile',
         data: updates,
       );
 
-      if (response.data['success'] == true) {
-        print('✅ Profile info updated successfully');
-        return true;
-      }
-
-      return false;
+      return response.statusCode == 200 && response.data['success'] == true;
     } on DioException catch (e) {
-      print('❌ Error updating profile info: ${e.response?.data}');
+      _logError('updateProfileInfo', e);
       return false;
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // PROFILE PICTURE
+  // ─────────────────────────────────────────────
+
+  /// PUT /users/handyman/profile-picture
+  ///
+  /// [url] must be a valid Cloudinary URL (already uploaded before calling this).
+  ///
+  /// Returns the saved URL on success, null on failure.
+  Future<String?> updateProfilePicture(String url) async {
+    try {
+      final response = await _api.userDio.put(
+        '/users/handyman/profile-picture',
+        data: {'profilePicture': url},
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        // Backend echoes the URL back in data.profilePicture
+        return response.data['data']?['profilePicture'] as String? ?? url;
+      }
+
+      return null;
+    } on DioException catch (e) {
+      _logError('updateProfilePicture', e);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // PRIVATE
+  // ─────────────────────────────────────────────
+
+  void _logError(String method, DioException e) {
+    if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if (kDebugMode) debugPrint('❌ SettingsBackendService.$method');
+    if (kDebugMode) debugPrint('   Status : ${e.response?.statusCode}');
+    if (kDebugMode) debugPrint('   Message: ${e.message}');
+    if (kDebugMode) debugPrint('   Body   : ${e.response?.data}');
+    if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 }

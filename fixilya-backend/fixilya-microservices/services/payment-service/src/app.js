@@ -1,8 +1,12 @@
 require('dotenv').config();
+const validateEnv = require('../../../shared/config/validateEnv');
+validateEnv(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']);
+
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
+const requestLogger = require('../../../shared/middleware/requestLogger');
 const paymentRoutes = require('./routes/payment.routes');
 
 const app = express();
@@ -10,13 +14,15 @@ const PORT = process.env.PORT || 3004;
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: '*' }));
+const corsOptions = require('../../../shared/config/cors');
+app.use(cors(corsOptions()));
 
 // Webhook endpoint needs raw body
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
 // Other routes use JSON parser
 app.use(express.json());
+app.use(requestLogger('payment-service'));
 app.use(morgan('combined'));
 
 // Health check

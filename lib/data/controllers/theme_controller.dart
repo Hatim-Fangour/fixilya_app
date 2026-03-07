@@ -10,7 +10,7 @@ enum ThemePreference { light, dark, system }
 
 class ThemeController extends GetxController {
   final _localStorage = LocalStorageService();
-  final _handymanDataService = HandymanDataService();
+  final _handymanDataService = HandymanApiService();
   final _auth = FirebaseAuth.instance;
 
   final _themePreference = ThemePreference.system.obs;
@@ -78,22 +78,14 @@ class ThemeController extends GetxController {
 
       debugPrint('🔐 Loading theme for user: ${user.uid}');
 
-      final profile = await _handymanDataService.getHandymanProfile();
+      final savedTheme = _localStorage.getThemePreference();
 
-      if (profile != null && profile['themePreference'] != null) {
-        final savedTheme = profile['themePreference'] as String;
-        _themePreference.value = _parseThemePreference(savedTheme);
-        debugPrint('✅ Theme from Firestore: $savedTheme');
+      if (savedTheme == null || savedTheme.isEmpty) {
+        debugPrint('⚠️ No saved theme - defaulting to system');
+        _themePreference.value = ThemePreference.system;
       } else {
-        final savedTheme = _localStorage.getThemePreference();
-
-        if (savedTheme == null || savedTheme.isEmpty) {
-          debugPrint('⚠️ No saved theme - defaulting to system');
-          _themePreference.value = ThemePreference.system;
-        } else {
-          _themePreference.value = _parseThemePreference(savedTheme);
-          debugPrint('✅ Theme from storage: $savedTheme');
-        }
+        _themePreference.value = _parseThemePreference(savedTheme);
+        debugPrint('✅ Theme from storage: $savedTheme');
       }
 
       _updateDarkMode();

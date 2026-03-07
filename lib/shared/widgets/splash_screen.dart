@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
@@ -57,60 +58,58 @@ class _SplashScreenState extends State<SplashScreen>
       // Get current Firebase user
       final User? currentUser = _authService.getCurrentUser();
 
-      print(
+      if (kDebugMode) debugPrint(
         currentUser == null
-            ? 'ℹ️ No user is currently logged in.'
-            : 'ℹ️ User is logged in: $currentUser ${currentUser.email}',
+            ? 'No user is currently logged in.'
+            : 'User is logged in: ${currentUser.uid} ${currentUser.email}',
       );
 
-      print(currentUser);
-
       if (currentUser != null) {
-        print('✅ User found: ${currentUser.email}');
+        if (kDebugMode) debugPrint('✅ User found: ${currentUser.email}');
 
         // ✅ Try to reload user with comprehensive error handling
         bool userStillExists = true;
 
         try {
           await currentUser.reload();
-          print('✅ User reloaded successfully');
+          if (kDebugMode) debugPrint('✅ User reloaded successfully');
         } on FirebaseAuthException catch (e) {
-          print('⚠️ FirebaseAuthException during reload: ${e.code}');
+          if (kDebugMode) debugPrint('⚠️ FirebaseAuthException during reload: ${e.code}');
 
           // ✅ Handle all possible Firebase Auth errors
           switch (e.code) {
             case 'user-not-found':
             case 'ERROR_USER_NOT_FOUND':
-              print('❌ User has been deleted from Firebase');
+              if (kDebugMode) debugPrint('❌ User has been deleted from Firebase');
               userStillExists = false;
               break;
 
             case 'user-disabled':
-              print('❌ User account has been disabled');
+              if (kDebugMode) debugPrint('❌ User account has been disabled');
               userStillExists = false;
               break;
 
             case 'user-token-expired':
             case 'invalid-user-token':
-              print('❌ User token has expired or is invalid');
+              if (kDebugMode) debugPrint('❌ User token has expired or is invalid');
               userStillExists = false;
               break;
 
             case 'network-request-failed':
-              print(
+              if (kDebugMode) debugPrint(
                 '⚠️ Network error during reload, continuing with cached data',
               );
               // User might still exist, continue with cached data
               break;
 
             default:
-              print('⚠️ Unknown Firebase error: ${e.code} - ${e.message}');
+              if (kDebugMode) debugPrint('⚠️ Unknown Firebase error: ${e.code} - ${e.message}');
               // For unknown errors, assume user might still exist
               break;
           }
         } on PlatformException catch (e) {
           // ✅ ADD THIS CATCH BLOCK FOR PlatformException
-          print('⚠️ PlatformException during reload: ${e.code} - ${e.message}');
+          if (kDebugMode) debugPrint('⚠️ PlatformException during reload: ${e.code} - ${e.message}');
 
           // Check for user not found errors
           if (e.code == 'ERROR_USER_NOT_FOUND' ||
@@ -118,26 +117,22 @@ class _SplashScreenState extends State<SplashScreen>
               e.message?.toLowerCase().contains('no user record') == true ||
               e.message?.toLowerCase().contains('user may have been deleted') ==
                   true) {
-            print('❌ User not found (platform exception)');
+            if (kDebugMode) debugPrint('❌ User not found (platform exception)');
             userStillExists = false;
           } else if (e.code == 'ERROR_USER_DISABLED' ||
               e.message?.toLowerCase().contains('disabled') == true) {
-            print('❌ User account disabled (platform exception)');
+            if (kDebugMode) debugPrint('❌ User account disabled (platform exception)');
             userStillExists = false;
           } else {
-            print('⚠️ Other platform error, continuing cautiously');
-            // For other platform errors, be conservative
-            userStillExists = false;
+            if (kDebugMode) debugPrint('Other platform error, continuing with cached data');
           }
         } catch (e) {
-          print('❌ Unexpected error during reload: $e');
-          // For unexpected errors, be conservative and assume user doesn't exist
-          userStillExists = false;
+          if (kDebugMode) debugPrint('Unexpected error during reload: $e — continuing with cached data');
         }
 
         // ✅ If user was deleted, sign out and go to welcome
         if (!userStillExists) {
-          print('🔄 User no longer exists, signing out...');
+          if (kDebugMode) debugPrint('🔄 User no longer exists, signing out...');
           await _authService.signOut();
           if (!mounted) return;
           Get.offAllNamed(AppRoutes.welcome);
@@ -149,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen>
 
         // ✅ Double-check user still exists
         if (refreshedUser == null) {
-          print('❌ User is null after reload');
+          if (kDebugMode) debugPrint('❌ User is null after reload');
           await _authService.signOut();
           if (!mounted) return;
           Get.offAllNamed(AppRoutes.welcome);
@@ -158,23 +153,23 @@ class _SplashScreenState extends State<SplashScreen>
 
         // ✅ Check email verification
         if (!refreshedUser.emailVerified) {
-          print('⚠️ Email not verified, signing out');
+          if (kDebugMode) debugPrint('⚠️ Email not verified, signing out');
           await _authService.signOut();
           if (!mounted) return;
           Get.offAllNamed(AppRoutes.welcome);
           return;
         }
 
-        print('✅ Email verified');
+        if (kDebugMode) debugPrint('✅ Email verified');
 
         // ✅ Get user data from Firestore
         final userData = await _authService.getUserData();
 
         if (userData != null && userData.isNotEmpty) {
-          print('✅ User data found: ${userData['fullName']}');
+          if (kDebugMode) debugPrint('✅ User data found: ${userData['fullName']}');
 
           final String userType = userData['userType'] ?? 'client';
-          print('✅ User type: $userType');
+          if (kDebugMode) debugPrint('✅ User type: $userType');
 
           // ✅ Check mounted before navigation
           if (!mounted) return;
@@ -182,24 +177,24 @@ class _SplashScreenState extends State<SplashScreen>
           // Navigate to WidgetTree
           Get.offAllNamed(AppRoutes.widgetTree);
         } else {
-          print('⚠️ No user data found in Firestore, signing out');
+          if (kDebugMode) debugPrint('⚠️ No user data found in Firestore, signing out');
           await _authService.signOut();
 
           if (!mounted) return;
           Get.offAllNamed(AppRoutes.welcome);
         }
       } else {
-        print('ℹ️ No user logged in');
+        if (kDebugMode) debugPrint('ℹ️ No user logged in');
         if (!mounted) return;
         Get.offAllNamed(AppRoutes.welcome);
       }
     } catch (e) {
-      print('❌ Fatal error in auth check: $e');
+      if (kDebugMode) debugPrint('❌ Fatal error in auth check: $e');
       // On any fatal error, sign out and go to welcome
       try {
         await _authService.signOut();
       } catch (signOutError) {
-        print('⚠️ Error during emergency sign out: $signOutError');
+        if (kDebugMode) debugPrint('⚠️ Error during emergency sign out: $signOutError');
       }
 
       if (mounted) {

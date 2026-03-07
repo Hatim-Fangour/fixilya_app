@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/core/constants/app_strings.dart';
@@ -38,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
 
   // Colors
-  static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
+  static const primaryColor = Color(0xFF536EFE);
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
   static const accentColor = Color.fromRGBO(147, 167, 255, 1);
 
@@ -139,14 +140,14 @@ class _LoginScreenState extends State<LoginScreen>
               .doc(result['userId'])
               .get();
 
-          print('User document data: ${doc.data()}');
-          print('doc[fullName]: ${doc['fullName']}');
-          print('doc[phone]: ${doc['phone']}');
+          if (kDebugMode) debugPrint('User document data: ${doc.data()}');
+          if (kDebugMode) debugPrint('doc[fullName]: ${doc['fullName']}');
+          if (kDebugMode) debugPrint('doc[phone]: ${doc['phone']}');
           // final userData = userDoc.data();
           fullName = doc['fullName'] ?? '';
           phone = doc['phone'] ?? '';
         } catch (e) {
-          print('Could not fetch user data: $e');
+          if (kDebugMode) debugPrint('Could not fetch user data: $e');
         }
 
         // Navigate to email verification screen

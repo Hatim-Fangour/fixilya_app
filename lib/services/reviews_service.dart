@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReviewsService {
@@ -9,7 +10,7 @@ class ReviewsService {
     int? limit,
   }) async {
     try {
-      print('📋 Fetching reviews for handyman: $handymanId');
+      if (kDebugMode) debugPrint('📋 Fetching reviews for handyman: $handymanId');
 
       Query query = _firestore
           .collection('reviews')
@@ -39,7 +40,7 @@ class ReviewsService {
             clientName = clientDoc.data()?['fullName'] ?? 'Anonymous';
           }
         } catch (e) {
-          print('⚠️ Error fetching client name: $e');
+          if (kDebugMode) debugPrint('⚠️ Error fetching client name: $e');
         }
 
         reviews.add({
@@ -53,10 +54,10 @@ class ReviewsService {
         });
       }
 
-      print('✅ Loaded ${reviews.length} reviews');
+      if (kDebugMode) debugPrint('✅ Loaded ${reviews.length} reviews');
       return reviews;
     } catch (e) {
-      print('❌ Error getting reviews: $e');
+      if (kDebugMode) debugPrint('❌ Error getting reviews: $e');
       return [];
     }
   }
@@ -92,7 +93,7 @@ class ReviewsService {
         'ratingDistribution': distribution,
       };
     } catch (e) {
-      print('❌ Error getting review stats: $e');
+      if (kDebugMode) debugPrint('❌ Error getting review stats: $e');
       return {
         'totalReviews': 0,
         'averageRating': 0.0,

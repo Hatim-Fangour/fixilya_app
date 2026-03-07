@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // ignore_for_file: depend_on_referenced_packages, unused_local_variable
 
 import 'dart:async';
@@ -61,6 +62,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   DateTime? _lastRefresh;
 
   List<Map<String, dynamic>> _pendingHandymen = [];
+  List<Map<String, dynamic>> _allHandymen = [];
+  List<Map<String, dynamic>> _allClients = [];
+  int _unreadNotificationCount = 0;
+  StreamSubscription<QuerySnapshot>? _notificationCountSub;
+  String _handymenFilter = 'all';
+  String _handymenSearchQuery = '';
+  String _clientsSearchQuery = '';
 
   @override
   void initState() {
@@ -82,7 +90,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   void _startAutoRefresh() {
     _refreshTimer = Timer.periodic(Duration(seconds: 30), (timer) {
       if (mounted && _isAdmin && !_isLoading) {
-        print('🔄 Auto-refreshing dashboard data...');
+        if (kDebugMode) debugPrint('🔄 Auto-refreshing dashboard data...');
         _loadDashboardData();
       }
     });
@@ -97,7 +105,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   //     return snapshot.size;
   //   } catch (e) {
-  //     print('❌ Error getting notification count: $e');
+  //     if (kDebugMode) debugPrint('❌ Error getting notification count: $e');
   //     return 0;
   //   }
   // }
@@ -145,7 +153,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       // final isAdmin = true;
 
       if (!isAdmin) {
-        // print('❌ Access denied: User is not admin');
+        // if (kDebugMode) debugPrint('❌ Access denied: User is not admin');
         _showAccessDenied();
         return;
       }
@@ -153,7 +161,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       setState(() => _isAdmin = true);
       await _loadDashboardData();
     } catch (e) {
-      // print('❌ Error checking admin access: $e');
+      // if (kDebugMode) debugPrint('❌ Error checking admin access: $e');
       _showAccessDenied();
     }
   }
@@ -201,12 +209,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         _isLoading = false; // ✅ Combined with other updates
       });
 
-      // print('✅ Dashboard loaded successfully');
-      // print('   Top handymen: ${_topHandymen.length}');
-      // print('   Trending skills: ${_trendingSkills.length}');
-      // print('   Recent activities: ${_recentActivity.length}');
+      // if (kDebugMode) debugPrint('✅ Dashboard loaded successfully');
+      // if (kDebugMode) debugPrint('   Top handymen: ${_topHandymen.length}');
+      // if (kDebugMode) debugPrint('   Trending skills: ${_trendingSkills.length}');
+      // if (kDebugMode) debugPrint('   Recent activities: ${_recentActivity.length}');
     } catch (e) {
-      // print('❌ Error loading dashboard: $e');
+      // if (kDebugMode) debugPrint('❌ Error loading dashboard: $e');
     }
 
     if (!mounted) return;
@@ -228,9 +236,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         _activeRate = (stats['activeRate'] ?? 0).toDouble();
       });
 
-      // print('✅ Statistics loaded successfully');
+      // if (kDebugMode) debugPrint('✅ Statistics loaded successfully');
     } catch (e) {
-      // print('❌ Error loading statistics: $e');
+      // if (kDebugMode) debugPrint('❌ Error loading statistics: $e');
     }
   }
 
@@ -242,9 +250,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         _pendingHandymen = pending;
       });
 
-      // print('✅ Loaded ${_pendingHandymen.length} pending handymen');
+      // if (kDebugMode) debugPrint('✅ Loaded ${_pendingHandymen.length} pending handymen');
     } catch (e) {
-      // print('❌ Error loading pending handymen: $e');
+      // if (kDebugMode) debugPrint('❌ Error loading pending handymen: $e');
     }
   }
 
@@ -2667,7 +2675,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   //       await _loadDashboardData();
   //     }
   //   } catch (e) {
-  //     print('❌ Error approving: $e');
+  //     if (kDebugMode) debugPrint('❌ Error approving: $e');
   //     Get.snackbar(
   //       '❌ Error',
   //       'Failed to approve handyman',
@@ -2697,7 +2705,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   //       await _loadDashboardData();
   //     }
   //   } catch (e) {
-  //     print('❌ Error rejecting: $e');
+  //     if (kDebugMode) debugPrint('❌ Error rejecting: $e');
   //     Get.snackbar(
   //       '❌ Error',
   //       'Failed to reject handyman',

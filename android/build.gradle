@@ -17,17 +17,30 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Agora RTC Maven repository
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://release-agora-io.oss-cn-hangzhou.aliyuncs.com' }
     }
 }
 
-rootProject.buildDir = '../build'
+// Redirect build outputs:
+// - :app → {flutterProjectRoot}/build/app  (Flutter tool looks here for the APK)
+// - all plugin libraries → C:/flutter_builds/  (outside OneDrive to avoid file-locking)
+def pluginBuildRoot = 'C:/flutter_builds/fixilya_app'
 subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    if (project.name == 'app') {
+        // rootProject.projectDir is android/, so ../build/app resolves to
+        // {flutterProjectRoot}/build/app — exactly where Flutter expects the APK.
+        project.buildDir = "${rootProject.projectDir}/../build/app"
+    } else {
+        project.buildDir = "${pluginBuildRoot}/${project.name}"
+    }
 }
 subprojects {
     project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {
-    delete rootProject.buildDir
+    delete "${rootProject.projectDir}/../build"
+    delete pluginBuildRoot
 }

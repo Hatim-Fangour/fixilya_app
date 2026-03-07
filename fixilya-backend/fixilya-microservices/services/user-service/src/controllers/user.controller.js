@@ -1,25 +1,36 @@
-const userService = require('../services/user.service');
-const logger = require('../../../../shared/utils/logger');
+const userService = require("../services/user.service");
+const logger      = require("../../../../shared/utils/logger");
+const audit       = require("../../../../shared/utils/auditLogger");
 
-// Complete profile with skip
+const SVC = 'user-service';
+
+// ─────────────────────────────────────────────
+// PROFILE COMPLETION  (no auth token required — called right after sign-up)
+// ─────────────────────────────────────────────
+
+/**
+ * POST /users/complete-profile-skip
+ * Creates a minimal profile so the user can proceed without filling everything in.
+ */
 exports.completeProfileWithSkip = async (req, res, next) => {
   try {
     const { uid, userType } = req.body;
 
-    const result = await userService.completeProfileWithSkip({
-      uid,
-      userType,
-    });
+    const result = await userService.completeProfileWithSkip({ uid, userType });
 
-    logger.info(`Profile completed with skip for user: ${uid}`);
+    logger.info(`✅ Profile-skip complete for uid=${uid}`);
+    audit.log(SVC, 'PROFILE_SKIP_COMPLETE', { actor: audit.actor(req), uid, userType });
 
-    res.json(result);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
 };
 
-// ✅ NEW: Complete full profile
+/**
+ * POST /users/complete-profile
+ * Saves the full onboarding profile (with Cloudinary image URLs).
+ */
 exports.completeProfile = async (req, res, next) => {
   try {
     const {
@@ -29,7 +40,6 @@ exports.completeProfile = async (req, res, next) => {
       phone,
       city,
       experience,
-      hourlyRate,
       bio,
       skills,
       profilePicture,
@@ -43,25 +53,39 @@ exports.completeProfile = async (req, res, next) => {
       phone,
       city,
       experience,
-      hourlyRate,
       bio,
       skills,
       profilePicture,
       workImages,
     });
 
-    console.log(`✅ Full profile completed for user: ${uid}`);
+    logger.info(`✅ Full profile complete for uid=${uid}`);
+    audit.log(SVC, 'PROFILE_COMPLETE', {
+      actor: audit.actor(req),
+      uid,
+      userType,
+      city,
+      hasProfilePicture: !!profilePicture,
+      workImagesCount:   workImages?.length ?? 0,
+    });
 
-    res.json(result);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
 };
 
-// Get user profile
+// ─────────────────────────────────────────────
+// GENERAL PROFILE  (auth required)
+// ─────────────────────────────────────────────
+
+/**
+ * GET /users/profile
+ * Returns the merged profile for any user type.
+ */
 exports.getProfile = async (req, res, next) => {
   try {
-    const { uid } = req.user; // From auth middleware
+    const { uid } = req.user;
 
     const profile = await userService.getProfile(uid);
 
@@ -74,173 +98,25 @@ exports.getProfile = async (req, res, next) => {
   }
 };
 
-// Update user profile
+/**
+ * PUT /users/profile
+ * Updates general profile fields (works for both clients and handymen).
+ */
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { uid } = req.user; // From auth middleware
+    const { uid } = req.user;
     const updates = req.body;
 
     const result = await userService.updateProfile(uid, updates);
 
-    logger.info(`Profile updated for user: ${uid}`);
+    logger.info(`✅ Profile updated for uid=${uid}`);
+    audit.log(SVC, 'PROFILE_UPDATE', {
+      actor:  audit.actor(req),
+      uid,
+      fields: Object.keys(updates),
+    });
 
     res.json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-// ✅ Get handyman profile
-exports.getHandymanProfile = async (req, res, next) => {
-  try {
-    const { uid } = req.user; // From auth middleware
-
-    const profile = await userService.getHandymanProfile(uid);
-
-    logger.info(`✅ Handyman profile retrieved for user: ${uid}`);
-    logger.info(`✅ Handyman profile data: ${JSON.stringify(profile)}`);
-
-    res.json({
-      success: true,
-      data: profile,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ✅ Get rating stats
-exports.getRatingStats = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-
-    const stats = await userService.getRatingStats(uid);
-
-    res.json({
-      success: true,
-      data: stats,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ✅ Get handyman stats
-exports.getHandymanStats = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-
-    const stats = await userService.getHandymanStats(uid);
-
-    res.json({
-      success: true,
-      data: stats,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ✅ Update handyman profile
-exports.updateHandymanProfile = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-    const updates = req.body;
-
-    const result = await userService.updateHandymanProfile(uid, updates);
-
-    logger.info(`Profile updated for user: ${uid}`);
-
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ✅ Update availability
-exports.updateAvailability = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-    const { isAvailable } = req.body;
-
-    const result = await userService.updateAvailabilityStatus(uid, isAvailable);
-
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// ✅ Get availability
-exports.getAvailability = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-
-    const availability = await userService.getAvailabilityStatus(uid);
-
-    res.json({
-      success: true,
-      data: availability,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-
-/**
- * Get handyman settings
- */
-exports.getHandymanSettings = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-    const settings = await userService.getHandymanSettings(uid);
-    
-    res.json({
-      success: true,
-      data: settings,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Update handyman settings
- */
-exports.updateHandymanSettings = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-    const updates = req.body;
-    
-    await userService.updateHandymanSettings(uid, updates);
-    
-    res.json({
-      success: true,
-      message: 'Settings updated successfully',
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Update profile picture
- */
-exports.updateProfilePicture = async (req, res, next) => {
-  try {
-    const { uid } = req.user;
-    const { profilePicture } = req.body;
-    
-    await userService.updateProfilePicture(uid, profilePicture);
-    
-    res.json({
-      success: true,
-      message: 'Profile picture updated successfully',
-      data: { profilePicture },
-    });
   } catch (error) {
     next(error);
   }

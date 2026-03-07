@@ -1,16 +1,22 @@
 // lib/core/services/auth_service.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dio/dio.dart';
 import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'package:fixilya_app/services/api_client.dart';
+import 'package:fixilya_app/services/data_persistence_service.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
+
+void _log(String msg) {
+  if (kDebugMode) debugPrint('[AuthService] $msg');
+}
 
 class AuthService {
   // ✅ ADD: Base URL for your backend
-  static const String _baseUrl = 'http://localhost:3001/api/auth';
+  // static const String _baseUrl = 'http://localhost:3001/api/auth';
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -40,13 +46,13 @@ class AuthService {
     required String userType,
   }) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📝 STARTING SIGNUP WITH BACKEND');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Email: $email');
-      print('Full Name: $fullName');
-      print('Phone: $phone');
-      print('User Type: $userType');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('📝 STARTING SIGNUP WITH BACKEND');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('Email: $email');
+      _log('Full Name: $fullName');
+      _log('Phone: $phone');
+      _log('User Type: $userType');
 
       // ✅ Check network connectivity first
       try {
@@ -61,9 +67,9 @@ class AuthService {
             'message': 'No internet connection. Please check your network.',
           };
         }
-        print('✅ Network connection verified');
+        _log('✅ Network connection verified');
       } catch (e) {
-        print('❌ Network check failed: $e');
+        _log('❌ Network check failed: $e');
         return {
           'success': false,
           'message': 'No internet connection. Please try again.',
@@ -71,7 +77,7 @@ class AuthService {
       }
 
       // ✅ Call backend registration API using ApiClient
-      print('🌐 Calling backend API...');
+      _log('🌐 Calling backend API...');
       final response = await _api.dio.post(
         '/auth/register',
         data: {
@@ -84,13 +90,13 @@ class AuthService {
       );
 
       final data = response.data;
-      print('📥 Backend response: $data');
+      _log('📥 Backend response: $data');
 
       if (response.statusCode == 201 && data['success'] == true) {
-        print('✅ Backend registration successful');
+        _log('✅ Backend registration successful');
 
         // ✅ Sign in to Firebase (to get the user object)
-        print('🔐 Signing in to Firebase...');
+        _log('🔐 Signing in to Firebase...');
         final userCredential = await _auth
             .signInWithEmailAndPassword(
               email: email.trim().toLowerCase(),
@@ -99,6 +105,7 @@ class AuthService {
             .timeout(
               const Duration(seconds: 15),
               onTimeout: () {
+                // logger.warning('Firebase sign-in timed out after 15 seconds');
                 throw FirebaseAuthException(
                   code: 'timeout',
                   message: 'Firebase sign-in timed out. Please try again.',
@@ -107,44 +114,40 @@ class AuthService {
             );
 
         final user = userCredential.user;
-        print('✅ Firebase sign-in successful: ${user?.uid}');
+        _log('✅ Firebase sign-in successful: ${user?.uid}');
 
         // ✅ CRITICAL: Force token refresh and wait for it to be ready
         if (user != null) {
-          print('🔄 Forcing token refresh...');
+          _log('🔄 Forcing token refresh...');
           try {
             await user.reload();
             final token = await user.getIdToken(true); // Force refresh
-            if (token != null) {
-              print(
-                '✅ Token refreshed and ready: ${token.substring(0, 20)}...',
-              );
-            } else {
-              print('⚠️ Warning: Token is null after refresh');
+            if (token == null) {
+              _log('⚠️ Warning: Token is null after refresh');
             }
           } catch (e) {
-            print('⚠️ Token refresh warning: $e');
+            _log('⚠️ Token refresh warning: $e');
           }
         }
 
         // ✅ Send verification email
         // try {
-        //   print('📧 Sending verification email...');
+        //   _log('📧 Sending verification email...');
         //   await user?.sendEmailVerification().timeout(
         //     const Duration(seconds: 10),
         //     onTimeout: () {
-        //       print('⏱️ Email verification timeout - continuing anyway');
+        //       _log('⏱️ Email verification timeout - continuing anyway');
         //       return;
         //     },
         //   );
-        //   print('✅ Verification email sent');
+        //   _log('✅ Verification email sent');
         // } catch (e) {
-        //   print('⚠️ Failed to send verification email: $e');
+        //   _log('⚠️ Failed to send verification email: $e');
         // }
 
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('✅ SIGNUP SUCCESSFUL');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        _log('✅ SIGNUP SUCCESSFUL');
+        _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return {
           'success': true,
@@ -160,12 +163,12 @@ class AuthService {
         };
       }
     } on DioException catch (e) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ BACKEND API ERROR');
-      print('Status Code: ${e.response?.statusCode}');
-      print('Message: ${e.message}');
-      print('Response: ${e.response?.data}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('❌ BACKEND API ERROR');
+      _log('Status Code: ${e.response?.statusCode}');
+      _log('Message: ${e.message}');
+      _log('Response: ${e.response?.data}');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (e.response != null) {
         final errorData = e.response!.data;
@@ -190,11 +193,11 @@ class AuthService {
         };
       }
     } on FirebaseAuthException catch (e) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ FIREBASE AUTH ERROR');
-      print('Code: ${e.code}');
-      print('Message: ${e.message}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('❌ FIREBASE AUTH ERROR');
+      _log('Code: ${e.code}');
+      _log('Message: ${e.message}');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       final errorMessage = switch (e.code) {
         'email-already-in-use' =>
@@ -212,11 +215,11 @@ class AuthService {
 
       return {'success': false, 'message': errorMessage, 'errorCode': e.code};
     } catch (e, stackTrace) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ UNEXPECTED ERROR');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('❌ UNEXPECTED ERROR');
+      _log('Error: $e');
+      _log('Stack trace: $stackTrace');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       return {
         'success': false,
@@ -233,9 +236,9 @@ class AuthService {
     required String userType,
   }) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📝 COMPLETING REGISTRATION');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('📝 COMPLETING REGISTRATION');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       final response = await _api.dio.post(
         '/auth/complete-registration',
@@ -250,8 +253,8 @@ class AuthService {
       final data = response.data;
 
       if (response.statusCode == 200 && data['success'] == true) {
-        print('✅ Registration completed successfully');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        _log('✅ Registration completed successfully');
+        _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return {
           'success': true,
@@ -265,7 +268,7 @@ class AuthService {
         };
       }
     } on DioException catch (e) {
-      print('❌ Backend Error: ${e.message}');
+      _log('❌ Backend Error: ${e.message}');
 
       if (e.response != null) {
         final errorData = e.response!.data;
@@ -280,7 +283,7 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('❌ Error: $e');
+      _log('❌ Error: $e');
       return {
         'success': false,
         'message': 'An error occurred: ${e.toString()}',
@@ -292,8 +295,16 @@ class AuthService {
   Future<Map<String, dynamic>> checkEmailVerificationBackend(String uid) async {
     try {
       final response = await _api.dio.get('/auth/check-verification/$uid');
-
+      //NOTE - The backend will return { success: true, data: { verified: true/false } } if the user is found, or { success: false, message: 'User not found' } if the UID is invalid.
+      // success: true,
+      // message: "Email verification status retrieved",
+      // data: result,
+      
       final data = response.data;
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('data : $data');
+
+      // data is the result now = success: true, message: "Email verification status retrieved",data: result,
 
       if (response.statusCode == 200 && data['success'] == true) {
         return {'success': true, 'verified': data['data']['verified']};
@@ -361,7 +372,7 @@ class AuthService {
       final user = _auth.currentUser;
       if (user == null) return null;
 
-      print('🔍 Getting user type for: ${user.uid}');
+      _log('🔍 Getting user type for: ${user.uid}');
 
       // Check users collection FIRST
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
@@ -369,7 +380,7 @@ class AuthService {
       if (userDoc.exists) {
         final userType = userDoc.data()?['userType'] as String?;
         if (userType != null && userType.isNotEmpty) {
-          print('✅ User type: $userType');
+          _log('✅ User type: $userType');
           return userType.toLowerCase();
         }
       }
@@ -381,7 +392,7 @@ class AuthService {
           .get();
 
       if (handymanDoc.exists) {
-        print('✅ User is handyman');
+        _log('✅ User is handyman');
         return 'handyman';
       }
 
@@ -392,15 +403,15 @@ class AuthService {
           .get();
 
       if (clientDoc.exists) {
-        print('✅ User is client');
+        _log('✅ User is client');
         return 'client';
       }
 
       // Default to CLIENT
-      print('⚠️ User type not found, defaulting to client');
+      _log('⚠️ User type not found, defaulting to client');
       return 'client';
     } catch (e) {
-      print('❌ Error: $e');
+      _log('❌ Error: $e');
       return 'client';
     }
   }
@@ -438,9 +449,9 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔐 STARTING LOGIN WITH BACKEND');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('🔐 STARTING LOGIN WITH BACKEND');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Call backend login API
       final response = await _api.dio.post(
@@ -451,26 +462,35 @@ class AuthService {
       final data = response.data;
 
       if (response.statusCode == 200 && data['success'] == true) {
-        print('✅ Backend login successful');
+        _log('Backend login successful');
 
-        // ✅ Sign in to Firebase with custom token
+        // Sign in to Firebase with custom token
         final customToken = data['data']['accessToken'];
         await _auth.signInWithCustomToken(customToken);
 
-        print('✅ Firebase sign-in successful');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        // Cache user type for instant routing on next app start
+        final loginUserType = data['data']['userType'] ?? 'client';
+        try {
+          await DataPersistenceService().cacheString(
+            DataPersistenceService.keyUserType,
+            loginUserType.toString().toLowerCase(),
+          );
+        } catch (_) {}
+
+        _log('Firebase sign-in successful');
+        _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return {
           'success': true,
           'message': data['message'],
-          'userType': data['data']['userType'],
+          'userType': loginUserType,
           'userData': data['data'],
         };
       } else {
         return {'success': false, 'message': data['message'] ?? 'Login failed'};
       }
     } on DioException catch (e) {
-      print('❌ Backend Login Error: ${e.message}');
+      _log('❌ Backend Login Error: ${e.message}');
 
       if (e.response != null) {
         final errorData = e.response!.data;
@@ -494,10 +514,10 @@ class AuthService {
   // ✅ Keep existing: Sign in with Google (no backend needed for now)
   Future<Map<String, dynamic>> signInWithGoogle(String userType) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔐 STARTING GOOGLE SIGN-IN');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('User Type: $userType');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('🔐 STARTING GOOGLE SIGN-IN');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('User Type: $userType');
 
       // ✅ Step 1: Check network connectivity
       try {
@@ -512,9 +532,9 @@ class AuthService {
             'message': 'No internet connection. Please check your network.',
           };
         }
-        print('✅ Network connection verified');
+        _log('✅ Network connection verified');
       } catch (e) {
-        print('❌ Network check failed: $e');
+        _log('❌ Network check failed: $e');
         return {
           'success': false,
           'message': 'No internet connection. Please try again.',
@@ -535,17 +555,17 @@ class AuthService {
       // ✅ Step 3: Sign out from any previous Google session
       try {
         await _googleSignIn.signOut();
-        print('🔄 Cleared previous Google session');
+        _log('🔄 Cleared previous Google session');
       } catch (e) {
-        print('⚠️ No previous session to clear: $e');
+        _log('⚠️ No previous session to clear: $e');
       }
 
       // ✅ Step 4: Trigger Google Sign-In flow
-      print('📱 Launching Google Sign-In...');
+      _log('📱 Launching Google Sign-In...');
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        print('⚠️ User cancelled Google Sign-In');
+        _log('⚠️ User cancelled Google Sign-In');
         return {
           'success': false,
           'message': 'Sign in cancelled',
@@ -553,22 +573,22 @@ class AuthService {
         };
       }
 
-      print('✅ Google account selected: ${googleUser.email}');
+      _log('✅ Google account selected: ${googleUser.email}');
 
       // ✅ Step 5: Get authentication tokens
-      print('🔑 Getting Google authentication tokens...');
+      _log('🔑 Getting Google authentication tokens...');
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
       if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        print('❌ Failed to get Google tokens');
+        _log('❌ Failed to get Google tokens');
         return {
           'success': false,
           'message': 'Failed to authenticate with Google. Please try again.',
         };
       }
 
-      print('✅ Google tokens obtained');
+      _log('✅ Google tokens obtained');
 
       // ✅ Step 6: Create Firebase credential
       final credential = GoogleAuthProvider.credential(
@@ -577,7 +597,7 @@ class AuthService {
       );
 
       // ✅ Step 7: Sign in to Firebase with timeout
-      print('🔐 Signing in to Firebase...');
+      _log('🔐 Signing in to Firebase...');
       final UserCredential userCredential = await _auth
           .signInWithCredential(credential)
           .timeout(
@@ -593,7 +613,7 @@ class AuthService {
       final User? user = userCredential.user;
 
       if (user == null) {
-        print('❌ Firebase sign-in returned null user');
+        _log('❌ Firebase sign-in returned null user');
         await _googleSignIn.signOut();
         return {
           'success': false,
@@ -601,10 +621,10 @@ class AuthService {
         };
       }
 
-      print('✅ Firebase authentication successful');
-      print('User ID: ${user.uid}');
-      print('Email: ${user.email}');
-      print('Email Verified: ${user.emailVerified}');
+      _log('✅ Firebase authentication successful');
+      _log('User ID: ${user.uid}');
+      _log('Email: ${user.email}');
+      _log('Email Verified: ${user.emailVerified}');
 
       // ✅ Step 8: Check if this is a new user or existing user
       final userDoc = await _firestore
@@ -622,7 +642,7 @@ class AuthService {
 
       if (isNewUser) {
         // ✅ NEW USER - Create Firestore documents
-        print('👤 New user detected - Creating Firestore documents...');
+        _log('👤 New user detected - Creating Firestore documents...');
         finalUserType = normalizedUserType;
 
         // ✅ Create users collection document
@@ -651,7 +671,7 @@ class AuthService {
                 onTimeout: () => throw Exception('Firestore write timeout'),
               );
 
-          print('✅ Users collection document created');
+          _log('✅ Users collection document created');
 
           // ✅ Create type-specific collection document
           final typeCollection = finalUserType == 'handyman'
@@ -694,17 +714,17 @@ class AuthService {
                 onTimeout: () => throw Exception('Firestore write timeout'),
               );
 
-          print('✅ $typeCollection collection document created');
+          _log('✅ $typeCollection collection document created');
         } catch (e) {
-          print('❌ Failed to create Firestore documents: $e');
+          _log('❌ Failed to create Firestore documents: $e');
 
           // ✅ Rollback: Delete Firebase Auth user if Firestore fails
           try {
             await user.delete();
             await _googleSignIn.signOut();
-            print('🗑️ Rolled back Firebase Auth user');
+            _log('🗑️ Rolled back Firebase Auth user');
           } catch (deleteError) {
-            print('⚠️ Could not rollback Firebase Auth: $deleteError');
+            _log('⚠️ Could not rollback Firebase Auth: $deleteError');
           }
 
           return {
@@ -714,12 +734,12 @@ class AuthService {
         }
       } else {
         // ✅ EXISTING USER - Verify user type matches
-        print('👤 Existing user detected - Verifying user type...');
+        _log('👤 Existing user detected - Verifying user type...');
         userData = userDoc.data();
         final existingUserType = userData?['userType'] as String?;
 
         if (existingUserType == null) {
-          print(
+          _log(
             '⚠️ User type not found in Firestore - Setting to: $normalizedUserType',
           );
           finalUserType = normalizedUserType;
@@ -731,13 +751,13 @@ class AuthService {
           });
         } else {
           finalUserType = existingUserType.toLowerCase();
-          print('✅ Existing user type: $finalUserType');
+          _log('✅ Existing user type: $finalUserType');
 
           // ✅ Security: Verify user type consistency
           if (finalUserType != normalizedUserType) {
-            print('⚠️ User type mismatch!');
-            print('Expected: $normalizedUserType');
-            print('Found: $finalUserType');
+            _log('⚠️ User type mismatch!');
+            _log('Expected: $normalizedUserType');
+            _log('Found: $finalUserType');
 
             await _auth.signOut();
             await _googleSignIn.signOut();
@@ -794,11 +814,19 @@ class AuthService {
         }
       }
 
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('✅ GOOGLE SIGN-IN SUCCESSFUL');
-      print('User Type: $finalUserType');
-      print('Is New User: $isNewUser');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      // Cache user type for instant routing on next app start
+      try {
+        await DataPersistenceService().cacheString(
+          DataPersistenceService.keyUserType,
+          finalUserType,
+        );
+      } catch (_) {}
+
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('GOOGLE SIGN-IN SUCCESSFUL');
+      _log('User Type: $finalUserType');
+      _log('Is New User: $isNewUser');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       return {
         'success': true,
@@ -808,11 +836,11 @@ class AuthService {
         'userData': userData,
       };
     } on FirebaseAuthException catch (e) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ FIREBASE AUTH ERROR');
-      print('Code: ${e.code}');
-      print('Message: ${e.message}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('❌ FIREBASE AUTH ERROR');
+      _log('Code: ${e.code}');
+      _log('Message: ${e.message}');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Clean up on error
       try {
@@ -837,11 +865,11 @@ class AuthService {
 
       return {'success': false, 'message': errorMessage, 'errorCode': e.code};
     } catch (e, stackTrace) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ UNEXPECTED ERROR');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('❌ UNEXPECTED ERROR');
+      _log('Error: $e');
+      _log('Stack trace: $stackTrace');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Clean up on error
       try {
@@ -858,36 +886,44 @@ class AuthService {
   // ✅ Keep existing: Sign out
   Future<void> signOut() async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🚪 STARTING LOGOUT PROCESS');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('STARTING LOGOUT PROCESS');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // Clear all persisted data caches on logout
+      try {
+        await DataPersistenceService().clearAll();
+        _log('Data caches cleared');
+      } catch (e) {
+        _log('Cache clear failed (non-critical): $e');
+      }
 
       // Reset theme to system mode
       try {
         final themeController = Get.find<ThemeController>();
         await themeController.resetThemeToSystem();
-        print('✅ Theme reset to system mode');
+        _log('Theme reset to system mode');
       } catch (e) {
-        print('⚠️ ThemeController not found or reset failed: $e');
+        _log('ThemeController not found or reset failed: $e');
       }
 
       // Sign out from Firebase Auth
       await _auth.signOut();
-      print('✅ Signed out from Firebase Auth');
+      _log('Signed out from Firebase Auth');
 
       // Sign out from Google
       try {
         await _googleSignIn.signOut();
-        print('✅ Signed out from Google');
+        _log('Signed out from Google');
       } catch (e) {
-        print('⚠️ Google sign out failed (may not be signed in): $e');
+        _log('Google sign out failed (may not be signed in): $e');
       }
 
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('✅ LOGOUT COMPLETED SUCCESSFULLY');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      _log('LOGOUT COMPLETED SUCCESSFULLY');
+      _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (e) {
-      print('❌ Error during sign out: $e');
+      _log('Error during sign out: $e');
       rethrow;
     }
   }
@@ -931,7 +967,7 @@ class AuthService {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       return userDoc.data();
     } catch (e) {
-      print('❌ Error getting user data: $e');
+      _log('❌ Error getting user data: $e');
       return null;
     }
   }
@@ -980,7 +1016,7 @@ class AuthService {
 
       return {'success': true, 'message': 'Profile updated successfully'};
     } catch (e) {
-      print('❌ Error updating profile: $e');
+      _log('❌ Error updating profile: $e');
       return {'success': false, 'message': e.toString()};
     }
   }
@@ -991,7 +1027,7 @@ class AuthService {
     String newPassword,
   ) async {
     try {
-      print('🔐 Changing password via backend...');
+      _log('🔐 Changing password via backend...');
 
       final response = await _api.dio.put(
         '/auth/change-password',
@@ -999,7 +1035,7 @@ class AuthService {
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        print('✅ Password changed successfully');
+        _log('✅ Password changed successfully');
         return {
           'success': true,
           'message':
@@ -1012,7 +1048,7 @@ class AuthService {
         };
       }
     } on DioException catch (e) {
-      print('❌ Backend error: ${e.response?.data}');
+      _log('❌ Backend error: ${e.response?.data}');
 
       if (e.response != null) {
         final errorData = e.response!.data;
@@ -1027,7 +1063,7 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('❌ Error: $e');
+      _log('❌ Error: $e');
       return {'success': false, 'message': 'An unexpected error occurred'};
     }
   }
@@ -1035,12 +1071,12 @@ class AuthService {
   /// Delete user account (via backend)
   Future<Map<String, dynamic>> deleteAccount() async {
     try {
-      print('🗑️ Deleting account via backend...');
+      _log('🗑️ Deleting account via backend...');
 
       final response = await _api.dio.delete('/auth/delete-account');
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        print('✅ Account deleted successfully');
+        _log('✅ Account deleted successfully');
 
         // Sign out locally
         await signOut();
@@ -1056,7 +1092,7 @@ class AuthService {
         };
       }
     } on DioException catch (e) {
-      print('❌ Backend error: ${e.response?.data}');
+      _log('❌ Backend error: ${e.response?.data}');
 
       if (e.response != null) {
         final errorData = e.response!.data;
@@ -1071,7 +1107,7 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('❌ Error: $e');
+      _log('❌ Error: $e');
       return {'success': false, 'message': 'An unexpected error occurred'};
     }
   }

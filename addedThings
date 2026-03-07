@@ -24,22 +24,28 @@
 after login as client i should show here the info of the loged client with his favorite list and all his preference settings 
 and all stuff related to the loged client
 
+# ISSUES
+
+account :handyman
+ - after changing the profile picture from settings, and going back to profile page or home page, it not updated i should reload the data to see the new profile picture, but it should be updated automatically without reloading the page.
+ - after changing the availability of the handyman in profile page and going to home page i see the availability not changed, i need to reload the page, but it should be updated automatically without reloading the page
 
 
- widget.handyman { 
-    category: General,     
-    hourlyRate: 123.0,   
-    verified: false, 
-    profilePicture: https://res.cloudinary.com/dbz3wtlbj/image/upload/v1770335398/profiles/profile_diuUrDnmBCcx4o8U41kp7OWDpiG.jpg, 
-    addedAt: FieldValue(Instance of 'MethodChannelFieldValue')}
+
+ OK - booking at 13 mars is accepted from notifications (mark as completed and give 5 stars with message "you have a nice work" still cannot see the client name in review and also not added to completed tab automatically without reloading the page, should be added instantly )
+     - the handyman should receive a notification if the client mark the booking as completed
 
 
-widget.handyman { 
-    category: Electricity,    
-    hourlyRate: 100, 
-    image: https://res.cloudinary.com/dbz3wtlbj/image/upload/v1770335398/profilesprofile_diuUrDnmBCcx4o8U41kp7OWDpiG3.jpg, verified: true,   
-    skills: [Electricity, Carpentry,Gardening], 
-    bio: hello, 
-    availability: true}
 
 
+ OK - booking at 10 mars is accepted from home page (mark as complete with 3 starts and message "good job man")
+ handyman should receive the notification the message and rating should be seen in completed booking details for client and handyman 
+
+
+ X  - booking at 11 mars is declined from notifications with message (handyman can't see the message or the motif of decline in handyman home page in details of declined booking the same thing for client cant see the motif of decline)
+ X  - booking at 09 mars is declined from home page
+ - booking at 08 mars still pending
+
+
+ C:\Users\Windows\OneDrive\Bureau\fixilya_app\lib\features\handyman\presentation\screens\handyman_notifications_page.dart the notifications when i accept or decline from home page, but i still have the te
+  accept and decline button in notification page, it should not be that

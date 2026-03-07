@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find lib:*)",
+      "Bash(read f:*)",
+      "Bash(adb devices:*)",
+      "Bash(export:*)",
+      "Bash(adb:*)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(node:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(git:*)"
+    ]
+  }
+}

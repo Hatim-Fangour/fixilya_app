@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
@@ -630,7 +631,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage>
           return name.contains(_searchQuery) || email.contains(_searchQuery);
         }).toList();
 
-        print("users :$users");
+        if (kDebugMode) debugPrint("users :$users");
 
         return ListView.builder(
           padding: EdgeInsets.symmetric(horizontal: 20),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
@@ -26,7 +27,7 @@ class AdminDataService {
 
       return adminDoc.exists && (adminDoc.data()?['isAdmin'] == true);
     } catch (e) {
-      print('❌ Error checking admin status: $e');
+      if (kDebugMode) debugPrint('❌ Error checking admin status: $e');
       return false;
     }
   }
@@ -50,7 +51,7 @@ class AdminDataService {
 
       return adminDoc.exists && (adminDoc.data()?['isAdmin'] == true);
     } catch (e) {
-      print('❌ Error checking user admin status: $e');
+      if (kDebugMode) debugPrint('❌ Error checking user admin status: $e');
       return false;
     }
   }
@@ -64,14 +65,14 @@ class AdminDataService {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
-        print('❌ No current user');
+        if (kDebugMode) debugPrint('❌ No current user');
         return false;
       }
 
       // Check if current user is admin
       final isCurrentUserAdmin = await isAdmin();
       if (!isCurrentUserAdmin) {
-        print('❌ Current user is not admin');
+        if (kDebugMode) debugPrint('❌ Current user is not admin');
         return false;
       }
 
@@ -98,10 +99,10 @@ class AdminDataService {
         details: {'email': email, 'name': name},
       );
 
-      print('✅ User made admin: $userId');
+      if (kDebugMode) debugPrint('✅ User made admin: $userId');
       return true;
     } catch (e) {
-      print('❌ Error making user admin: $e');
+      if (kDebugMode) debugPrint('❌ Error making user admin: $e');
       return false;
     }
   }
@@ -111,20 +112,20 @@ class AdminDataService {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
-        print('❌ No current user');
+        if (kDebugMode) debugPrint('❌ No current user');
         return false;
       }
 
       // Check if current user is admin
       final isCurrentUserAdmin = await isAdmin();
       if (!isCurrentUserAdmin) {
-        print('❌ Current user is not admin');
+        if (kDebugMode) debugPrint('❌ Current user is not admin');
         return false;
       }
 
       // Prevent self-removal
       if (userId == currentUser.uid) {
-        print('❌ Cannot remove own admin privileges');
+        if (kDebugMode) debugPrint('❌ Cannot remove own admin privileges');
         return false;
       }
 
@@ -137,10 +138,10 @@ class AdminDataService {
         targetId: userId,
       );
 
-      print('✅ Admin removed: $userId');
+      if (kDebugMode) debugPrint('✅ Admin removed: $userId');
       return true;
     } catch (e) {
-      print('❌ Error removing admin: $e');
+      if (kDebugMode) debugPrint('❌ Error removing admin: $e');
       return false;
     }
   }
@@ -157,7 +158,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data()};
       }).toList();
     } catch (e) {
-      print('❌ Error getting admins: $e');
+      if (kDebugMode) debugPrint('❌ Error getting admins: $e');
       return [];
     }
   }
@@ -182,10 +183,10 @@ class AdminDataService {
         ],
       });
 
-      print('✅ Admin created: $userId');
+      if (kDebugMode) debugPrint('✅ Admin created: $userId');
       return true;
     } catch (e) {
-      print('❌ Error creating admin: $e');
+      if (kDebugMode) debugPrint('❌ Error creating admin: $e');
       return false;
     }
   }
@@ -262,7 +263,7 @@ class AdminDataService {
           ? (totalHandymen / totalHandymenEver * 100)
           : 0.0;
 
-      print('✅ Statistics loaded successfully');
+      if (kDebugMode) debugPrint('✅ Statistics loaded successfully');
 
       return {
         'totalHandymen': totalHandymen,
@@ -288,12 +289,12 @@ class AdminDataService {
         'lastUpdated': DateTime.now().toIso8601String(),
       };
     } catch (e) {
-      print('❌ Error getting statistics: $e');
+      if (kDebugMode) debugPrint('❌ Error getting statistics: $e');
 
       if (e.toString().contains('index')) {
-        print('⚠️ Firestore index required. Create indexes for:');
-        print('   Collection: handymen - Fields: approved (=), suspended (=)');
-        print('   Collection: bookings - Field: status (=)');
+        if (kDebugMode) debugPrint('⚠️ Firestore index required. Create indexes for:');
+        if (kDebugMode) debugPrint('   Collection: handymen - Fields: approved (=), suspended (=)');
+        if (kDebugMode) debugPrint('   Collection: bookings - Field: status (=)');
       }
 
       return {};
@@ -328,9 +329,9 @@ class AdminDataService {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Admin action logged: $action');
+      if (kDebugMode) debugPrint('✅ Admin action logged: $action');
     } catch (e) {
-      print('❌ Error logging action: $e');
+      if (kDebugMode) debugPrint('❌ Error logging action: $e');
     }
   }
 
@@ -347,7 +348,7 @@ class AdminDataService {
   //     // return true;
   //     return adminDoc.exists && (adminDoc.data()?['isAdmin'] == true);
   //   } catch (e) {
-  //     print('❌ Error checking admin status: $e');
+  //     if (kDebugMode) debugPrint('❌ Error checking admin status: $e');
   //     return false;
   //   }
   // }
@@ -372,10 +373,10 @@ class AdminDataService {
   //       ],
   //     });
 
-  //     print('✅ Admin created: $userId');
+  //     if (kDebugMode) debugPrint('✅ Admin created: $userId');
   //     return true;
   //   } catch (e) {
-  //     print('❌ Error creating admin: $e');
+  //     if (kDebugMode) debugPrint('❌ Error creating admin: $e');
   //     return false;
   //   }
   // }
@@ -438,7 +439,7 @@ class AdminDataService {
   //         ? (handymenSnapshot.size / totalHandymenEver * 100)
   //         : 0.0;
 
-  //     print('✅ Statistics loaded successfully');
+  //     if (kDebugMode) debugPrint('✅ Statistics loaded successfully');
 
   //     return {
   //       'totalHandymen': handymenSnapshot.size,
@@ -464,13 +465,13 @@ class AdminDataService {
   //       'lastUpdated': DateTime.now().toIso8601String(),
   //     };
   //   } catch (e) {
-  //     print('❌ Error getting statistics: $e');
+  //     if (kDebugMode) debugPrint('❌ Error getting statistics: $e');
 
   //     // If error is due to missing index, provide helpful message
   //     if (e.toString().contains('index')) {
-  //       print('⚠️ Firestore index required. Create indexes for:');
-  //       print('   Collection: handymen - Fields: approved (=), suspended (=)');
-  //       print('   Collection: bookings - Field: status (=)');
+  //       if (kDebugMode) debugPrint('⚠️ Firestore index required. Create indexes for:');
+  //       if (kDebugMode) debugPrint('   Collection: handymen - Fields: approved (=), suspended (=)');
+  //       if (kDebugMode) debugPrint('   Collection: bookings - Field: status (=)');
   //     }
 
   //     return {};
@@ -520,7 +521,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data() as Map<String, dynamic>};
       }).toList();
     } catch (e) {
-      print('❌ Error getting handymen: $e');
+      if (kDebugMode) debugPrint('❌ Error getting handymen: $e');
       return [];
     }
   }
@@ -542,12 +543,12 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data()};
       }).toList();
     } catch (e) {
-      print('❌ Error getting pending handymen: $e');
+      if (kDebugMode) debugPrint('❌ Error getting pending handymen: $e');
 
       if (e.toString().contains('index')) {
-        print('⚠️ Create Firestore index:');
-        print('   Collection: handymen');
-        print('   Fields: approved (=), suspended (=), createdAt (DESC)');
+        if (kDebugMode) debugPrint('⚠️ Create Firestore index:');
+        if (kDebugMode) debugPrint('   Collection: handymen');
+        if (kDebugMode) debugPrint('   Fields: approved (=), suspended (=), createdAt (DESC)');
       }
 
       return [];
@@ -571,10 +572,10 @@ class AdminDataService {
         targetId: handymanId,
       );
 
-      print('✅ Handyman approved: $handymanId');
+      if (kDebugMode) debugPrint('✅ Handyman approved: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error approving handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error approving handyman: $e');
       return false;
     }
   }
@@ -598,10 +599,10 @@ class AdminDataService {
         details: {'reason': reason},
       );
 
-      print('✅ Handyman rejected: $handymanId');
+      if (kDebugMode) debugPrint('✅ Handyman rejected: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error rejecting handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error rejecting handyman: $e');
       return false;
     }
   }
@@ -628,10 +629,10 @@ class AdminDataService {
         details: {'reason': reason},
       );
 
-      print('✅ Handyman ${suspend ? "suspended" : "unsuspended"}: $handymanId');
+      if (kDebugMode) debugPrint('✅ Handyman ${suspend ? "suspended" : "unsuspended"}: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error toggling suspend: $e');
+      if (kDebugMode) debugPrint('❌ Error toggling suspend: $e');
       return false;
     }
   }
@@ -652,10 +653,10 @@ class AdminDataService {
         targetId: handymanId,
       );
 
-      print('✅ Handyman deleted: $handymanId');
+      if (kDebugMode) debugPrint('✅ Handyman deleted: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error deleting handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error deleting handyman: $e');
       return false;
     }
   }
@@ -685,7 +686,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data() as Map<String, dynamic>};
       }).toList();
     } catch (e) {
-      print('❌ Error getting clients: $e');
+      if (kDebugMode) debugPrint('❌ Error getting clients: $e');
       return [];
     }
   }
@@ -702,10 +703,38 @@ class AdminDataService {
         targetId: clientId,
       );
 
-      print('✅ Client deleted: $clientId');
+      if (kDebugMode) debugPrint('✅ Client deleted: $clientId');
       return true;
     } catch (e) {
-      print('❌ Error deleting client: $e');
+      if (kDebugMode) debugPrint('❌ Error deleting client: $e');
+      return false;
+    }
+  }
+
+  /// Suspend/Unsuspend client account
+  Future<bool> toggleSuspendClient(
+    String clientId,
+    bool suspend, {
+    String? reason,
+  }) async {
+    try {
+      await _firestore.collection('clients').doc(clientId).update({
+        'suspended': suspend,
+        'suspendedAt': suspend ? FieldValue.serverTimestamp() : null,
+        'suspensionReason': suspend ? (reason ?? 'Violation of terms') : null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await _logAdminAction(
+        action: suspend ? 'suspend_client' : 'unsuspend_client',
+        targetType: 'client',
+        targetId: clientId,
+        details: {'reason': reason},
+      );
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error toggling client suspend: $e');
       return false;
     }
   }
@@ -735,7 +764,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data() as Map<String, dynamic>};
       }).toList();
     } catch (e) {
-      print('❌ Error getting bookings: $e');
+      if (kDebugMode) debugPrint('❌ Error getting bookings: $e');
       return [];
     }
   }
@@ -757,10 +786,10 @@ class AdminDataService {
         details: {'reason': reason},
       );
 
-      print('✅ Booking cancelled: $bookingId');
+      if (kDebugMode) debugPrint('✅ Booking cancelled: $bookingId');
       return true;
     } catch (e) {
-      print('❌ Error cancelling booking: $e');
+      if (kDebugMode) debugPrint('❌ Error cancelling booking: $e');
       return false;
     }
   }
@@ -790,7 +819,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data() as Map<String, dynamic>};
       }).toList();
     } catch (e) {
-      print('❌ Error getting complaints: $e');
+      if (kDebugMode) debugPrint('❌ Error getting complaints: $e');
       return [];
     }
   }
@@ -816,10 +845,10 @@ class AdminDataService {
         details: {'resolution': resolution},
       );
 
-      print('✅ Complaint resolved: $complaintId');
+      if (kDebugMode) debugPrint('✅ Complaint resolved: $complaintId');
       return true;
     } catch (e) {
-      print('❌ Error resolving complaint: $e');
+      if (kDebugMode) debugPrint('❌ Error resolving complaint: $e');
       return false;
     }
   }
@@ -849,9 +878,9 @@ class AdminDataService {
   //       'timestamp': FieldValue.serverTimestamp(),
   //     });
 
-  //     print('✅ Admin action logged: $action');
+  //     if (kDebugMode) debugPrint('✅ Admin action logged: $action');
   //   } catch (e) {
-  //     print('❌ Error logging action: $e');
+  //     if (kDebugMode) debugPrint('❌ Error logging action: $e');
   //   }
   // }
 
@@ -868,7 +897,7 @@ class AdminDataService {
         return {'id': doc.id, ...doc.data()};
       }).toList();
     } catch (e) {
-      print('❌ Error getting activity: $e');
+      if (kDebugMode) debugPrint('❌ Error getting activity: $e');
       return [];
     }
   }
@@ -919,7 +948,7 @@ class AdminDataService {
         'totalCompletedBookings': completedBookings.size,
       };
     } catch (e) {
-      print('❌ Error getting revenue stats: $e');
+      if (kDebugMode) debugPrint('❌ Error getting revenue stats: $e');
       return {};
     }
   }
@@ -989,7 +1018,7 @@ class AdminDataService {
         'clientsGrowth': clientsGrowth,
       };
     } catch (e) {
-      print('❌ Error getting growth stats: $e');
+      if (kDebugMode) debugPrint('❌ Error getting growth stats: $e');
       return {};
     }
   }
@@ -1027,7 +1056,7 @@ class AdminDataService {
         };
       }).toList();
     } catch (e) {
-      print('❌ Error getting trending skills: $e');
+      if (kDebugMode) debugPrint('❌ Error getting trending skills: $e');
       return [];
     }
   }
@@ -1090,7 +1119,7 @@ class AdminDataService {
 
       return handymenWithStats.take(limit).toList();
     } catch (e) {
-      print('❌ Error getting top handymen: $e');
+      if (kDebugMode) debugPrint('❌ Error getting top handymen: $e');
       return [];
     }
   }
@@ -1151,7 +1180,7 @@ class AdminDataService {
 
       return activities.take(limit).toList();
     } catch (e) {
-      print('❌ Error getting recent activity: $e');
+      if (kDebugMode) debugPrint('❌ Error getting recent activity: $e');
       return [];
     }
   }
@@ -1213,7 +1242,7 @@ class AdminDataService {
         'completedThisWeek': completedThisWeek.size,
       };
     } catch (e) {
-      print('❌ Error getting platform health: $e');
+      if (kDebugMode) debugPrint('❌ Error getting platform health: $e');
       return {};
     }
   }
@@ -1245,7 +1274,7 @@ class AdminDataService {
         };
       }).toList();
     } catch (e) {
-      print('❌ Error getting city distribution: $e');
+      if (kDebugMode) debugPrint('❌ Error getting city distribution: $e');
       return [];
     }
   }
@@ -1264,7 +1293,7 @@ class AdminDataService {
           .get();
 
       if (!handymanDoc.exists) {
-        print('❌ Handyman not found');
+        if (kDebugMode) debugPrint('❌ Handyman not found');
         return false;
       }
 
@@ -1290,10 +1319,10 @@ class AdminDataService {
         details: {'title': title, 'message': message},
       );
 
-      print('✅ Notification sent to $handymanName');
+      if (kDebugMode) debugPrint('✅ Notification sent to $handymanName');
       return true;
     } catch (e) {
-      print('❌ Error sending notification: $e');
+      if (kDebugMode) debugPrint('❌ Error sending notification: $e');
       return false;
     }
   }
@@ -1327,10 +1356,10 @@ class AdminDataService {
         details: {'reason': reason},
       );
 
-      print('✅ Handyman rejected with reason');
+      if (kDebugMode) debugPrint('✅ Handyman rejected with reason');
       return true;
     } catch (e) {
-      print('❌ Error rejecting handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error rejecting handyman: $e');
       return false;
     }
   }
@@ -1374,10 +1403,10 @@ class AdminDataService {
         details: {'message': message, 'missingFields': missingFields},
       );
 
-      print('✅ Info request sent');
+      if (kDebugMode) debugPrint('✅ Info request sent');
       return true;
     } catch (e) {
-      print('❌ Error requesting info: $e');
+      if (kDebugMode) debugPrint('❌ Error requesting info: $e');
       return false;
     }
   }
@@ -1411,10 +1440,10 @@ class AdminDataService {
         details: {'reason': reason},
       );
 
-      print('✅ Handyman suspended');
+      if (kDebugMode) debugPrint('✅ Handyman suspended');
       return true;
     } catch (e) {
-      print('❌ Error suspending handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error suspending handyman: $e');
       return false;
     }
   }
@@ -1425,16 +1454,18 @@ class AdminDataService {
   }) async {
     try {
       final snapshot = await _firestore
-          .collection('admin_notifications')
+          .collection('adminNotifications')
           .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();
+
+      if (kDebugMode) debugPrint("snapshot.docs : ${snapshot.docs}");
 
       return snapshot.docs.map((doc) {
         return {'id': doc.id, ...doc.data()};
       }).toList();
     } catch (e) {
-      print('❌ Error getting admin notifications: $e');
+      if (kDebugMode) debugPrint('❌ Error getting admin notifications: $e');
       return [];
     }
   }
@@ -1443,12 +1474,12 @@ class AdminDataService {
   Future<bool> markAdminNotificationRead(String notificationId) async {
     try {
       await _firestore
-          .collection('admin_notifications')
+          .collection('adminNotifications')
           .doc(notificationId)
           .update({'read': true});
       return true;
     } catch (e) {
-      print('❌ Error marking notification as read: $e');
+      if (kDebugMode) debugPrint('❌ Error marking notification as read: $e');
       return false;
     }
   }
@@ -1487,10 +1518,10 @@ class AdminDataService {
         targetId: handymanId,
       );
 
-      print('✅ Handyman approved with notification');
+      if (kDebugMode) debugPrint('✅ Handyman approved with notification');
       return true;
     } catch (e) {
-      print('❌ Error approving handyman: $e');
+      if (kDebugMode) debugPrint('❌ Error approving handyman: $e');
       return false;
     }
   }

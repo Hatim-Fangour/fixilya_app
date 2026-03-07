@@ -1,138 +1,110 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { body } = require('express-validator');
-const userController = require('../controllers/user.controller');
-const { authenticate } = require('../../../../shared/middleware/auth');
-const { validate } = require('../../../../shared/middleware/validate');
+const { body } = require("express-validator");
+const userController = require("../controllers/user.controller");
+const { authenticate } = require("../../../../shared/middleware/auth");
+const { validate } = require("../../../../shared/middleware/validate");
 
-// ✅ Complete profile with skip (doesn't need auth - user just registered)
-router.post('/complete-profile-skip',
+// ─────────────────────────────────────────────
+// Mount all /handyman/* routes from their own router.
+// This keeps user.routes.js focused and handyman logic self-contained.
+// ─────────────────────────────────────────────
+const handymanRoutes = require("./handyman.routes");
+const clientRoutes   = require("./client.routes");
+
+router.use("/handyman", handymanRoutes);
+router.use("/client",   clientRoutes);
+
+
+// ─────────────────────────────────────────────
+// PROFILE COMPLETION  (auth required — UID must match token)
+// ─────────────────────────────────────────────
+
+/**
+ * Middleware: ensure body.uid matches the authenticated user.
+ */
+const enforceOwnership = (req, res, next) => {
+  if (req.body.uid && req.body.uid !== req.user.uid) {
+    return res.status(403).json({
+      success: false,
+      message: "You can only modify your own profile",
+    });
+  }
+  // If no uid in body, inject it from the token
+  if (!req.body.uid) {
+    req.body.uid = req.user.uid;
+  }
+  next();
+};
+
+/**
+ * POST /users/complete-profile-skip
+ * Creates a minimal profile so the user can move past onboarding immediately.
+ */
+router.post(
+  "/complete-profile-skip",
+  authenticate,
   [
-    body('uid').notEmpty().withMessage('User ID is required'),
-    body('userType').isIn(['handyman', 'client', 'customer']).withMessage('Invalid user type'),
+    body("uid").optional(),
+    body("userType")
+      .isIn(["handyman", "client", "customer"])
+      .withMessage("Invalid user type"),
     validate,
   ],
+  enforceOwnership,
   userController.completeProfileWithSkip
 );
 
-// ✅ NEW: Complete full profile
-router.post('/complete-profile',
+/**
+ * POST /users/complete-profile
+ * Saves the full onboarding profile (accepts Cloudinary image URLs).
+ */
+router.post(
+  "/complete-profile",
+  authenticate,
   [
-    body('uid').notEmpty().withMessage('User ID is required'),
-    body('userType').isIn(['handyman', 'client', 'customer']).withMessage('Invalid user type'),
-    body('fullName').notEmpty().withMessage('Full name is required'),
-    body('phone').optional(),
-    body('city').optional(),
-    body('experience').optional(),
-    body('hourlyRate').optional().isNumeric(),
-    body('bio').optional(),
-    body('skills').optional().isArray(),
-    body('profilePicture').optional().isString(), // ✅ URL string
-    body('workImages').optional().isArray(), // ✅ Array of URL strings
+    body("uid").optional(),
+    body("userType")
+      .isIn(["handyman", "client", "customer"])
+      .withMessage("Invalid user type"),
+    body("fullName").notEmpty().withMessage("Full name is required"),
+    body("phone").optional(),
+    body("city").optional(),
+    body("experience").optional(),
+    body("bio").optional(),
+    body("skills").optional().isArray().withMessage("Skills must be an array"),
+    body("profilePicture").optional().isString(),
+    body("workImages").optional().isArray().withMessage("workImages must be an array"),
     validate,
   ],
+  enforceOwnership,
   userController.completeProfile
 );
 
+// ─────────────────────────────────────────────
+// GENERAL PROFILE  (auth required)
+// ─────────────────────────────────────────────
 
-// Get own profile
-router.get('/profile', authenticate, userController.getProfile);
+/**
+ * GET /users/profile
+ * Returns the merged profile for any user type.
+ */
+router.get("/profile", authenticate, userController.getProfile);
 
-// Update own profile
-router.put('/profile',
+/**
+ * PUT /users/profile
+ * Updates basic profile info (works for clients and handymen alike).
+ */
+router.put(
+  "/profile",
   authenticate,
   [
-    body('fullName').optional().notEmpty(),
-    body('phone').optional().notEmpty(),
-    body('city').optional().notEmpty(),
+    body("fullName").optional().notEmpty().withMessage("Full name cannot be empty"),
+    body("phone").optional().notEmpty().withMessage("Phone cannot be empty"),
+    body("city").optional().notEmpty().withMessage("City cannot be empty"),
     validate,
   ],
   userController.updateProfile
 );
-
-
-// Get handyman profile
-router.get('/handyman/profile', authenticate, userController.getHandymanProfile);
-
-// Get handyman rating stats
-router.get('/handyman/rating-stats', authenticate, userController.getRatingStats);
-
-// Get handyman stats (bookings, earnings, etc.)
-router.get('/handyman/stats', authenticate, userController.getHandymanStats);
-
-// Update handyman profile
-router.put('/handyman/profile',
-  authenticate,
-  [
-    body('fullName').optional().notEmpty(),
-    body('phone').optional().notEmpty(),
-    body('city').optional().notEmpty(),
-    body('experience').optional(),
-    body('hourlyRate').optional().isNumeric(),
-    body('bio').optional(),
-    body('skills').optional().isArray(),
-    body('workImages').optional().isArray(),
-    validate,
-  ],
-  userController.updateHandymanProfile
-);
-
-// Update availability status
-router.put('/handyman/availability',
-  authenticate,
-  [
-    body('isAvailable').isBoolean().withMessage('isAvailable must be a boolean'),
-    validate,
-  ],
-  userController.updateAvailability
-);
-
-// Get availability status
-router.get('/handyman/availability', authenticate, userController.getAvailability);
-
-// ==========================================
-// GENERAL USER ROUTES (Auth Required)
-// ==========================================
-
-// Get own profile (for any user type)
-router.get('/profile', authenticate, userController.getProfile);
-
-// Update own profile (for any user type)
-router.put('/profile',
-  authenticate,
-  [
-    body('fullName').optional().notEmpty(),
-    body('phone').optional().notEmpty(),
-    body('city').optional().notEmpty(),
-    validate,
-  ],
-  userController.updateProfile
-);
-
-// Get handyman settings
-router.get('/handyman/settings', authenticate, userController.getHandymanSettings);
-
-// Update handyman settings
-router.put('/handyman/settings',
-  authenticate,
-  [
-    body('pushNotifications').optional().isBoolean(),
-    body('emailNotifications').optional().isBoolean(),
-    body('smsNotifications').optional().isBoolean(),
-    validate,
-  ],
-  userController.updateHandymanSettings
-);
-
-// Update profile picture
-router.put('/handyman/profile-picture',
-  authenticate,
-  [
-    body('profilePicture').notEmpty().withMessage('Profile picture URL is required'),
-    validate,
-  ],
-  userController.updateProfilePicture
-);
-
 
 module.exports = router;

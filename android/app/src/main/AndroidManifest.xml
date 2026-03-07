@@ -4,10 +4,16 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- In-app calling (Agora RTC) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
 
 
     <application
-        android:label="fixilya_app"
+        android:label="Fixilya"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -37,8 +43,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyBdq090XX4rOcdOG2KLsA0dWcBwHt9PIXA"/>
+            android:value="AIzaSyBdq090XX4rOcdOG2KLsA0dWcBwHt9PIXA" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

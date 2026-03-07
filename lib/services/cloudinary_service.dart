@@ -17,14 +17,12 @@ class CloudinaryService {
 
   CloudinaryService({required this.cloudName, required this.uploadPreset}) {
     _cloudinary = CloudinaryPublic(cloudName, uploadPreset, cache: false);
-    print('🔧 CloudinaryService initialized:');
-    print('   Cloud Name: $cloudName');
-    print('   Upload Preset: $uploadPreset');
+    if (kDebugMode) debugPrint('CloudinaryService initialized');
   }
 
   Future<File?> pickImage({bool fromCamera = false}) async {
     if (_isPickerActive) {
-      print('⚠️ Image picker is already active');
+      if (kDebugMode) debugPrint('Image picker is already active');
       return null;
     }
 
@@ -39,23 +37,23 @@ class CloudinaryService {
       );
 
       if (image == null) {
-        print('ℹ️ User cancelled image selection');
+        if (kDebugMode) debugPrint('ℹ️ User cancelled image selection');
         return null;
       }
 
-      print('✅ Image picked: ${image.path}');
+      if (kDebugMode) debugPrint('✅ Image picked: ${image.path}');
       final File imageFile = File(image.path);
 
       if (!await imageFile.exists()) {
-        print('❌ File does not exist');
+        if (kDebugMode) debugPrint('❌ File does not exist');
         return null;
       }
 
       final fileSize = await imageFile.length();
-      print('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+      if (kDebugMode) debugPrint('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
 
       if (fileSize == 0) {
-        print('❌ File is empty');
+        if (kDebugMode) debugPrint('❌ File is empty');
         return null;
       }
 
@@ -64,10 +62,10 @@ class CloudinaryService {
       final String newPath = '${appDir.path}/$fileName';
       final File persistentFile = await imageFile.copy(newPath);
 
-      print('✅ File ready: $newPath');
+      if (kDebugMode) debugPrint('✅ File ready: $newPath');
       return persistentFile;
     } catch (e) {
-      print('❌ Error picking image: $e');
+      if (kDebugMode) debugPrint('❌ Error picking image: $e');
       return null;
     } finally {
       _isPickerActive = false;
@@ -76,7 +74,7 @@ class CloudinaryService {
 
   Future<List<File>> pickMultipleImages({int maxImages = 10}) async {
     if (_isPickerActive) {
-      print('⚠️ Image picker is already active');
+      if (kDebugMode) debugPrint('Image picker is already active');
       return [];
     }
 
@@ -90,11 +88,11 @@ class CloudinaryService {
       );
 
       if (images.isEmpty) {
-        print('ℹ️ No images selected');
+        if (kDebugMode) debugPrint('ℹ️ No images selected');
         return [];
       }
 
-      print('✅ ${images.length} images picked');
+      if (kDebugMode) debugPrint('✅ ${images.length} images picked');
 
       final imagesToProcess = images.length > maxImages
           ? images.take(maxImages).toList()
@@ -108,7 +106,7 @@ class CloudinaryService {
           final File tempFile = File(imagesToProcess[i].path);
 
           if (!await tempFile.exists()) {
-            print('⚠️ File $i does not exist, skipping');
+            if (kDebugMode) debugPrint('⚠️ File $i does not exist, skipping');
             continue;
           }
 
@@ -118,16 +116,16 @@ class CloudinaryService {
           final File persistentFile = await tempFile.copy(newPath);
 
           persistentFiles.add(persistentFile);
-          print('✅ File $i ready');
+          if (kDebugMode) debugPrint('✅ File $i ready');
         } catch (e) {
-          print('⚠️ Error processing file $i: $e');
+          if (kDebugMode) debugPrint('⚠️ Error processing file $i: $e');
         }
       }
 
-      print('✅ ${persistentFiles.length} files ready for upload');
+      if (kDebugMode) debugPrint('✅ ${persistentFiles.length} files ready for upload');
       return persistentFiles;
     } catch (e) {
-      print('❌ Error picking multiple images: $e');
+      if (kDebugMode) debugPrint('❌ Error picking multiple images: $e');
       return [];
     } finally {
       _isPickerActive = false;
@@ -148,16 +146,16 @@ class CloudinaryService {
 
     while (retryCount <= maxRetries) {
       try {
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('📤 UPLOAD ATTEMPT ${retryCount + 1}/${maxRetries + 1}');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        if (kDebugMode) debugPrint('📤 UPLOAD ATTEMPT ${retryCount + 1}/${maxRetries + 1}');
+        if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         if (!await imageFile.exists()) {
           throw Exception('File does not exist');
         }
 
         final fileSize = await imageFile.length();
-        print('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+        if (kDebugMode) debugPrint('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
 
         if (fileSize == 0) throw Exception('File is empty');
         if (fileSize > 10 * 1024 * 1024) throw Exception('File too large');
@@ -168,7 +166,7 @@ class CloudinaryService {
         // ✅ Get temp directory
         final tempDir = await getTemporaryDirectory();
 
-        print('📤 Uploading to Cloudinary with transformations...');
+        if (kDebugMode) debugPrint('📤 Uploading to Cloudinary with transformations...');
 
         final uploadParams = _CloudinaryUploadParams(
           cloudName: cloudName,
@@ -184,50 +182,50 @@ class CloudinaryService {
         final result = await compute(_uploadInIsolate, uploadParams).timeout(
           Duration(seconds: timeoutSeconds + 5),
           onTimeout: () {
-            print('⏱️ Upload timed out');
+            if (kDebugMode) debugPrint('⏱️ Upload timed out');
             return _CloudinaryUploadResult(success: false, error: 'Timeout');
           },
         );
 
         if (result.success && result.url != null) {
-          print('✅ Upload successful!');
-          print('🔗 URL: ${result.url}');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          if (kDebugMode) debugPrint('✅ Upload successful!');
+          if (kDebugMode) debugPrint('🔗 URL: ${result.url}');
+          if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           // ✅ Get optimized URL with transformations
           final optimizedUrl = getOptimizedUrl(
             result.url!,
             isProfilePicture: isProfilePicture,
           );
 
-          print('🔗 Optimized URL: $optimizedUrl');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          if (kDebugMode) debugPrint('🔗 Optimized URL: $optimizedUrl');
+          if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
           try {
             await imageFile.delete();
-            print('🗑️ Temp file cleaned up');
+            if (kDebugMode) debugPrint('🗑️ Temp file cleaned up');
           } catch (e) {
-            print('⚠️ Could not delete temp file: $e');
+            if (kDebugMode) debugPrint('⚠️ Could not delete temp file: $e');
           }
 
           return optimizedUrl;
         } else {
-          print('❌ Upload failed: ${result.error}');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          if (kDebugMode) debugPrint('❌ Upload failed: ${result.error}');
+          if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           return null;
         }
       } on TimeoutException catch (e) {
-        print('⏱️ UPLOAD TIMEOUT: $e');
+        if (kDebugMode) debugPrint('⏱️ UPLOAD TIMEOUT: $e');
         return null;
       } catch (e) {
-        print('❌ Attempt ${retryCount + 1} failed: $e');
-        print('❌ UPLOAD ERROR: $e');
+        if (kDebugMode) debugPrint('❌ Attempt ${retryCount + 1} failed: $e');
+        if (kDebugMode) debugPrint('❌ UPLOAD ERROR: $e');
         if (retryCount < maxRetries) {
-          print('🔄 Retrying in 2 seconds...');
+          if (kDebugMode) debugPrint('🔄 Retrying in 2 seconds...');
           await Future.delayed(Duration(seconds: 2));
           retryCount++;
         } else {
-          print('❌ All retries exhausted');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          if (kDebugMode) debugPrint('❌ All retries exhausted');
+          if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           return null;
         }
       }
@@ -244,7 +242,7 @@ class CloudinaryService {
     List<String> uploadedUrls = [];
 
     try {
-      print('📤 Uploading ${imageFiles.length} images...');
+      if (kDebugMode) debugPrint('📤 Uploading ${imageFiles.length} images...');
 
       for (int i = 0; i < imageFiles.length; i++) {
         final imageFile = imageFiles[i];
@@ -254,13 +252,13 @@ class CloudinaryService {
         }
 
         if (!await imageFile.exists()) {
-          print('⚠️ File $i missing');
+          if (kDebugMode) debugPrint('⚠️ File $i missing');
           continue;
         }
 
         final fileSize = await imageFile.length();
         if (fileSize == 0) {
-          print('⚠️ File $i empty');
+          if (kDebugMode) debugPrint('⚠️ File $i empty');
           if (onProgress != null) {
             onProgress(i + 1, imageFiles.length, 'File is empty');
           }
@@ -268,7 +266,7 @@ class CloudinaryService {
         }
 
         // if (fileSize == 0) {
-        //   print('⚠️ File $i is empty, skipping');
+        //   if (kDebugMode) debugPrint('⚠️ File $i is empty, skipping');
         //   if (onProgress != null) onProgress(i + 1, imageFiles.length, 'File is empty');
         //   continue;
         // }
@@ -284,9 +282,9 @@ class CloudinaryService {
 
         if (url != null) {
           uploadedUrls.add(url);
-          print('✅ Image ${i + 1}/${imageFiles.length} uploaded');
+          if (kDebugMode) debugPrint('✅ Image ${i + 1}/${imageFiles.length} uploaded');
         } else {
-          print('❌ Image ${i + 1}/${imageFiles.length} failed');
+          if (kDebugMode) debugPrint('❌ Image ${i + 1}/${imageFiles.length} failed');
         }
 
         // Small delay between uploads
@@ -298,17 +296,17 @@ class CloudinaryService {
         //   onProgress(i + 1, imageFiles.length);
         // }
       }
-      print('✅ Complete: ${uploadedUrls.length}/${imageFiles.length}');
-      print('✅ Complete: ${uploadedUrls.length}/${imageFiles.length}');
+      if (kDebugMode) debugPrint('✅ Complete: ${uploadedUrls.length}/${imageFiles.length}');
+      if (kDebugMode) debugPrint('✅ Complete: ${uploadedUrls.length}/${imageFiles.length}');
       return uploadedUrls;
     } catch (e) {
-      print('❌ Error: $e');
+      if (kDebugMode) debugPrint('❌ Error: $e');
       return uploadedUrls;
     }
   }
 
   Future<bool> deleteImage(String publicId) async {
-    print('⚠️ Cloudinary deletion requires backend API');
+    if (kDebugMode) debugPrint('⚠️ Cloudinary deletion requires backend API');
     return true;
   }
 
@@ -368,7 +366,7 @@ class CloudinaryService {
 
       return optimizedUrl;
     } catch (e) {
-      print('⚠️ Error creating optimized URL: $e');
+      if (kDebugMode) debugPrint('⚠️ Error creating optimized URL: $e');
       return originalUrl;
     }
 
@@ -443,7 +441,7 @@ Future<_CloudinaryUploadResult> _uploadInIsolate(
 ) async {
   File? tempFile;
   try {
-    print('🔧 Isolate: Initializing...');
+    if (kDebugMode) debugPrint('🔧 Isolate: Initializing...');
 
     final cloudinary = CloudinaryPublic(
       params.cloudName,
@@ -458,11 +456,11 @@ Future<_CloudinaryUploadResult> _uploadInIsolate(
     tempFile = File(tempFilePath);
 
     await tempFile.writeAsBytes(params.fileBytes);
-    print(
+    if (kDebugMode) debugPrint(
       '🔧 Isolate: File size: ${(params.fileBytes.length / 1024).toStringAsFixed(2)} KB',
     );
 
-    print('🔧 Isolate: Uploading...');
+    if (kDebugMode) debugPrint('🔧 Isolate: Uploading...');
 
     // ✅ Upload with eager transformation (applied during upload)
     final response = await cloudinary
@@ -477,34 +475,34 @@ Future<_CloudinaryUploadResult> _uploadInIsolate(
         .timeout(
           Duration(seconds: 50),
           onTimeout: () {
-            print('🔧 Isolate: Timeout');
+            if (kDebugMode) debugPrint('🔧 Isolate: Timeout');
             throw TimeoutException('Upload timeout');
           },
         );
 
-    print('🔧 Isolate: Success!');
-    print('🔧 Isolate: URL: ${response.secureUrl}');
+    if (kDebugMode) debugPrint('🔧 Isolate: Success!');
+    if (kDebugMode) debugPrint('🔧 Isolate: URL: ${response.secureUrl}');
 
     // Clean up
     try {
       await tempFile.delete();
-      print('🔧 Isolate: Temp file deleted');
+      if (kDebugMode) debugPrint('🔧 Isolate: Temp file deleted');
     } catch (e) {
-      print('🔧 Isolate: Could not delete temp file: $e');
+      if (kDebugMode) debugPrint('🔧 Isolate: Could not delete temp file: $e');
     }
 
     return _CloudinaryUploadResult(success: true, url: response.secureUrl);
   } catch (e) {
-    print('🔧 Isolate: Error - $e');
+    if (kDebugMode) debugPrint('🔧 Isolate: Error - $e');
     return _CloudinaryUploadResult(success: false, error: e.toString());
   } finally {
     try {
       if (tempFile != null && await tempFile.exists()) {
         await tempFile.delete();
-        print('🔧 Isolate: Cleanup complete');
+        if (kDebugMode) debugPrint('🔧 Isolate: Cleanup complete');
       }
     } catch (e) {
-      print('🔧 Isolate: Cleanup error: $e');
+      if (kDebugMode) debugPrint('🔧 Isolate: Cleanup error: $e');
     }
   }
 }

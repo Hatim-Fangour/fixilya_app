@@ -12,9 +12,12 @@ import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
 import 'package:fixilya_app/services/handyman_backend_service.dart';
 import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/profile_service.dart';
+import 'package:path_provider/path_provider.dart';
+
 import 'package:get/get.dart'; // ✅ Add this
 // import 'package:fixilya_app/data/controllers/theme_controller.dart'; // ✅ Add this
 // import 'package:fixilya_app/services/handyman_data_service.dart';
@@ -97,6 +100,17 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // Previous work
   List<Map<String, dynamic>> previousWork = [];
 
+  Future<File> _xFileToTempFile(XFile xFile) async {
+    final tempDir = await getTemporaryDirectory();
+    final fileName = xFile.name.isNotEmpty
+        ? xFile.name
+        : 'upload_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final tempFile = File('${tempDir.path}/$fileName');
+    final bytes = await xFile.readAsBytes();
+    await tempFile.writeAsBytes(bytes, flush: true);
+    return tempFile;
+  }
+
   // List<Map<String, String>> previousWork = [
   //   {
   //     'title': 'Modern Villa Rewiring',
@@ -178,7 +192,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   //       setState(() => _isAdmin = isAdmin);
   //     }
   //   } catch (e) {
-  //     print('❌ Error checking admin status: $e');
+  //     if (kDebugMode) debugPrint('❌ Error checking admin status: $e');
   //     if (mounted) {
   //       setState(() => _isAdmin = false);
   //     }
@@ -277,7 +291,8 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
           if (profileData['workImages'] != null) {
             final workImageUrls = profileData['workImages'] as List;
             previousWork = workImageUrls.asMap().entries.map((entry) {
-              return {
+              return <String, dynamic>{
+                // ← explicit type forces Map<String, dynamic>
                 'id': 'image_${entry.key}',
                 'image': entry.value as String,
               };
@@ -290,7 +305,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
       }
     } catch (e) {
       if (!mounted) return;
-      print('❌ Error: $e');
+      if (kDebugMode) debugPrint('❌ Error: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -312,7 +327,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
         });
       }
     } catch (e) {
-      print('❌ Error loading stats: $e');
+      if (kDebugMode) debugPrint('❌ Error loading stats: $e');
     }
   }
 
@@ -336,16 +351,17 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // ✅ UPDATED: Save profile to backend
   Future<void> _saveProfileToFirebase() async {
     try {
-      print('💾 Saving profile to backend...');
-      print('📋 Current values:');
-      print('   Name: $_name');
-      print('   Email: $_email');
-      print('   Phone: $_phone');
-      print('   City: $selectedCity');
-      print('   Experience: $_experience');
-      print('   Hourly Rate: $_hourlyRate');
-      print('   Bio: $_bio');
-      print('   Skills: ${skills.map((s) => s['name']).toList()}');
+      if (kDebugMode) debugPrint('💾 Saving profile to backend...');
+      if (kDebugMode) debugPrint('📋 Current values:');
+      if (kDebugMode) debugPrint('   Name: $_name');
+      if (kDebugMode) debugPrint('   Email: $_email');
+      if (kDebugMode) debugPrint('   Phone: $_phone');
+      if (kDebugMode) debugPrint('   City: $selectedCity');
+      if (kDebugMode) debugPrint('   Experience: $_experience');
+      if (kDebugMode) debugPrint('   Hourly Rate: $_hourlyRate');
+      if (kDebugMode) debugPrint('   Bio: $_bio');
+      if (kDebugMode)
+        debugPrint('   Skills: ${skills.map((s) => s['name']).toList()}');
 
       final skillsData = skills.map((s) => s['name']).toList();
 
@@ -360,14 +376,14 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
         'skills': skillsData,
       };
 
-      print('📤 Sending to backend: $updateData');
+      if (kDebugMode) debugPrint('📤 Sending to backend: $updateData');
 
       final success = await _handymanBackendService.updateHandymanProfile(
         updateData,
       );
 
       if (success) {
-        print('✅ Backend confirmed update');
+        if (kDebugMode) debugPrint('✅ Backend confirmed update');
 
         Get.snackbar(
           'Success',
@@ -380,12 +396,12 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
           icon: Icon(Icons.check_circle, color: Colors.white),
         );
       } else {
-        print('⚠️ Backend returned false');
+        if (kDebugMode) debugPrint('⚠️ Backend returned false');
         throw Exception('Update failed');
       }
     } catch (e, stackTrace) {
-      print('❌ Error saving profile: $e');
-      print('Stack trace: $stackTrace');
+      if (kDebugMode) debugPrint('❌ Error saving profile: $e');
+      if (kDebugMode) debugPrint('Stack trace: $stackTrace');
 
       Get.snackbar(
         'Error',
@@ -761,7 +777,10 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                                     AuthService();
                                                 await authService.signOut();
 
-                                                print('✅ Logout successful');
+                                                if (kDebugMode)
+                                                  debugPrint(
+                                                    '✅ Logout successful',
+                                                  );
 
                                                 // Close loading dialog (if still open)
                                                 if (Get.isDialogOpen ?? false) {
@@ -790,7 +809,10 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                                   ),
                                                 );
                                               } catch (e) {
-                                                print('❌ Logout error: $e');
+                                                if (kDebugMode)
+                                                  debugPrint(
+                                                    '❌ Logout error: $e',
+                                                  );
 
                                                 // Close loading dialog if open
                                                 if (Get.isDialogOpen ?? false) {
@@ -948,8 +970,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // }
 
   void _showAddProjectDialog() {
-    List<XFile> selectedImages = []; // ✅ List of selected images
-    List<String> uploadedUrls = []; // ✅ Uploaded Cloudinary URLs
+    // Explicit types prevent the Map<String, dynamic> → Map<String, String> cast crash.
+    List<XFile> selectedImages = [];
+    List<String> uploadedUrls = [];
     bool isUploading = false;
 
     showDialog(
@@ -985,7 +1008,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ✨ Premium Header
+                    // ── Header ──────────────────────────────────────────────
                     Container(
                       padding: EdgeInsets.symmetric(
                         vertical: 20,
@@ -1000,15 +1023,6 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primaryColor.withValues(
-                              alpha: 0.3,
-                            ),
-                            blurRadius: 20,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
                       ),
                       child: Row(
                         children: [
@@ -1054,7 +1068,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                             ),
                           ),
                           IconButton(
-                            onPressed: () => Get.back(),
+                            onPressed: isUploading ? null : () => Get.back(),
                             icon: Icon(
                               Icons.close_rounded,
                               color: Colors.white,
@@ -1065,31 +1079,29 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                       ),
                     ),
 
-                    // 📸 Content Area
+                    // ── Image picker + preview ───────────────────────────────
                     Flexible(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.all(24),
                         child: Column(
                           children: [
-                            // ✨ Select Images Button
+                            // Tap-to-pick area
                             GestureDetector(
                               onTap: isUploading
                                   ? null
                                   : () async {
                                       try {
-                                        final ImagePicker picker =
-                                            ImagePicker();
-                                        // ✅ Pick MULTIPLE images
+                                        final picker = ImagePicker();
                                         final List<XFile> images = await picker
                                             .pickMultiImage(imageQuality: 85);
-
                                         if (images.isNotEmpty) {
-                                          setDialogState(() {
-                                            selectedImages = images;
-                                          });
+                                          setDialogState(
+                                            () => selectedImages = images,
+                                          );
                                         }
                                       } catch (e) {
-                                        print('❌ Picker error: $e');
+                                        if (kDebugMode)
+                                          debugPrint('❌ Picker error: $e');
                                       }
                                     },
                               child: Container(
@@ -1149,7 +1161,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                       Text(
                                         selectedImages.isEmpty
                                             ? 'Select Images'
-                                            : '${selectedImages.length} images selected',
+                                            : '${selectedImages.length} image${selectedImages.length == 1 ? '' : 's'} selected',
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -1172,7 +1184,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
 
                             SizedBox(height: 24),
 
-                            // ✅ Preview Selected Images
+                            // Preview strip
                             if (selectedImages.isNotEmpty)
                               SizedBox(
                                 height: 120,
@@ -1196,22 +1208,43 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
-                                            Image.file(
-                                              File(selectedImages[index].path),
-                                              fit: BoxFit.cover,
+                                            // ✅ FIX 1: Read XFile as bytes — works on
+                                            // Android content:// URIs and real paths alike.
+                                            FutureBuilder<Uint8List>(
+                                              future: selectedImages[index]
+                                                  .readAsBytes(),
+                                              builder: (ctx, snap) {
+                                                if (snap.hasData) {
+                                                  return Image.memory(
+                                                    snap.data!,
+                                                    fit: BoxFit.cover,
+                                                  );
+                                                }
+                                                return Container(
+                                                  color: Colors.grey[200],
+                                                  child: Center(
+                                                    child: SizedBox(
+                                                      width: 20,
+                                                      height: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
                                             // Remove button
                                             Positioned(
                                               top: 4,
                                               right: 4,
                                               child: GestureDetector(
-                                                onTap: () {
-                                                  setDialogState(() {
-                                                    selectedImages.removeAt(
-                                                      index,
-                                                    );
-                                                  });
-                                                },
+                                                onTap: () => setDialogState(
+                                                  () => selectedImages.removeAt(
+                                                    index,
+                                                  ),
+                                                ),
                                                 child: Container(
                                                   padding: EdgeInsets.all(4),
                                                   decoration: BoxDecoration(
@@ -1238,7 +1271,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                       ),
                     ),
 
-                    // ✨ Action Buttons
+                    // ── Action buttons ───────────────────────────────────────
                     Container(
                       padding: EdgeInsets.all(24),
                       decoration: BoxDecoration(
@@ -1283,80 +1316,117 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                   ? null
                                   : () async {
                                       setDialogState(() => isUploading = true);
+                                      uploadedUrls = []; // reset for fresh run
 
                                       try {
-                                        print(
-                                          '📤 Uploading ${selectedImages.length} images...',
-                                        );
-
                                         final cloudinaryService =
                                             Get.find<CloudinaryService>();
 
-                                        // ✅ Upload all images
-                                        // Upload images to Cloudinary
-                                        for (var imageFile in selectedImages) {
-                                          final imageUrl =
+                                        // ✅ FIX 2: Convert each XFile to a real
+                                        // temp File before uploading. This handles
+                                        // Android content:// URIs correctly.
+                                        for (final xFile in selectedImages) {
+                                          final File tempFile =
+                                              await _xFileToTempFile(xFile);
+
+                                          if (!tempFile.existsSync()) {
+                                            if (kDebugMode)
+                                              debugPrint(
+                                                '⚠️ Temp file missing, skipping: ${xFile.name}',
+                                              );
+                                            continue;
+                                          }
+
+                                          final String? imageUrl =
                                               await cloudinaryService
                                                   .uploadImage(
-                                                    imageFile: File(
-                                                      imageFile.path,
-                                                    ),
+                                                    imageFile: tempFile,
                                                     folder: 'portfolio',
                                                   );
 
                                           if (imageUrl != null &&
                                               imageUrl.isNotEmpty) {
                                             uploadedUrls.add(imageUrl);
+                                            if (kDebugMode)
+                                              debugPrint(
+                                                '✅ Uploaded: $imageUrl',
+                                              );
+                                          } else {
+                                            if (kDebugMode)
+                                              debugPrint(
+                                                '⚠️ Upload returned null/empty for ${xFile.name}',
+                                              );
                                           }
+
+                                          // Clean up temp file
+                                          try {
+                                            await tempFile.delete();
+                                          } catch (_) {}
                                         }
 
-                                        print(
-                                          '✅ ${uploadedUrls.length} images uploaded',
-                                        );
+                                        if (kDebugMode)
+                                          debugPrint(
+                                            '📦 ${uploadedUrls.length}/${selectedImages.length} images uploaded',
+                                          );
 
-                                        if (uploadedUrls.isNotEmpty) {
-                                          // Add to local list
-                                          for (var url in uploadedUrls) {
-                                            previousWork.add({
-                                              'id':
-                                                  'image_${DateTime.now().millisecondsSinceEpoch}_${previousWork.length}',
-                                              'image': url,
-                                            });
-                                          }
-
-                                          // ✅ Save to backend instead of Firestore
-                                          final workImages = previousWork
-                                              .map(
-                                                (work) =>
-                                                    work['image'] as String,
-                                              )
-                                              .toList();
-                                          await _handymanBackendService
-                                              .updateHandymanProfile({
-                                                'workImages': workImages,
-                                              });
-
-                                          Get.back();
-                                          setState(() {});
-
-                                          Get.snackbar(
-                                            'Success',
-                                            '${uploadedUrls.length} images added to portfolio!',
-                                            snackPosition: SnackPosition.BOTTOM,
-                                            backgroundColor: Colors.green,
-                                            colorText: Colors.white,
+                                        if (uploadedUrls.isEmpty) {
+                                          throw Exception(
+                                            'No images were uploaded successfully',
                                           );
                                         }
-                                      } catch (e) {
-                                        print('❌ Upload error: $e');
 
+                                        // ✅ FIX 3: Explicit Map<String, dynamic>
+                                        // — prevents the Map cast crash.
+                                        for (final String url in uploadedUrls) {
+                                          final Map<String, dynamic> entry = {
+                                            'id':
+                                                'img_${DateTime.now().millisecondsSinceEpoch}_${previousWork.length}',
+                                            'image': url,
+                                          };
+                                          previousWork.add(entry);
+                                        }
+
+                                        // Persist updated work images via backend
+                                        final List<dynamic> workImages =
+                                            previousWork
+                                                .map(
+                                                  (w) => w['image'] as String,
+                                                )
+                                                .toList();
+
+                                        if (kDebugMode) debugPrint("this 1");
+
+                                        await _handymanBackendService
+                                            .updateHandymanProfile({
+                                              'workImages': workImages,
+                                            });
+                                        if (kDebugMode) debugPrint("this 2");
+
+                                        Get.back();
+                                        setState(() {}); // refresh grid
+
+                                        Get.snackbar(
+                                          'Success',
+                                          '${uploadedUrls.length} image${uploadedUrls.length == 1 ? '' : 's'} added to portfolio!',
+                                          snackPosition: SnackPosition.BOTTOM,
+                                          backgroundColor: Colors.green,
+                                          colorText: Colors.white,
+                                          margin: EdgeInsets.all(16),
+                                          borderRadius: 12,
+                                        );
+                                      } catch (e) {
+                                        if (kDebugMode)
+                                          debugPrint('❌ Upload error: $e');
                                         setDialogState(
                                           () => isUploading = false,
                                         );
 
                                         Get.snackbar(
-                                          'Error',
-                                          'Upload failed: ${e.toString()}',
+                                          'Upload Failed',
+                                          e.toString().replaceFirst(
+                                            'Exception: ',
+                                            '',
+                                          ),
                                           snackPosition: SnackPosition.BOTTOM,
                                           backgroundColor: Colors.red,
                                           colorText: Colors.white,
@@ -1370,24 +1440,35 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                                 foregroundColor: Colors.white,
                                 padding: EdgeInsets.symmetric(vertical: 16),
                                 elevation: 0,
-                                shadowColor: AppColors.primaryColor.withValues(
-                                  alpha: 0.5,
-                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
                               child: isUploading
-                                  ? SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          'Uploading...',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : Row(
                                       mainAxisAlignment:
@@ -1422,6 +1503,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
       ),
     );
   }
+
   // ✨ LUXURY TEXT FIELD WIDGET
 
   // Widget _buildLuxuryTextField({
@@ -2534,12 +2616,11 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                           },
                         ),
 
-                      SizedBox(height: 24),
+                      // SizedBox(height: 24),
 
-                      // Availability Toggle
-                      _buildAvailabilityCard(),
-
-                      SizedBox(height: 24),
+                      // // Availability Toggle
+                      // _buildAvailabilityCard(),
+                      SizedBox(height: 40),
 
                       // Logout Button
                       _buildPremiumLogoutButton(),
@@ -3104,7 +3185,6 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
         Expanded(
           child: _isEditing && !readOnly
               ? TextFormField(
-                  readOnly: true,
                   initialValue: initialValue,
                   keyboardType: keyboardType,
                   style: TextStyle(
@@ -3954,10 +4034,12 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                 ),
                 child: ElevatedButton(
                   onPressed: () async {
-                    print('Selected skills: $tempSelectedSkills');
-                    print(
-                      'Selected skills with map: ${tempSelectedSkills.map((s) => s['name']).toList()}',
-                    );
+                    if (kDebugMode)
+                      debugPrint('Selected skills: $tempSelectedSkills');
+                    if (kDebugMode)
+                      debugPrint(
+                        'Selected skills with map: ${tempSelectedSkills.map((s) => s['name']).toList()}',
+                      );
                     // if (false) {
                     if (tempSelectedSkills.isNotEmpty) {
                       // ✅ Show loading indicator
@@ -4009,7 +4091,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                             .map((s) => s['name'])
                             .toList();
 
-                        print('skillsData : $skillsData');
+                        if (kDebugMode) debugPrint('skillsData : $skillsData');
 
                         // ✅ Save to backend
                         final success = await _handymanBackendService
@@ -4021,8 +4103,10 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                         }
 
                         if (success) {
-                          print('✅ Skills updated successfully');
-                          print('   Skills count: ${skillsData.length}');
+                          if (kDebugMode)
+                            debugPrint('✅ Skills updated successfully');
+                          if (kDebugMode)
+                            debugPrint('   Skills count: ${skillsData.length}');
 
                           // ✅ Show success message
                           Get.snackbar(
@@ -4037,7 +4121,8 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                             icon: Icon(Icons.check_circle, color: Colors.white),
                           );
                         } else {
-                          print('⚠️ Skills update returned false');
+                          if (kDebugMode)
+                            debugPrint('⚠️ Skills update returned false');
 
                           Get.snackbar(
                             'Warning',
@@ -4051,7 +4136,8 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                           );
                         }
                       } catch (e) {
-                        print('❌ Error updating skills: $e');
+                        if (kDebugMode)
+                          debugPrint('❌ Error updating skills: $e');
 
                         // Close loading dialog if open
                         if (Get.isDialogOpen ?? false) {

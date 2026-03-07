@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/services/admin_notification_service.dart';
 import 'package:fixilya_app/services/api_client.dart';
+import 'package:fixilya_app/services/user_service.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,6 +33,7 @@ class _WelcomeAfterSignupState extends State<WelcomeAfterSignup>
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  final _userService = UserService();
 
   @override
   void initState() {
@@ -62,156 +65,151 @@ class _WelcomeAfterSignupState extends State<WelcomeAfterSignup>
     super.dispose();
   }
 
-  
   Future<void> _saveProfileWithSkip({required String userType}) async {
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('User not found');
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not found');
 
-    // ✅ CRITICAL: Verify token is ready and has correct claims
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('🔄 Verifying token readiness before API call...');
-    
-    await user.reload();
-    final freshUser = FirebaseAuth.instance.currentUser;
-    
-    if (freshUser != null) {
-      // Get token with force refresh
-      final token = await freshUser.getIdToken(true);
-      if (token == null) {
-        throw Exception('Failed to get authentication token');
-      }
-      
-      // Verify token has correct claims
-      final idTokenResult = await freshUser.getIdTokenResult(true);
-            print('📋 Token claims: ${idTokenResult.claims}');
-      print('   Email Verified: ${idTokenResult.claims?['email_verified']}');
-      print('   User Type: ${idTokenResult.claims?['userType']}');
-      
-      if (idTokenResult.claims?['email_verified'] != true) {
-        print('⚠️ Warning: email_verified claim is not true');
-      }
-      
-      // ✅ Wait for token to propagate
-      await Future.delayed(Duration(milliseconds: 500));
-      print('✅ Token verified and ready');
-    }
-    
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      // ✅ CRITICAL: Verify token is ready and has correct claims
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('🔄 Verifying token readiness before API call...');
 
-    // Show progress dialog
-    Get.dialog(
-      WillPopScope(
-        onWillPop: () async => false,
-        child: Center(
-          child: Container(
-            margin: EdgeInsets.symmetric(horizontal: 32),
-            padding: EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    AppColors.primaryColor,
+      await user.reload();
+      final freshUser = FirebaseAuth.instance.currentUser;
+
+      if (freshUser != null) {
+        // Get token with force refresh
+        final token = await freshUser.getIdToken(true);
+        if (token == null) {
+          throw Exception('Failed to get authentication token');
+        }
+
+        // Verify token has correct claims
+        final idTokenResult = await freshUser.getIdTokenResult(true);
+        if (kDebugMode) debugPrint('📋 Token claims: ${idTokenResult.claims}');
+        if (kDebugMode) debugPrint('   Email Verified: ${idTokenResult.claims?['email_verified']}');
+        if (kDebugMode) debugPrint('   User Type: ${idTokenResult.claims?['userType']}');
+
+        if (idTokenResult.claims?['email_verified'] != true) {
+          if (kDebugMode) debugPrint('⚠️ Warning: email_verified claim is not true');
+        }
+
+        // ✅ Wait for token to propagate
+        await Future.delayed(Duration(milliseconds: 500));
+        if (kDebugMode) debugPrint('✅ Token verified and ready');
+      }
+
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // Show progress dialog
+      Get.dialog(
+        WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: 32),
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primaryColor,
+                    ),
                   ),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'Setting up your profile...',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                  SizedBox(height: 20),
+                  Text(
+                    'Setting up your profile...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      barrierDismissible: false,
-    );
-
-    // ✅ Call backend API
-    final api = ApiClient();
-    final response = await api.userDio.post(
-      '/users/complete-profile-skip',
-      data: {
-        'uid': user.uid,
-        'userType': userType == 'client' ? 'customer' : userType,
-      },
-    );
-
-    final data = response.data;
-
-    // Close dialog
-    if (Get.isDialogOpen ?? false) {
-      Get.back();
-    }
-
-    if (data['success']) {
-      // Show success
-      Get.snackbar(
-        'Success!',
-        data['message'],
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.success,
-        colorText: Colors.white,
-        icon: Icon(Icons.check_circle, color: Colors.white),
-        margin: EdgeInsets.all(16),
-        borderRadius: 12,
-        duration: Duration(seconds: 2),
+        barrierDismissible: false,
       );
 
-      await Future.delayed(Duration(milliseconds: 500));
-      AppRoutes.toHome();
-    } else {
-      throw Exception(data['message'] ?? 'Failed to save profile');
+      //!SECTION Complete profile with skip API call
+      //! this will fill all the values with default ones and set profileCompleted to false, so the user can complete it later from the profile page
+      //! and push notification to admin if it's a handyman to review and approve the profile later
+      final result = await _userService.completeProfileSkip(
+        uid: user.uid,
+        userType: widget.userType,
+      );
+
+      // Close dialog
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      if (result['success']) {
+        // Show success
+        Get.snackbar(
+          'Success!',
+          result['message'],
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AppColors.success,
+          colorText: Colors.white,
+          icon: Icon(Icons.check_circle, color: Colors.white),
+          margin: EdgeInsets.all(16),
+          borderRadius: 12,
+          duration: Duration(seconds: 2),
+        );
+
+        await Future.delayed(Duration(milliseconds: 500));
+        AppRoutes.toHome();
+      } else {
+        throw Exception(result['message'] ?? 'Failed to save profile');
+      }
+    } on DioException catch (e) {
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      if (kDebugMode) debugPrint('❌ DioException: ${e.response?.statusCode}');
+      if (kDebugMode) debugPrint('❌ Response: ${e.response?.data}');
+
+      Get.snackbar(
+        'Error',
+        e.response?.data['message'] ??
+            'Failed to save profile. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.error,
+        colorText: Colors.white,
+        icon: Icon(Icons.error_outline, color: Colors.white),
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: Duration(seconds: 4),
+      );
+    } catch (e) {
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      if (kDebugMode) debugPrint('❌ Exception: $e');
+
+      Get.snackbar(
+        'Error',
+        'Failed to save profile. Please check your connection and try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AppColors.error,
+        colorText: Colors.white,
+        icon: Icon(Icons.error_outline, color: Colors.white),
+        margin: EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: Duration(seconds: 4),
+      );
     }
-  } on DioException catch (e) {
-    if (Get.isDialogOpen ?? false) {
-      Get.back();
-    }
-
-    print('❌ DioException: ${e.response?.statusCode}');
-    print('❌ Response: ${e.response?.data}');
-
-    Get.snackbar(
-      'Error',
-      e.response?.data['message'] ??
-          'Failed to save profile. Please try again.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: AppColors.error,
-      colorText: Colors.white,
-      icon: Icon(Icons.error_outline, color: Colors.white),
-      margin: EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: Duration(seconds: 4),
-    );
-  } catch (e) {
-    if (Get.isDialogOpen ?? false) {
-      Get.back();
-    }
-
-    print('❌ Exception: $e');
-
-    Get.snackbar(
-      'Error',
-      'Failed to save profile. Please check your connection and try again.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: AppColors.error,
-      colorText: Colors.white,
-      icon: Icon(Icons.error_outline, color: Colors.white),
-      margin: EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: Duration(seconds: 4),
-    );
   }
-}
 
   @override
   Widget build(BuildContext context) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
@@ -102,10 +103,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       if (userDoc.exists) {
         final data = userDoc.data();
         // You might want to store this in state variables if needed
-        print('✅ Fetched user data: ${data?['fullName']}');
+        if (kDebugMode) debugPrint('✅ Fetched user data: ${data?['fullName']}');
       }
     } catch (e) {
-      print('⚠️ Could not fetch user data: $e');
+      if (kDebugMode) debugPrint('⚠️ Could not fetch user data: $e');
     }
   }
 
@@ -658,23 +659,30 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     setState(() => _isVerifying = true);
 
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📧 CHECKING EMAIL VERIFICATION STATUS');
-      print('User ID: ${user.uid}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('📧 CHECKING EMAIL VERIFICATION STATUS');
+      if (kDebugMode) debugPrint('User ID: ${user.uid}');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Call backend to check verification status
       final result = await _authService.checkEmailVerificationBackend(user.uid);
+      // result will be 
+      // {
+      //     'success': true,
+      //     'message': data['message'],
+      //     'userData': data['data'],
+      //   };
 
       if (!result['success']) {
+        
         throw Exception(result['message'] ?? 'Failed to check verification');
       }
 
       final isVerified = result['verified'] ?? false;
-      print('📊 Email verified: $isVerified');
+      if (kDebugMode) debugPrint('📊 Email verified: $isVerified');
 
       if (!isVerified) {
-        print('⚠️ Email not yet verified');
+        if (kDebugMode) debugPrint('⚠️ Email not yet verified');
         Get.snackbar(
           'Not Verified',
           'Please check your inbox and click the verification link',
@@ -693,8 +701,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       // ✅ Email is verified - complete registration
       await _completeRegistration(user.uid);
     } catch (e) {
-      print('❌ Error checking verification: $e');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('❌ Error checking verification: $e');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       Get.snackbar(
         'Error',
@@ -714,11 +722,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   /// Complete registration via backend
   Future<void> _completeRegistration(String uid) async {
     try {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📝 COMPLETING REGISTRATION VIA BACKEND');
-      print('User ID: $uid');
-      print('User Type: ${widget.userType}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('📝 COMPLETING REGISTRATION VIA BACKEND');
+      if (kDebugMode) debugPrint('User ID: $uid');
+      if (kDebugMode) debugPrint('User Type: ${widget.userType}');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Call backend to complete registration
       final result = await _authService.completeRegistration(
@@ -732,11 +740,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         throw Exception(result['message'] ?? 'Failed to complete registration');
       }
 
-      print('✅ Backend registration completed successfully');
+      if (kDebugMode) debugPrint('✅ Backend registration completed successfully');
 
       // ✅ CRITICAL: Force user reload and token refresh to get updated custom claims
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔄 Forcing Firebase user reload and token refresh...');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('🔄 Forcing Firebase user reload and token refresh...');
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         // Force reload to get latest user state
@@ -750,29 +758,29 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
             true,
           ); // true = force refresh
           if (token != null) {
-            print('✅ Fresh token obtained: ${token.substring(0, 20)}...');
+            if (kDebugMode) debugPrint('✅ Fresh token obtained: ${token.substring(0, 20)}...');
 
             // Verify token has correct claims
             final idTokenResult = await freshUser.getIdTokenResult(true);
-            print('📋 Token claims: ${idTokenResult.claims}');
-            print(
+            if (kDebugMode) debugPrint('📋 Token claims: ${idTokenResult.claims}');
+            if (kDebugMode) debugPrint(
               '   Email Verified: ${idTokenResult.claims?['email_verified']}',
             );
-            print('   User Type: ${idTokenResult.claims?['userType']}');
-            print('   Role: ${idTokenResult.claims?['role']}');
+            if (kDebugMode) debugPrint('   User Type: ${idTokenResult.claims?['userType']}');
+            if (kDebugMode) debugPrint('   Role: ${idTokenResult.claims?['role']}');
 
             // ✅ Wait for token to propagate (important!)
             await Future.delayed(Duration(milliseconds: 2000));
-            print('✅ Token refresh complete and propagated');
+            if (kDebugMode) debugPrint('✅ Token refresh complete and propagated');
           } else {
-            print('⚠️ Warning: Token is null after refresh');
+            if (kDebugMode) debugPrint('⚠️ Warning: Token is null after refresh');
           }
         }
       }
 
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('✅ REGISTRATION FULLY COMPLETE');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('✅ REGISTRATION FULLY COMPLETE');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // ✅ Show success message
       Get.snackbar(
@@ -788,7 +796,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       );
 
       // ✅ Wait for user to see message
-      await Future.delayed(Duration(milliseconds: 1500));
+      await Future.delayed(Duration(milliseconds: 1000));
 
       // ✅ Navigate to welcome screen
       if (mounted) {
@@ -798,8 +806,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         );
       }
     } catch (e) {
-      print('❌ Error completing registration: $e');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('❌ Error completing registration: $e');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       Get.snackbar(
         'Error',
@@ -842,9 +850,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   //   setState(() => _isResending = true);
 
   //   try {
-  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  //     print('📧 RESENDING VERIFICATION EMAIL');
-  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  //     if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  //     if (kDebugMode) debugPrint('📧 RESENDING VERIFICATION EMAIL');
+  //     if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   //     // ✅ Call backend to resend email
   //     final result = await _authService.resendVerificationEmail();
@@ -853,8 +861,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   //       throw Exception(result['message'] ?? 'Failed to resend email');
   //     }
 
-  //     print('✅ Verification email resent successfully');
-  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  //     if (kDebugMode) debugPrint('✅ Verification email resent successfully');
+  //     if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   //     Get.snackbar(
   //       'Email Sent',
@@ -868,8 +876,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   //       duration: Duration(seconds: 3),
   //     );
   //   } catch (e) {
-  //     print('❌ Error resending email: $e');
-  //     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  //     if (kDebugMode) debugPrint('❌ Error resending email: $e');
+  //     if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   //     Get.snackbar(
   //       'Error',

@@ -1,5 +1,6 @@
 // lib/main.dart
 import "package:firebase_core/firebase_core.dart";
+import "package:cloud_firestore/cloud_firestore.dart";
 import "package:fixilya_app/core/constants/app_routes.dart";
 import "package:fixilya_app/core/constants/app_theme.dart";
 import "package:fixilya_app/data/controllers/auth_controller.dart";
@@ -8,13 +9,14 @@ import "package:fixilya_app/data/controllers/user_controller.dart";
 import "package:fixilya_app/firebase_options.dart";
 import "package:fixilya_app/l10n/app_localizations.dart";
 import "package:fixilya_app/services/api_client.dart";
+import "package:fixilya_app/services/data_persistence_service.dart";
 import "package:fixilya_app/services/local_storage_service.dart";
+import "package:fixilya_app/services/notification_service.dart";
 import "package:fixilya_app/services/service_locator.dart";
 import "package:fixilya_app/services/language_service.dart";
 import "package:fixilya_app/shared/animations/animated_theme_wrapper.dart";
 import "package:flutter/material.dart";
 import "package:flutter_localizations/flutter_localizations.dart";
-// import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import "package:get/get.dart";
 
@@ -26,12 +28,21 @@ void main() async {
   await LocalStorageService().init();
   await LocalStorageService().migrateDarkModeToThemePreference();
 
+  // Initialise the data persistence cache (separate GetStorage container)
+  await DataPersistenceService().init();
+
   // Initialize Firebase
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+
+  // Enable Firestore offline persistence (100 MB cap)
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: 100 * 1024 * 1024, // 100 MB
+  );
 
   // Initialize controllers in order
   Get.put(ThemeController()); // Theme first
@@ -41,11 +52,11 @@ void main() async {
 
   ServiceLocator.init();
 
-  // final firebaseImageService = FirebaseImageService();
-  // ✅ Initialize local storage FIRST
-
   // Initialize API client
   ApiClient().init();
+
+  // Initialize push notifications (after Firebase + ApiClient are ready)
+  await NotificationService().init();
 
   runApp(const MyApp());
 }

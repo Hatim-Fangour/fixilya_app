@@ -1,20 +1,70 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fixilya_app/services/data_persistence_service.dart';
 
 class ClientDataService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final DataPersistenceService _cache = DataPersistenceService();
 
-  /// Get current client's profile data
-  Future<Map<String, dynamic>?> getClientProfile() async {
+  // Cache keys specific to this Firestore-based service.
+  // Prefixed with 'fs_' to avoid collision with the backend-based keys.
+  static const String _profileKey = 'cache_fs_client_profile';
+  static const String _statsKey = 'cache_fs_client_stats';
+  static const String _bookingsKey = 'cache_fs_client_bookings';
+
+  /// Converts Firestore Timestamps to ISO strings so data can be
+  /// stored in GetStorage (which does not support Timestamp objects).
+  Map<String, dynamic> _sanitizeForCache(Map<String, dynamic> data) {
+    final sanitized = <String, dynamic>{};
+    data.forEach((key, value) {
+      if (value is Timestamp) {
+        sanitized[key] = value.toDate().toIso8601String();
+      } else if (value is Map) {
+        sanitized[key] = _sanitizeForCache(Map<String, dynamic>.from(value));
+      } else if (value is List) {
+        sanitized[key] = value.map((e) {
+          if (e is Map) return _sanitizeForCache(Map<String, dynamic>.from(e));
+          if (e is Timestamp) return e.toDate().toIso8601String();
+          return e;
+        }).toList();
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    return sanitized;
+  }
+
+  /// Get current client's profile data.
+  ///
+  /// Serves cached data instantly if available, then refreshes from
+  /// Firestore in the background. On errors, stale cache is returned.
+  Future<Map<String, dynamic>?> getClientProfile({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        _profileKey,
+        ttl: DataPersistenceService.profileTTL,
+      );
+      if (cached != null) {
+        if (kDebugMode) debugPrint('[ClientDataService] Profile served from cache');
+        _refreshClientProfile();
+        return cached;
+      }
+    }
+
+    return _refreshClientProfile();
+  }
+
+  Future<Map<String, dynamic>?> _refreshClientProfile() async {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        print('❌ No user logged in');
+        if (kDebugMode) debugPrint('[ClientDataService] No user logged in');
         return null;
       }
-
-      print('🔍 Fetching profile for user: ${user.uid}');
 
       // Get client document
       final clientDoc = await _firestore
@@ -23,39 +73,63 @@ class ClientDataService {
           .get();
 
       if (!clientDoc.exists) {
-        print('❌ Client profile not found');
+        if (kDebugMode) debugPrint('[ClientDataService] Client profile not found');
         return null;
       }
 
       final clientData = clientDoc.data()!;
-      print('✅ Client profile loaded');
-      print(clientData);
+      if (kDebugMode) debugPrint('[ClientDataService] Client profile loaded from Firestore');
 
       // Get user document for email (stored in users collection, not clients)
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       final userData = userDoc.data() ?? {};
 
       // Merge data
-      return {
+      final merged = {
         ...clientData,
         'fullName': clientData['fullName'] ?? 'Client',
         'email': userData['email'] ?? user.email ?? '',
         'phone': clientData['phone'] ?? '',
         'uid': user.uid,
       };
+
+      // Cache the sanitized result (Timestamps converted to ISO strings)
+      await _cache.cacheData(_profileKey, _sanitizeForCache(merged));
+
+      return merged;
     } catch (e) {
-      print('❌ Error fetching client profile: $e');
-      return null;
+      if (kDebugMode) debugPrint('[ClientDataService] Error fetching client profile: $e');
+      return _cache.getCachedDataStale<Map<String, dynamic>>(_profileKey);
     }
   }
 
-  /// Get client statistics
-  Future<Map<String, dynamic>> getClientStats() async {
+  /// Get client statistics.
+  ///
+  /// Cached for fast display, refreshed from Firestore in the background.
+  Future<Map<String, dynamic>> getClientStats({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        _statsKey,
+        ttl: DataPersistenceService.statsTTL,
+      );
+      if (cached != null) {
+        if (kDebugMode) debugPrint('[ClientDataService] Stats served from cache');
+        _refreshClientStats();
+        return cached;
+      }
+    }
+
+    return _refreshClientStats();
+  }
+
+  Future<Map<String, dynamic>> _refreshClientStats() async {
     try {
       final user = _auth.currentUser;
       if (user == null) return _getDefaultStats();
 
-      print('📊 Fetching stats for user: ${user.uid}');
+      if (kDebugMode) debugPrint('[ClientDataService] Fetching stats from Firestore');
 
       // Get total bookings count
       final bookingsSnapshot = await _firestore
@@ -87,7 +161,7 @@ class ClientDataService {
         clientDoc.data()?['favoriteHandymen'] ?? [],
       );
 
-      return {
+      final stats = {
         'totalBookings': totalBookings,
         'completedBookings': completedBookings,
         'activeBookings': activeBookings,
@@ -96,9 +170,13 @@ class ClientDataService {
             .where((doc) => doc.data()['status'] == 'pending')
             .length,
       };
+
+      await _cache.cacheData(_statsKey, stats);
+      return stats;
     } catch (e) {
-      print('❌ Error fetching stats: $e');
-      return _getDefaultStats();
+      if (kDebugMode) debugPrint('[ClientDataService] Error fetching stats: $e');
+      return _cache.getCachedDataStale<Map<String, dynamic>>(_statsKey) ??
+          _getDefaultStats();
     }
   }
 
@@ -112,13 +190,16 @@ class ClientDataService {
     };
   }
 
-  /// Update client profile
+  /// Update client profile.
+  ///
+  /// Invalidates profile caches after a successful write so the next
+  /// read fetches fresh data from Firestore.
   Future<bool> updateClientProfile(Map<String, dynamic> updates) async {
     try {
       final user = _auth.currentUser;
       if (user == null) return false;
 
-      print('💾 Updating profile for user: ${user.uid}');
+      if (kDebugMode) debugPrint('[ClientDataService] Updating profile');
 
       // Separate client updates from user updates
       final clientUpdates = <String, dynamic>{};
@@ -162,21 +243,46 @@ class ClientDataService {
         }, SetOptions(merge: true));
       }
 
-      print('✅ Profile updated successfully');
+      // Invalidate profile caches so next read is fresh
+      await _cache.invalidate(_profileKey);
+      await _cache.invalidate(_statsKey);
+      await _cache.invalidateProfileCaches();
+
+      if (kDebugMode) debugPrint('[ClientDataService] Profile updated, caches invalidated');
       return true;
     } catch (e) {
-      print('❌ Error updating profile: $e');
+      if (kDebugMode) debugPrint('[ClientDataService] Error updating profile: $e');
       return false;
     }
   }
 
-  /// Get client's booking history
-  Future<List<Map<String, dynamic>>> getClientBookings() async {
+  /// Get client's booking history.
+  ///
+  /// Cached for offline access; refreshed from Firestore in the background.
+  Future<List<Map<String, dynamic>>> getClientBookings({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<List<Map<String, dynamic>>>(
+        _bookingsKey,
+        ttl: DataPersistenceService.listTTL,
+      );
+      if (cached != null) {
+        if (kDebugMode) debugPrint('[ClientDataService] Bookings served from cache (${cached.length} items)');
+        _refreshClientBookings();
+        return cached;
+      }
+    }
+
+    return _refreshClientBookings();
+  }
+
+  Future<List<Map<String, dynamic>>> _refreshClientBookings() async {
     try {
       final user = _auth.currentUser;
       if (user == null) return [];
 
-      print('🔍 Fetching bookings for client: ${user.uid}');
+      if (kDebugMode) debugPrint('[ClientDataService] Fetching bookings from Firestore');
 
       final snapshot = await _firestore
           .collection('bookings')
@@ -186,14 +292,16 @@ class ClientDataService {
           .get();
 
       final bookings = snapshot.docs.map((doc) {
-        return {'id': doc.id, ...doc.data()};
+        return _sanitizeForCache({'id': doc.id, ...doc.data()});
       }).toList();
 
-      print('✅ Found ${bookings.length} bookings');
+      await _cache.cacheList(_bookingsKey, bookings);
+
+      if (kDebugMode) debugPrint('[ClientDataService] Found ${bookings.length} bookings');
       return bookings;
     } catch (e) {
-      print('❌ Error fetching bookings: $e');
-      return [];
+      if (kDebugMode) debugPrint('[ClientDataService] Error fetching bookings: $e');
+      return _cache.getCachedDataStale<List<Map<String, dynamic>>>(_bookingsKey) ?? [];
     }
   }
 
@@ -203,7 +311,7 @@ class ClientDataService {
       final user = _auth.currentUser;
       if (user == null) return [];
 
-      print('🔍 Fetching favorites for client: ${user.uid}');
+      if (kDebugMode) debugPrint('🔍 Fetching favorites for client: ${user.uid}');
 
       final clientDoc = await _firestore
           .collection('clients')
@@ -217,7 +325,7 @@ class ClientDataService {
       );
 
       if (favoriteIds.isEmpty) {
-        print('ℹ️ No favorites found');
+        if (kDebugMode) debugPrint('ℹ️ No favorites found');
         return [];
       }
 
@@ -235,10 +343,10 @@ class ClientDataService {
         }
       }
 
-      print('✅ Found ${favorites.length} favorite handymen');
+      if (kDebugMode) debugPrint('✅ Found ${favorites.length} favorite handymen');
       return favorites;
     } catch (e) {
-      print('❌ Error fetching favorites: $e');
+      if (kDebugMode) debugPrint('❌ Error fetching favorites: $e');
       return [];
     }
   }
@@ -254,10 +362,12 @@ class ClientDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Added to favorites: $handymanId');
+      await _cache.invalidateFavoritesCaches();
+      await _cache.invalidate(_statsKey);
+      if (kDebugMode) debugPrint('[ClientDataService] Added to favorites: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error adding to favorites: $e');
+      if (kDebugMode) debugPrint('[ClientDataService] Error adding to favorites: $e');
       return false;
     }
   }
@@ -273,10 +383,12 @@ class ClientDataService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Removed from favorites: $handymanId');
+      await _cache.invalidateFavoritesCaches();
+      await _cache.invalidate(_statsKey);
+      if (kDebugMode) debugPrint('[ClientDataService] Removed from favorites: $handymanId');
       return true;
     } catch (e) {
-      print('❌ Error removing from favorites: $e');
+      if (kDebugMode) debugPrint('[ClientDataService] Error removing from favorites: $e');
       return false;
     }
   }
@@ -381,7 +493,7 @@ class ClientDataService {
 
       return ((completed / total) * 100).round();
     } catch (e) {
-      print('❌ Error calculating profile completion: $e');
+      if (kDebugMode) debugPrint('❌ Error calculating profile completion: $e');
       return 0;
     }
   }
@@ -424,7 +536,7 @@ class ClientDataService {
 
       return {'percentage': percentage, 'missingFields': missingFields};
     } catch (e) {
-      print('❌ Error getting completion details: $e');
+      if (kDebugMode) debugPrint('❌ Error getting completion details: $e');
       return {'percentage': 0, 'missingFields': []};
     }
   }

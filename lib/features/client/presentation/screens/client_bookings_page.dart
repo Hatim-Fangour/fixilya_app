@@ -1,5 +1,7 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
-import 'package:fixilya_app/services/client_data_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,8 +15,8 @@ class ClientBookingsPage extends StatefulWidget {
 
 class _ClientBookingsPageState extends State<ClientBookingsPage>
     with SingleTickerProviderStateMixin {
-  final ClientDataService _clientDataService = ClientDataService();
   late AnimationController _animationController;
+  StreamSubscription<QuerySnapshot>? _bookingsSub;
 
   String _selectedFilter = 'All';
   final List<String> _filters = [
@@ -37,33 +39,36 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
       vsync: this,
     );
     _animationController.forward();
-    _loadBookings();
+    _subscribeToBookings();
+  }
+
+  void _subscribeToBookings() {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _bookingsSub = FirebaseFirestore.instance
+        .collection('bookings')
+        .where('clientId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .listen((snap) {
+      if (mounted) {
+        setState(() {
+          _bookings = snap.docs
+              .map((d) => {'id': d.id, ...(d.data() as Map<String, dynamic>)})
+              .toList();
+          _isLoading = false;
+        });
+      }
+    }, onError: (e) {
+      if (kDebugMode) debugPrint('❌ Bookings stream error: $e');
+      if (mounted) setState(() => _isLoading = false);
+    });
   }
 
   @override
   void dispose() {
+    _bookingsSub?.cancel();
     _animationController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadBookings() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final bookings = await _clientDataService.getClientBookings();
-      if (mounted) {
-        setState(() {
-          _bookings = bookings;
-          _isLoading = false;
-        });
-      }
-      print('✅ Loaded ${_bookings.length} bookings');
-    } catch (e) {
-      print('❌ Error loading bookings: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   Future<void> _completeBookingWithReview(
@@ -77,20 +82,27 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
       final handymanId = booking['handymanId'];
       final clientId = booking['clientId'];
 
-      // 1. Create Review
+      final clientName = booking['clientName'] as String? ?? 'Client';
+      final service = booking['service'] as String? ?? 'service';
+      final reviewComment = comment.trim().isEmpty ? 'Great service!' : comment.trim();
+
+      // 1. Create Review (with clientName so handyman's review page shows it)
       await firestore.collection('reviews').add({
         'bookingId': bookingId,
         'handymanId': handymanId,
         'clientId': clientId,
+        'clientName': clientName,
         'rating': rating,
-        'comment': comment.trim().isEmpty ? 'Great service!' : comment.trim(),
+        'comment': reviewComment,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. Update Booking Status
+      // 2. Update Booking Status + denormalise review so both sides can read it from the booking doc
       await firestore.collection('bookings').doc(bookingId).update({
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
+        'rating': rating,
+        'reviewComment': reviewComment,
       });
 
       // 3. Update Handyman Stats
@@ -105,7 +117,6 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         final currentReviews = handymanDoc.data()?['reviews'] as int? ?? 0;
         final completedJobs = handymanDoc.data()?['completedJobs'] as int? ?? 0;
 
-        // Calculate new average rating
         final totalRating = (currentRating * currentReviews) + rating;
         final newReviews = currentReviews + 1;
         final newRating = totalRating / newReviews;
@@ -117,8 +128,19 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         });
       }
 
-      // 4. Reload bookings
-      await _loadBookings();
+      // 4. Notify handyman that client marked job as completed
+      await firestore.collection('notifications').add({
+        'userId': handymanId,
+        'type': 'job_completed',
+        'title': 'Job Marked as Completed',
+        'message': '$clientName has marked your $service booking as completed',
+        'bookingId': bookingId,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 5. Switch to Completed tab — stream auto-updates the list
+      if (mounted) setState(() => _selectedFilter = 'Completed');
 
       // 5. Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,9 +161,9 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         ),
       );
 
-      print('✅ Booking completed with $rating star review');
+      if (kDebugMode) debugPrint('✅ Booking completed with $rating star review');
     } catch (e) {
-      print('❌ Error completing booking: $e');
+      if (kDebugMode) debugPrint('❌ Error completing booking: $e');
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -217,7 +239,7 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
       _bookings.where((b) => b['status'] == 'completed').length;
 
   String _formatDate(dynamic timestamp) {
-    if (timestamp == null) return 'Recent';
+    if (timestamp == null) return 'N/A';
 
     try {
       DateTime date;
@@ -225,8 +247,15 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         date = timestamp.toDate();
       } else if (timestamp is DateTime) {
         date = timestamp;
+      } else if (timestamp is String) {
+        date = DateTime.parse(timestamp);
+      } else if (timestamp is Map) {
+        // Firestore Timestamp serialised as {_seconds, _nanoseconds} from REST API
+        final seconds = (timestamp['_seconds'] as num?) ?? (timestamp['seconds'] as num?);
+        if (seconds == null) return 'N/A';
+        date = DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000);
       } else {
-        return 'Recent';
+        return 'N/A';
       }
 
       final months = [
@@ -244,9 +273,11 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         'Dec',
       ];
 
-      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+      final h = date.hour.toString().padLeft(2, '0');
+      final m = date.minute.toString().padLeft(2, '0');
+      return '${months[date.month - 1]} ${date.day}, ${date.year} at $h:$m';
     } catch (e) {
-      return 'Recent';
+      return 'N/A';
     }
   }
 
@@ -721,7 +752,7 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
                     ),
                     SizedBox(width: 6),
                     Text(
-                      _formatDate(booking['scheduledDate']),
+                      _formatDate(booking['scheduledAt'] ?? booking['scheduledDate']),
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondaryColor(context),
@@ -833,12 +864,26 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
                     _buildDetailRow('City', booking['city'] ?? 'N/A'),
                     _buildDetailRow(
                       'Scheduled Date',
-                      _formatDate(booking['scheduledDate']),
+                      _formatDate(booking['scheduledAt'] ?? booking['scheduledDate']),
                     ),
                     _buildDetailRow(
-                      'Created',
+                      'Booked At',
                       _formatDate(booking['createdAt']),
                     ),
+                    if (booking['acceptedAt'] != null)
+                      _buildDetailRow(
+                        'Accepted At',
+                        _formatDate(booking['acceptedAt']),
+                      ),
+                    if (booking['declinedAt'] != null)
+                      _buildDetailRow(
+                        'Declined At',
+                        _formatDate(booking['declinedAt']),
+                      ),
+                    if ((booking['declineReason'] ?? booking['cancellationReason']) != null)
+                      _buildDeclineReasonCard(
+                        booking['declineReason'] ?? booking['cancellationReason'],
+                      ),
                     if (booking['description'] != null &&
                         booking['description'].isNotEmpty) ...[
                       SizedBox(height: 16),
@@ -858,33 +903,18 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
                         ),
                       ),
                     ],
-                    SizedBox(height: 24),
-                    Divider(),
-                    SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Total Amount',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimaryColor(context),
-                          ),
-                        ),
-                        Text(
-                          '${booking['amount'] ?? 0} DH',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // ✅ ADD COMPLETE BUTTON (only if not already completed)
-                    if (booking['status']?.toLowerCase() != 'completed') ...[
+                    // ── Review (only if completed and has rating) ──
+                    if (booking['status']?.toLowerCase() == 'completed' &&
+                        booking['rating'] != null) ...[
+                      SizedBox(height: 20),
+                      _buildReviewCard(
+                        rating: (booking['rating'] as num).toInt(),
+                        comment: booking['reviewComment'] as String? ?? '',
+                        label: 'Your Review',
+                      ),
+                    ],
+                    // ✅ COMPLETE BUTTON (only if confirmed)
+                    if (booking['status']?.toLowerCase() == 'confirmed') ...[
                       SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
@@ -1127,6 +1157,101 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildReviewCard({required int rating, required String comment, required String label}) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star_rounded, size: 18, color: Colors.amber.shade700),
+              SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.amber.shade800,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Row(
+            children: List.generate(
+              5,
+              (i) => Icon(
+                i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: Colors.amber,
+                size: 22,
+              ),
+            ),
+          ),
+          if (comment.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Text(
+              comment,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.amber.shade900,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeclineReasonCard(String reason) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cancel_outlined, size: 18, color: Colors.red.shade400),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Decline Reason',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  reason,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

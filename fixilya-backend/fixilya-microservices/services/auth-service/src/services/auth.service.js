@@ -6,6 +6,12 @@ const { initializeApp, getApps } = require("firebase/app");
 const { AppError } = require("../../../../shared/utils/appError");
 const admin = require("./../../../../shared/config/firebase");
 const sgMail = require("@sendgrid/mail");
+const {
+  USER_TYPES,
+  USER_COLLECTION_NAME,
+  HANDYMAN_COLLECTION_NAME,
+  CLIENT_COLLECTION_NAME,
+} = require("../../../../shared/config/appConstats");
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -36,23 +42,59 @@ function getClientAuth() {
   return clientAuth;
 }
 
+async function validateUserAvailability({ email, phone }) {
+  // Check email
+  try {
+    await auth.getUserByEmail(email);
+    console.log("Email already exists: (validateUserAvailability)", email);
+    throw new AppError("Email already exists", 400);
+  } catch (error) {
+    if (error.code !== "auth/user-not-found") {
+      throw error;
+    }
+  }
+
+  // Check phone
+  if (phone) {
+    try {
+      await auth.getUserByPhoneNumber(phone);
+      console.log("Phone number already exists: (validateUserAvailability)", phone);
+
+      throw new AppError("Phone number already in use", 400);
+    } catch (error) {
+      if (error.code !== "auth/user-not-found") {
+        throw error;
+      }
+    }
+  }
+}
 class AuthService {
   async register({ email, password, fullName, phone, userType }) {
     try {
       // Validate userType
-      const validUserTypes = ["client", "customer", "handyman", "admin"];
+      // const validUserTypes = ["client", "customer", "handyman", "admin"];
 
-      if (!validUserTypes.includes(userType)) {
+      if (!USER_TYPES.includes(userType)) {
+        logger.error(`Invalid user type during registration: ${userType}`);
         throw new AppError("Invalid user type", 400);
       }
 
       // Normalize: both "client" and "customer" become "client"
       const normalizedUserType =
-        userType.toLowerCase() === "customer" || userType.toLowerCase() === "client"
+        userType.toLowerCase() === "customer" ||
+        userType.toLowerCase() === "client"
           ? "client"
           : userType.toLowerCase();
 
+      logger.info(
+        `From auth-service.js Registering user: ${email} as ${normalizedUserType}`,
+      );
+
+      // Validate email and phone availability before creating user
+      await validateUserAvailability({ email, phone });
+
       // Create Firebase user
+      //!SECTION CRITICAL: This is where the user is created in Firebase Auth
       const userRecord = await auth.createUser({
         email,
         password,
@@ -61,23 +103,27 @@ class AuthService {
       });
 
       // Set custom claims
+      //!SECTION CRITICAL: Custom claims determine user role and access
       await auth.setCustomUserClaims(userRecord.uid, {
         userType: normalizedUserType,
         role: normalizedUserType,
         // email_verified: true,
       });
 
+      //
       // Create minimal user document in Firestore
-      await db.collection("users").doc(userRecord.uid).set({
+      await db.collection(USER_COLLECTION_NAME).doc(userRecord.uid).set({
         email,
         userType: normalizedUserType,
         createdAt: new Date().toISOString(),
       });
 
-      // Create minimal type-specific document
       const typeCollection =
-        normalizedUserType === "handyman" ? "handymen" : "clients";
+        normalizedUserType === "handyman"
+          ? HANDYMAN_COLLECTION_NAME
+          : CLIENT_COLLECTION_NAME;
 
+      // Create minimal type-specific document
       await db.collection(typeCollection).doc(userRecord.uid).set({
         approved: false,
         suspended: false,
@@ -90,6 +136,12 @@ class AuthService {
       // ✅ UPDATED: Only send email if SendGrid is configured
       let emailSent = false;
       if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) {
+        logger.info("SendGrid configured - sending verification email");
+        logger.info(`Verification link: ${verificationLink}`); // Log the verification link for debugging
+        logger.info(
+          `User email: ${email}, fullName: ${fullName}, From: ${process.env.SENDGRID_FROM_EMAIL}, From Name: ${process.env.SENDGRID_FROM_NAME}  `,
+        ); // Log user details for debugging
+
         console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         console.log("📧 SENDING VERIFICATION EMAIL");
         console.log("To:", email);
@@ -147,11 +199,15 @@ class AuthService {
 
         try {
           const response = await sgMail.send(msg);
+          logger.info(
+            `Verification email sent successfully to ${email}, With Status Code : ${response[0].statusCode}`,
+          ); // Log SendGrid response status
           console.log("✅ Verification email sent successfully");
           console.log("Status Code:", response[0].statusCode);
           console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
           emailSent = true;
         } catch (error) {
+          logger.error(`Failed to send verification email to ${email}:`, error);
           console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
           console.error("❌ SENDGRID ERROR");
           console.error("Error Code:", error.code);
@@ -161,6 +217,7 @@ class AuthService {
           if (error.response?.body?.errors) {
             console.error("SendGrid Errors:");
             error.response.body.errors.forEach((err, index) => {
+              logger.error(`  ${index + 1}. ${err.message}`);
               console.error(`  ${index + 1}. ${err.message}`);
               if (err.field) console.error(`     Field: ${err.field}`);
               if (err.help) console.error(`     Help: ${err.help}`);
@@ -187,12 +244,17 @@ class AuthService {
       };
     } catch (error) {
       if (error.code === "auth/email-already-exists") {
+        logger.error(`Registration failed - email already exists: ${email}`);
         throw new AppError("Email already exists", 400);
       }
       if (error.code === "auth/invalid-phone-number") {
+        logger.error(`Registration failed - invalid phone number: ${phone}`);
         throw new AppError("Invalid phone number", 400);
       }
       if (error.code === "auth/phone-number-already-exists") {
+        logger.error(
+          `Registration failed - phone number already in use: ${phone}`,
+        );
         throw new AppError("Phone number already in use", 400);
       }
       throw error;
@@ -200,97 +262,114 @@ class AuthService {
   }
 
   async completeRegistration({ uid, fullName, phone, userType }) {
-  try {
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📝 COMPLETING REGISTRATION");
-    console.log("UID:", uid);
-    console.log("User Type:", userType);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    try {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("📝 COMPLETING REGISTRATION");
+      console.log("UID:", uid);
+      console.log("User Type:", userType);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-    // Check if user exists and email is verified
-    const userRecord = await auth.getUser(uid);
+      // Check if user exists and email is verified
+      const userRecord = await auth.getUser(uid);
 
-    if (!userRecord.emailVerified) {
-      throw new AppError("Email not verified", 403);
-    }
+      if (!userRecord.emailVerified) {
+        logger.warn(`Email not verified for UID: ${uid}`);
+        throw new AppError("Email not verified", 403);
+      }
 
-    console.log("✅ Email verified:", userRecord.emailVerified);
+      console.log("✅ Email verified:", userRecord.emailVerified);
 
-    // ✅ CRITICAL: Update Firebase user to mark email as verified (in case it's not)
-    await auth.updateUser(uid, {
-      emailVerified: true,
-    });
-    console.log("✅ Firebase user emailVerified set to true");
+      // ✅ CRITICAL: Update Firebase user to mark email as verified (in case it's not)
+      await auth.updateUser(uid, {
+        emailVerified: true,
+      });
+      console.log("✅ Firebase user emailVerified set to true");
 
-    // ✅ Set custom claims with email_verified
-    const normalizedUserType = userType === "customer" ? "client" : userType;
-    await auth.setCustomUserClaims(uid, {
-      userType: normalizedUserType,
-      role: normalizedUserType,
-      email_verified: true, // ✅ CRITICAL
-    });
-    console.log("✅ Custom claims set:", {
-      userType: normalizedUserType,
-      role: normalizedUserType,
-      email_verified: true,
-    });
+      // ✅ Set custom claims with email_verified
+      const normalizedUserType = userType === "customer" ? "client" : userType;
 
-    // ✅ Update users collection with full profile
-    await db.collection("users").doc(uid).update({
-      fullName,
-      phone,
-      emailVerified: true,
-      isActive: true,
-      suspended: false,
-      updatedAt: new Date().toISOString(),
-    });
-    console.log("✅ Users collection updated");
+      await auth.setCustomUserClaims(uid, {
+        userType: normalizedUserType,
+        role: normalizedUserType,
+        email_verified: true, // ✅ CRITICAL
+      });
+      console.log("✅ Custom claims set:", {
+        userType: normalizedUserType,
+        role: normalizedUserType,
+        email_verified: true,
+      });
 
-    // ✅ Update type-specific collection with full profile
-    const typeCollection = userType === "handyman" ? "handymen" : "clients";
-
-    await db.collection(typeCollection).doc(uid).update({
-      fullName,
-      phone,
-      profileCompleted: false,
-      updatedAt: new Date().toISOString(),
-    });
-    console.log(`✅ ${typeCollection} collection updated`);
-
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("✅ REGISTRATION COMPLETE");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    return {
-      success: true,
-      message: "Registration completed successfully",
-      userData: {
-        uid,
-        email: userRecord.email,
+      // ✅ Update users collection with full profile
+      await db.collection(USER_COLLECTION_NAME).doc(uid).update({
         fullName,
         phone,
-        userType: normalizedUserType,
         emailVerified: true,
-      },
-    };
-  } catch (error) {
-    console.error("❌ Error completing registration:", error);
-    if (error.code === "auth/user-not-found") {
-      throw new AppError("User not found", 404);
+        isActive: true,
+        suspended: false,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log("✅ Users collection updated");
+
+      // ✅ Update type-specific collection with full profile
+      const typeCollection =
+        userType === "handyman"
+          ? HANDYMAN_COLLECTION_NAME
+          : CLIENT_COLLECTION_NAME;
+
+      await db.collection(typeCollection).doc(uid).update({
+        fullName,
+        phone,
+        profileCompleted: false,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(`✅ ${typeCollection} collection updated`);
+
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("✅ REGISTRATION COMPLETE");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      logger.info(`Registration completed for user: ${uid}, Type: ${normalizedUserType}`);
+
+      return {
+        success: true,
+        message: "Registration completed successfully",
+        userData: {
+          uid,
+          email: userRecord.email,
+          fullName,
+          phone,
+          userType: normalizedUserType,
+          emailVerified: true,
+        },
+      };
+    } catch (error) {
+      console.error("❌ Error completing registration:", error);
+      logger.error(`Error completing registration for UID: ${uid}`, error);
+      if (error.code === "auth/user-not-found") {
+        throw new AppError("User not found", 404);
+      }
+      throw error;
     }
-    throw error;
   }
-}
 
   async checkEmailVerification(uid) {
     try {
       const userRecord = await auth.getUser(uid);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🔍 CHECKING EMAIL VERIFICATION");
+      console.log("user Record:", userRecord);
+      console.log("UID:", uid);
+
+      logger.info(
+        `Checked email verification for UID: ${uid}, Email Verified: ${userRecord.emailVerified}`,
+      );
 
       return {
         verified: userRecord.emailVerified,
         email: userRecord.email,
       };
     } catch (error) {
+      logger.error(`Error checking email verification for UID: ${uid}`, error);
       throw new AppError("User not found", 404);
     }
   }

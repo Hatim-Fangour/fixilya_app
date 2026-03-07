@@ -1,23 +1,36 @@
 const admin = require('../config/firebase');
 const db = admin.firestore();
-const nodemailer = require('nodemailer');
-const twilio = require('twilio');
 
-// Email configuration
-const emailTransporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Lazy singletons — only created when actually sending email/SMS,
+// so the service starts even without Twilio/SMTP env vars configured.
+let _emailTransporter = null;
+let _twilioClient = null;
 
-// Twilio configuration
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+function getEmailTransporter() {
+  if (!_emailTransporter) {
+    const nodemailer = require('nodemailer');
+    _emailTransporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: process.env.EMAIL_PORT,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+  }
+  return _emailTransporter;
+}
+
+function getTwilioClient() {
+  if (!_twilioClient) {
+    const twilio = require('twilio');
+    _twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN,
+    );
+  }
+  return _twilioClient;
+}
 
 class NotificationService {
   async sendPushNotification({ userId, title, message, data = {} }) {
@@ -70,7 +83,7 @@ class NotificationService {
         html,
       };
 
-      await emailTransporter.sendMail(mailOptions);
+      await getEmailTransporter().sendMail(mailOptions);
 
       console.log(`Email sent to ${to}`);
       return { success: true };
@@ -82,7 +95,7 @@ class NotificationService {
 
   async sendSMS({ to, message }) {
     try {
-      await twilioClient.messages.create({
+      await getTwilioClient().messages.create({
         body: message,
         from: process.env.TWILIO_PHONE_NUMBER,
         to,
@@ -136,6 +149,21 @@ class NotificationService {
         success: false,
         error: error.message,
       };
+    }
+  }
+
+  async getUnreadCount(userId) {
+    try {
+      const snapshot = await db
+        .collection('notifications')
+        .where('userId', '==', userId)
+        .where('read', '==', false)
+        .count()
+        .get();
+
+      return snapshot.data().count;
+    } catch (error) {
+      throw new Error(`Failed to get unread count: ${error.message}`);
     }
   }
 

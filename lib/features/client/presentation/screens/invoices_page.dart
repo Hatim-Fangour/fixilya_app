@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -126,7 +127,7 @@ class _InvoicesPageState extends State<InvoicesPage>
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        print('❌ No user logged in');
+        if (kDebugMode) debugPrint('❌ No user logged in');
         setState(() => _isLoading = false);
         return;
       }
@@ -175,9 +176,9 @@ class _InvoicesPageState extends State<InvoicesPage>
         });
       }
 
-      print('✅ Loaded ${_invoices.length} invoices');
+      if (kDebugMode) debugPrint('✅ Loaded ${_invoices.length} invoices');
     } catch (e) {
-      print('❌ Error loading invoices: $e');
+      if (kDebugMode) debugPrint('❌ Error loading invoices: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }

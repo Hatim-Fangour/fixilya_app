@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
 
@@ -17,10 +18,10 @@ class FirebaseImageService {
         'profileImageUpdatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      print('✅ Profile image URL saved to Firestore');
+      if (kDebugMode) debugPrint('✅ Profile image URL saved to Firestore');
       return true;
     } catch (e) {
-      print('❌ Error saving profile image URL: $e');
+      if (kDebugMode) debugPrint('❌ Error saving profile image URL: $e');
       return false;
     }
   }
@@ -50,11 +51,11 @@ class FirebaseImageService {
         'workImagesUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Work images URLs saved to Firestore');
-      print('   Total images: ${existingImages.length}');
+      if (kDebugMode) debugPrint('✅ Work images URLs saved to Firestore');
+      if (kDebugMode) debugPrint('   Total images: ${existingImages.length}');
       return true;
     } catch (e) {
-      print('❌ Error saving work images URLs: $e');
+      if (kDebugMode) debugPrint('❌ Error saving work images URLs: $e');
       return false;
     }
   }
@@ -70,10 +71,10 @@ class FirebaseImageService {
         'workImagesUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Work image URL added to Firestore');
+      if (kDebugMode) debugPrint('✅ Work image URL added to Firestore');
       return true;
     } catch (e) {
-      print('❌ Error adding work image URL: $e');
+      if (kDebugMode) debugPrint('❌ Error adding work image URL: $e');
       return false;
     }
   }
@@ -89,10 +90,10 @@ class FirebaseImageService {
         'workImagesUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Work image URL removed from Firestore');
+      if (kDebugMode) debugPrint('✅ Work image URL removed from Firestore');
       return true;
     } catch (e) {
-      print('❌ Error removing work image URL: $e');
+      if (kDebugMode) debugPrint('❌ Error removing work image URL: $e');
       return false;
     }
   }
@@ -109,7 +110,7 @@ class FirebaseImageService {
 
       return null;
     } catch (e) {
-      print('❌ Error getting profile image URL: $e');
+      if (kDebugMode) debugPrint('❌ Error getting profile image URL: $e');
       return null;
     }
   }
@@ -126,7 +127,7 @@ class FirebaseImageService {
 
       return [];
     } catch (e) {
-      print('❌ Error getting work images URLs: $e');
+      if (kDebugMode) debugPrint('❌ Error getting work images URLs: $e');
       return [];
     }
   }
@@ -139,10 +140,10 @@ class FirebaseImageService {
         'profileImageUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Profile image URL deleted from Firestore');
+      if (kDebugMode) debugPrint('✅ Profile image URL deleted from Firestore');
       return true;
     } catch (e) {
-      print('❌ Error deleting profile image URL: $e');
+      if (kDebugMode) debugPrint('❌ Error deleting profile image URL: $e');
       return false;
     }
   }
@@ -155,10 +156,10 @@ class FirebaseImageService {
         'workImagesUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ All work images URLs cleared from Firestore');
+      if (kDebugMode) debugPrint('✅ All work images URLs cleared from Firestore');
       return true;
     } catch (e) {
-      print('❌ Error clearing work images URLs: $e');
+      if (kDebugMode) debugPrint('❌ Error clearing work images URLs: $e');
       return false;
     }
   }
@@ -187,10 +188,10 @@ class FirebaseImageService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Portfolio item saved with image URL');
+      if (kDebugMode) debugPrint('✅ Portfolio item saved with image URL');
       return portfolioRef.id;
     } catch (e) {
-      print('❌ Error saving portfolio item: $e');
+      if (kDebugMode) debugPrint('❌ Error saving portfolio item: $e');
       return null;
     }
   }
@@ -209,7 +210,7 @@ class FirebaseImageService {
           .map((doc) => {'id': doc.id, ...doc.data()})
           .toList();
     } catch (e) {
-      print('❌ Error getting portfolio items: $e');
+      if (kDebugMode) debugPrint('❌ Error getting portfolio items: $e');
       return [];
     }
   }
@@ -227,10 +228,10 @@ class FirebaseImageService {
           .doc(portfolioId)
           .delete();
 
-      print('✅ Portfolio item deleted');
+      if (kDebugMode) debugPrint('✅ Portfolio item deleted');
       return true;
     } catch (e) {
-      print('❌ Error deleting portfolio item: $e');
+      if (kDebugMode) debugPrint('❌ Error deleting portfolio item: $e');
       return false;
     }
   }

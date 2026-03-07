@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -152,7 +153,7 @@ class _GenericDropdownState<T> extends State<GenericDropdown<T>> {
     }
 
     // Value doesn't exist in items, return null
-    print(
+    if (kDebugMode) debugPrint(
       '⚠️ Dropdown value "$value" not found in items list. Setting to null.',
     );
     return null;

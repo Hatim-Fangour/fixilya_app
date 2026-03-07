@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
@@ -50,7 +51,7 @@ class _FavoritesPageState extends State<FavoritesPage>
         });
       }
     } catch (e) {
-      print('❌ Error loading favorites: $e');
+      if (kDebugMode) debugPrint('❌ Error loading favorites: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -399,7 +400,7 @@ class _FavoritesPageState extends State<FavoritesPage>
                               children: [
                                 Expanded(
                                   child: Text(
-                                    handyman['name'],
+                                    handyman['name'] ?? handyman['fullName'] ?? 'Unknown',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -417,7 +418,7 @@ class _FavoritesPageState extends State<FavoritesPage>
                             ),
                             SizedBox(height: 6),
                             Text(
-                              handyman['category'],
+                              handyman['category'] ?? 'General',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: AppColors.textSecondaryColor(context),
@@ -433,7 +434,7 @@ class _FavoritesPageState extends State<FavoritesPage>
                                 ),
                                 SizedBox(width: 4),
                                 Text(
-                                  '${handyman['rating'].toStringAsFixed(1)} (${handyman['reviews']})',
+                                  '${(handyman['rating'] as num? ?? 0).toStringAsFixed(1)} (${handyman['reviews'] ?? 0})',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -450,7 +451,7 @@ class _FavoritesPageState extends State<FavoritesPage>
                                 ),
                                 SizedBox(width: 2),
                                 Text(
-                                  handyman['city'],
+                                  handyman['city'] ?? '',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textSecondaryColor(

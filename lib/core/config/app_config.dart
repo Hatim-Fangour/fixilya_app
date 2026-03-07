@@ -1,3 +1,5 @@
+import 'dart:io';
+
 class AppConfig {
   AppConfig._();
 
@@ -11,46 +13,84 @@ class AppConfig {
   static const String apiVersion = 'v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
+  // ─── Local Dev Base IP ─────────────────────────────────────────────────
+  // 10.0.2.2  = Android emulator loopback to PC
+  // YOUR_IP   = Physical device on same WiFi (change this to your PC's IP)
+  static const String _emulatorHost = '10.0.2.2';
+  static const String _physicalDeviceHost = '192.168.1.16'; // ← YOUR PC IP HERE
+
+  /// Returns the correct host depending on whether we're on emulator or real device.
+  /// Can always be overridden via --dart-define.
+  static String get _localHost {
+    // If dart-define override is provided, it takes priority (handled per-service below)
+    // Otherwise auto-detect: emulator uses 10.0.2.2, real device uses LAN IP
+    return _isEmulator ? _emulatorHost : _physicalDeviceHost;
+  }
+
+  /// Simple emulator detection based on known emulator model names.
+  static bool get _isEmulator {
+    try {
+      return Platform.environment['ANDROID_EMULATOR'] == 'true' ||
+          // Flutter sets this for emulators
+          const bool.fromEnvironment('IS_EMULATOR', defaultValue: false);
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── Microservice URLs ─────────────────────────────────────────────────
-  // Pass via --dart-define for each environment:
+  // Override via --dart-define for CI/CD or staging:
   //   flutter run --dart-define=AUTH_SERVICE_URL=https://auth.fixilya.ma/api
-  // Defaults target the Android emulator loopback for local dev.
-  static const String authServiceUrl = String.fromEnvironment(
-    'AUTH_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:3001/api',
-  );
-  static const String userServiceUrl = String.fromEnvironment(
-    'USER_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:3002/api',
-  );
-  static const String bookingServiceUrl = String.fromEnvironment(
-    'BOOKING_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:3003',
-  );
-  static const String notificationServiceUrl = String.fromEnvironment(
-    'NOTIFICATION_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:3005',
-  );
-  static const String callServiceUrl = String.fromEnvironment(
-    'CALL_SERVICE_URL',
-    defaultValue: 'http://10.0.2.2:3007/api',
-  );
+  static String get authServiceUrl =>
+      const String.fromEnvironment(
+        'AUTH_SERVICE_URL',
+        defaultValue: '',
+      ).isNotEmpty
+      ? const String.fromEnvironment('AUTH_SERVICE_URL')
+      : 'http://$_localHost:3001/api';
+
+  static String get userServiceUrl =>
+      const String.fromEnvironment(
+        'USER_SERVICE_URL',
+        defaultValue: '',
+      ).isNotEmpty
+      ? const String.fromEnvironment('USER_SERVICE_URL')
+      : 'http://$_localHost:3002/api';
+
+  static String get bookingServiceUrl =>
+      const String.fromEnvironment(
+        'BOOKING_SERVICE_URL',
+        defaultValue: '',
+      ).isNotEmpty
+      ? const String.fromEnvironment('BOOKING_SERVICE_URL')
+      : 'http://$_localHost:3003';
+
+  static String get notificationServiceUrl =>
+      const String.fromEnvironment(
+        'NOTIFICATION_SERVICE_URL',
+        defaultValue: '',
+      ).isNotEmpty
+      ? const String.fromEnvironment('NOTIFICATION_SERVICE_URL')
+      : 'http://$_localHost:3005';
+
+  static String get callServiceUrl =>
+      const String.fromEnvironment(
+        'CALL_SERVICE_URL',
+        defaultValue: '',
+      ).isNotEmpty
+      ? const String.fromEnvironment('CALL_SERVICE_URL')
+      : 'http://$_localHost:3007/api';
   // ─────────────────────────────────────────────────────────────────────────
 
   // ─── Agora RTC ───────────────────────────────────────────────────────────
-  /// Agora App ID — get from console.agora.io
-  /// In production, load from --dart-define=AGORA_APP_ID=xxx
   static const String agoraAppId = String.fromEnvironment(
     'AGORA_APP_ID',
-    defaultValue: '100dfbc4a86d4affbe7eaabe0808a6d8', // dev fallback only
+    defaultValue: '100dfbc4a86d4affbe7eaabe0808a6d8',
   );
-
-  /// Backend endpoint to obtain per-call Agora RTC tokens securely.
-  /// The backend uses the Agora RTC Token Builder library.
   static const String agoraTokenEndpoint = '/agora/token';
   // ─────────────────────────────────────────────────────────────────────────
 
-  // ─── Cloudinary ──────────────────────────────────────────────────────
+  // ─── Cloudinary ──────────────────────────────────────────────────────────
   static const String cloudinaryCloudName = String.fromEnvironment(
     'CLOUDINARY_CLOUD_NAME',
     defaultValue: 'dbz3wtlbj',

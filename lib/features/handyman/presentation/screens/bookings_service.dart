@@ -1,12 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 // ✅ Import email service
 import 'package:fixilya_app/services/email_service.dart';
+import 'package:fixilya_app/services/location_privacy_service.dart';
+import 'package:fixilya_app/services/location_service.dart';
 
 class BookingsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final EmailService _emailService = EmailService(); // ✅ Add email service
+  final LocationPrivacyService _locationPrivacyService = LocationPrivacyService();
+  final LocationService _locationService = LocationService();
 
   String? get currentUserId => _auth.currentUser?.uid;
 
@@ -27,14 +32,16 @@ class BookingsService {
     // required String timeSlot,
     required String description,
     // required double estimatedPrice,
+    double? clientLatitude,
+    double? clientLongitude,
   }) async {
     try {
       if (currentUserId == null) {
-        print('❌ No user logged in');
+        if (kDebugMode) debugPrint('❌ No user logged in');
         return null;
       }
 
-      print('📝 Creating booking...');
+      if (kDebugMode) debugPrint('📝 Creating booking...');
 
       // Create booking document
       final bookingRef = await _firestore.collection('bookings').add({
@@ -54,9 +61,11 @@ class BookingsService {
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        if (clientLatitude != null) 'clientLatitude': clientLatitude,
+        if (clientLongitude != null) 'clientLongitude': clientLongitude,
       });
 
-      print('✅ Booking created: ${bookingRef.id}');
+      if (kDebugMode) debugPrint('✅ Booking created: ${bookingRef.id}');
 
       // ✅ Get handyman email for notification
       final handymanDoc = await _firestore
@@ -88,7 +97,7 @@ class BookingsService {
         //   timeSlot: timeSlot,
         //   bookingId: bookingRef.id,
         // );
-        print('📧 Email sent to handyman: $handymanEmail');
+        if (kDebugMode) debugPrint('📧 Email sent to handyman: $handymanEmail');
       }
 
       // Create notification for client (confirmation)
@@ -105,7 +114,7 @@ class BookingsService {
 
       return bookingRef.id;
     } catch (e) {
-      print('❌ Error creating booking: $e');
+      if (kDebugMode) debugPrint('❌ Error creating booking: $e');
       return null;
     }
   }
@@ -117,7 +126,7 @@ class BookingsService {
   /// Accept a booking request (Handyman)
   Future<bool> acceptBooking(String bookingId) async {
     try {
-      print('✅ Accepting booking: $bookingId');
+      if (kDebugMode) debugPrint('✅ Accepting booking: $bookingId');
 
       // Get booking data first
       final bookingDoc = await _firestore
@@ -127,7 +136,7 @@ class BookingsService {
       final bookingData = bookingDoc.data();
 
       if (bookingData == null) {
-        print('❌ Booking not found');
+        if (kDebugMode) debugPrint('❌ Booking not found');
         return false;
       }
 
@@ -136,6 +145,11 @@ class BookingsService {
         'status': 'confirmed',
         'acceptedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Attach handyman GPS to booking (independent — never aborts accept flow)
+      _attachHandymanLocationToBooking(bookingId, bookingData).catchError((e) {
+        if (kDebugMode) debugPrint('BookingsService: location attach failed: $e');
       });
 
       // Create activity for handyman
@@ -182,21 +196,64 @@ class BookingsService {
           timeSlot: bookingData['timeSlot'] ?? 'TBD',
           bookingId: bookingId,
         );
-        print('📧 Acceptance email sent to client: $clientEmail');
+        if (kDebugMode) debugPrint('📧 Acceptance email sent to client: $clientEmail');
       }
 
-      print('✅ Booking accepted successfully');
+      if (kDebugMode) debugPrint('✅ Booking accepted successfully');
       return true;
     } catch (e) {
-      print('❌ Error accepting booking: $e');
+      if (kDebugMode) debugPrint('❌ Error accepting booking: $e');
       return false;
+    }
+  }
+
+  /// Attaches handyman GPS to booking when privacy == 'on_booking_accept',
+  /// and sends FCM-style in-app notification with Google Maps deep-link.
+  Future<void> _attachHandymanLocationToBooking(
+    String bookingId,
+    Map<String, dynamic> bookingData,
+  ) async {
+    try {
+      final uid = currentUserId;
+      if (uid == null) return;
+
+      final privacy = await _locationPrivacyService.getHandymanPrivacy(uid);
+
+      if (privacy == 'on_booking_accept') {
+        final pos = await _locationService.getCurrentLocation();
+        if (pos != null) {
+          await _firestore.collection('bookings').doc(bookingId).update({
+            'handymanLatitude': pos.latitude,
+            'handymanLongitude': pos.longitude,
+          });
+
+          // Notify client with Google Maps deep-link
+          final mapsLink =
+              'https://www.google.com/maps?q=${pos.latitude},${pos.longitude}';
+          final clientId = bookingData['clientId'] as String?;
+          final handymanName = bookingData['handymanName'] ?? 'Your handyman';
+          if (clientId != null) {
+            await _createNotification(
+              userId: clientId,
+              type: 'handyman_location_shared',
+              title: 'Booking Confirmed!',
+              message: '$handymanName is on their way. Tap to see location: $mapsLink',
+              bookingId: bookingId,
+              actionType: 'view_location',
+              priority: 'high',
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('BookingsService: _attachHandymanLocationToBooking: $e');
     }
   }
 
   /// Decline a booking request (Handyman)
   Future<bool> declineBooking(String bookingId, {String? reason}) async {
     try {
-      print('🚫 Declining booking: $bookingId');
+      if (kDebugMode) debugPrint('🚫 Declining booking: $bookingId');
 
       // Get booking data first
       final bookingDoc = await _firestore
@@ -206,7 +263,7 @@ class BookingsService {
       final bookingData = bookingDoc.data();
 
       if (bookingData == null) {
-        print('❌ Booking not found');
+        if (kDebugMode) debugPrint('❌ Booking not found');
         return false;
       }
 
@@ -258,13 +315,13 @@ class BookingsService {
           reason: declineReason,
           bookingId: bookingId,
         );
-        print('📧 Decline email sent to client: $clientEmail');
+        if (kDebugMode) debugPrint('📧 Decline email sent to client: $clientEmail');
       }
 
-      print('✅ Booking declined successfully');
+      if (kDebugMode) debugPrint('✅ Booking declined successfully');
       return true;
     } catch (e) {
-      print('❌ Error declining booking: $e');
+      if (kDebugMode) debugPrint('❌ Error declining booking: $e');
       return false;
     }
   }
@@ -272,7 +329,7 @@ class BookingsService {
   /// Start a booking (mark as in progress)
   Future<bool> startBooking(String bookingId) async {
     try {
-      print('▶️ Starting booking: $bookingId');
+      if (kDebugMode) debugPrint('▶️ Starting booking: $bookingId');
 
       final bookingDoc = await _firestore
           .collection('bookings')
@@ -302,7 +359,7 @@ class BookingsService {
 
       return true;
     } catch (e) {
-      print('❌ Error starting booking: $e');
+      if (kDebugMode) debugPrint('❌ Error starting booking: $e');
       return false;
     }
   }
@@ -310,7 +367,7 @@ class BookingsService {
   /// Mark booking as complete (Handyman)
   Future<bool> completeBooking(String bookingId) async {
     try {
-      print('🎉 Completing booking: $bookingId');
+      if (kDebugMode) debugPrint('🎉 Completing booking: $bookingId');
 
       final bookingDoc = await _firestore
           .collection('bookings')
@@ -319,7 +376,7 @@ class BookingsService {
       final bookingData = bookingDoc.data();
 
       if (bookingData == null) {
-        print('❌ Booking not found');
+        if (kDebugMode) debugPrint('❌ Booking not found');
         return false;
       }
 
@@ -358,10 +415,10 @@ class BookingsService {
         priority: 'high',
       );
 
-      print('✅ Booking completed successfully');
+      if (kDebugMode) debugPrint('✅ Booking completed successfully');
       return true;
     } catch (e) {
-      print('❌ Error completing booking: $e');
+      if (kDebugMode) debugPrint('❌ Error completing booking: $e');
       return false;
     }
   }
@@ -369,7 +426,7 @@ class BookingsService {
   /// Cancel booking (Client)
   Future<bool> cancelBooking(String bookingId, {String? reason}) async {
     try {
-      print('❌ Cancelling booking: $bookingId');
+      if (kDebugMode) debugPrint('❌ Cancelling booking: $bookingId');
 
       final bookingDoc = await _firestore
           .collection('bookings')
@@ -400,7 +457,7 @@ class BookingsService {
 
       return true;
     } catch (e) {
-      print('❌ Error cancelling booking: $e');
+      if (kDebugMode) debugPrint('❌ Error cancelling booking: $e');
       return false;
     }
   }
@@ -535,9 +592,9 @@ class BookingsService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('📬 Notification created for user: $userId');
+      if (kDebugMode) debugPrint('📬 Notification created for user: $userId');
     } catch (e) {
-      print('❌ Error creating notification: $e');
+      if (kDebugMode) debugPrint('❌ Error creating notification: $e');
     }
   }
 
@@ -579,7 +636,7 @@ class BookingsService {
         'readAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('❌ Error marking notification as read: $e');
+      if (kDebugMode) debugPrint('❌ Error marking notification as read: $e');
     }
   }
 
@@ -604,9 +661,9 @@ class BookingsService {
       }
 
       await batch.commit();
-      print('✅ All notifications marked as read');
+      if (kDebugMode) debugPrint('✅ All notifications marked as read');
     } catch (e) {
-      print('❌ Error marking all notifications as read: $e');
+      if (kDebugMode) debugPrint('❌ Error marking all notifications as read: $e');
     }
   }
 
@@ -634,7 +691,7 @@ class BookingsService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('❌ Error creating activity: $e');
+      if (kDebugMode) debugPrint('❌ Error creating activity: $e');
     }
   }
 
@@ -663,9 +720,9 @@ class BookingsService {
           .doc(currentUserId)
           .update(updates);
 
-      print('✅ Handyman stats updated');
+      if (kDebugMode) debugPrint('✅ Handyman stats updated');
     } catch (e) {
-      print('❌ Error updating handyman stats: $e');
+      if (kDebugMode) debugPrint('❌ Error updating handyman stats: $e');
     }
   }
 
@@ -734,7 +791,7 @@ class BookingsService {
       // Filter out booked slots
       return allSlots.where((slot) => !bookedTimeSlots.contains(slot)).toList();
     } catch (e) {
-      print('❌ Error getting available slots: $e');
+      if (kDebugMode) debugPrint('❌ Error getting available slots: $e');
       return [];
     }
   }

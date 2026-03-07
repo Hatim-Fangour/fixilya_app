@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/bookings_service.dart';
+import 'package:fixilya_app/services/location_privacy_service.dart';
+import 'package:fixilya_app/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,6 +22,8 @@ class BookingDialog extends StatefulWidget {
 class _BookingDialogState extends State<BookingDialog> {
   final _formKey = GlobalKey<FormState>();
   final _bookingsService = BookingsService();
+  final _locationPrivacyService = LocationPrivacyService();
+  final _locationService = LocationService();
 
   // Form controllers
   final _nameController = TextEditingController();
@@ -38,6 +43,12 @@ class _BookingDialogState extends State<BookingDialog> {
   Set<DateTime> _unavailableDates = {};
   bool _loadingDates = false;
 
+  // Location sharing
+  bool _clientSharesLocation = false;
+  double? _clientLatitude;
+  double? _clientLongitude;
+  bool _captureGps = false;
+
   // Premium colors
   static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
@@ -49,17 +60,18 @@ class _BookingDialogState extends State<BookingDialog> {
     _loadUserData();
     _loadUnavailableDates();
     _listenToBookingChanges();
+    _loadClientLocationPreference();
 
     // ✅ DEBUG: Print handyman data to see what fields we have
-    print('🔍 HANDYMAN DATA IN BOOKING DIALOG:');
+    if (kDebugMode) debugPrint('🔍 HANDYMAN DATA IN BOOKING DIALOG:');
     widget.handyman.forEach((key, value) {
-      print('  $key: $value');
+      if (kDebugMode) debugPrint('  $key: $value');
     });
 
     Future.delayed(Duration(seconds: 2), () {
       if (mounted && _loadingDates) {
         setState(() => _loadingDates = false);
-        print('⚠️ Force-stopped loading dates');
+        if (kDebugMode) debugPrint('⚠️ Force-stopped loading dates');
       }
     });
   }
@@ -101,13 +113,13 @@ class _BookingDialogState extends State<BookingDialog> {
 
     for (var id in possibleIds) {
       if (id != null && id.toString().isNotEmpty) {
-        print('✅ Found handyman ID: $id');
+        if (kDebugMode) debugPrint('✅ Found handyman ID: $id');
         return id.toString();
       }
     }
 
-    print('❌ ERROR: No handyman ID found!');
-    print('Available fields: ${widget.handyman.keys.join(", ")}');
+    if (kDebugMode) debugPrint('❌ ERROR: No handyman ID found!');
+    if (kDebugMode) debugPrint('Available fields: ${widget.handyman.keys.join(", ")}');
     return '';
   }
 
@@ -137,7 +149,39 @@ class _BookingDialogState extends State<BookingDialog> {
         });
       }
     } catch (e) {
-      print('Error loading user data: $e');
+      if (kDebugMode) debugPrint('Error loading user data: $e');
+    }
+  }
+
+  Future<void> _loadClientLocationPreference() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final shares = await _locationPrivacyService.getClientSharePreference(uid);
+      if (mounted) setState(() => _clientSharesLocation = shares);
+    } catch (_) {}
+  }
+
+  Future<void> _captureClientLocation() async {
+    setState(() => _captureGps = true);
+    try {
+      final pos = await _locationService.getCurrentLocation();
+      if (pos != null && mounted) {
+        setState(() {
+          _clientLatitude = pos.latitude;
+          _clientLongitude = pos.longitude;
+        });
+      } else {
+        Get.snackbar(
+          'Location',
+          'Could not get GPS. Please allow location access.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
+      }
+    } catch (_) {} finally {
+      if (mounted) setState(() => _captureGps = false);
     }
   }
 
@@ -150,7 +194,7 @@ class _BookingDialogState extends State<BookingDialog> {
       final handymanId = _getHandymanId();
 
       if (handymanId.isEmpty) {
-        print('❌ Cannot load slots: No handyman ID');
+        if (kDebugMode) debugPrint('❌ Cannot load slots: No handyman ID');
         setState(() => _loadingSlots = false);
         return;
       }
@@ -170,7 +214,7 @@ class _BookingDialogState extends State<BookingDialog> {
         });
       }
     } catch (e) {
-      print('Error loading slots: $e');
+      if (kDebugMode) debugPrint('Error loading slots: $e');
       if (mounted) {
         setState(() => _loadingSlots = false);
       }
@@ -180,7 +224,7 @@ class _BookingDialogState extends State<BookingDialog> {
   Future<void> _submitBooking() async {
     // ✅ VALIDATION
     if (!_formKey.currentState!.validate()) {
-      print('❌ Form validation failed');
+      if (kDebugMode) debugPrint('❌ Form validation failed');
       return;
     }
 
@@ -201,8 +245,8 @@ class _BookingDialogState extends State<BookingDialog> {
     final handymanId = _getHandymanId();
 
     if (handymanId.isEmpty) {
-      print('❌ CRITICAL ERROR: No handyman ID available!');
-      print('Handyman data: ${widget.handyman}');
+      if (kDebugMode) debugPrint('❌ CRITICAL ERROR: No handyman ID available!');
+      if (kDebugMode) debugPrint('Handyman data: ${widget.handyman}');
 
       Get.snackbar(
         'Error',
@@ -238,14 +282,14 @@ class _BookingDialogState extends State<BookingDialog> {
 
     try {
       // ✅ DEBUG LOGGING
-      print('📝 Booking Details:');
-      print('  Handyman ID: $handymanId');
-      print('  Handyman Name: ${_getHandymanName()}');
-      print('  Client Name: ${_nameController.text}');
-      print('  Service: $_selectedService');
-      print('  Date: $_selectedDate');
-      print('  Time Slot: $_selectedTimeSlot');
-      print('  Amount: ${widget.handyman['hourlyRate'] ?? 150}');
+      if (kDebugMode) debugPrint('📝 Booking Details:');
+      if (kDebugMode) debugPrint('  Handyman ID: $handymanId');
+      if (kDebugMode) debugPrint('  Handyman Name: ${_getHandymanName()}');
+      if (kDebugMode) debugPrint('  Client Name: ${_nameController.text}');
+      if (kDebugMode) debugPrint('  Service: $_selectedService');
+      if (kDebugMode) debugPrint('  Date: $_selectedDate');
+      if (kDebugMode) debugPrint('  Time Slot: $_selectedTimeSlot');
+      if (kDebugMode) debugPrint('  Amount: ${widget.handyman['hourlyRate'] ?? 150}');
 
       final bookingId = await _bookingsService.createBooking(
         handymanId: handymanId,
@@ -259,13 +303,15 @@ class _BookingDialogState extends State<BookingDialog> {
         // timeSlot: _selectedTimeSlot!,
         description: _descriptionController.text,
         // estimatedPrice: (widget.handyman['hourlyRate'] ?? 150).toDouble(),
+        clientLatitude: _clientLatitude,
+        clientLongitude: _clientLongitude,
       );
 
       // Close loading
       Get.back();
 
       if (bookingId != null) {
-        print('✅ Booking created successfully: $bookingId');
+        if (kDebugMode) debugPrint('✅ Booking created successfully: $bookingId');
 
         // Close dialog
         Get.back();
@@ -281,7 +327,7 @@ class _BookingDialogState extends State<BookingDialog> {
           icon: Icon(Icons.check_circle, color: Colors.white),
         );
       } else {
-        print('❌ Booking creation returned null');
+        if (kDebugMode) debugPrint('❌ Booking creation returned null');
         Get.snackbar(
           'Error',
           'Failed to create booking. Please try again.',
@@ -292,7 +338,7 @@ class _BookingDialogState extends State<BookingDialog> {
       }
     } catch (e) {
       Get.back(); // Close loading
-      print('❌ Error submitting booking: $e');
+      if (kDebugMode) debugPrint('❌ Error submitting booking: $e');
       Get.snackbar(
         'Error',
         'An error occurred: $e',
@@ -310,7 +356,7 @@ class _BookingDialogState extends State<BookingDialog> {
       final handymanId = _getHandymanId();
 
       if (handymanId.isEmpty) {
-        print('❌ Cannot load unavailable dates: No handyman ID');
+        if (kDebugMode) debugPrint('❌ Cannot load unavailable dates: No handyman ID');
         setState(() => _loadingDates = false);
         return;
       }
@@ -351,10 +397,10 @@ class _BookingDialogState extends State<BookingDialog> {
           _loadingDates = false;
         });
 
-        print('✅ Loaded ${_unavailableDates.length} unavailable dates');
+        if (kDebugMode) debugPrint('✅ Loaded ${_unavailableDates.length} unavailable dates');
       }
     } catch (e) {
-      print('❌ Error loading unavailable dates: $e');
+      if (kDebugMode) debugPrint('❌ Error loading unavailable dates: $e');
       if (mounted) {
         setState(() => _loadingDates = false);
       }
@@ -545,6 +591,87 @@ class _BookingDialogState extends State<BookingDialog> {
                       validator: (val) =>
                           val?.isEmpty ?? true ? 'Required' : null,
                     ),
+
+                    // My Location row (shown only when client opted in)
+                    if (_clientSharesLocation) ...[
+                      SizedBox(height: 16),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardColor(context),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: AppColors.borderColor(context),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.share_location,
+                                color: primaryColor,
+                                size: 20,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'My Location',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    _clientLatitude != null
+                                        ? '${_clientLatitude!.toStringAsFixed(5)}, ${_clientLongitude!.toStringAsFixed(5)}'
+                                        : 'Not captured yet',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: _clientLatitude != null
+                                          ? AppColors.textPrimaryColor(context)
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _captureGps
+                                ? SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        primaryColor,
+                                      ),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: Icon(
+                                      Icons.gps_fixed,
+                                      color: primaryColor,
+                                    ),
+                                    tooltip: 'Capture GPS',
+                                    onPressed: _captureClientLocation,
+                                  ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     SizedBox(height: 24),
 
@@ -928,9 +1055,9 @@ class _BookingDialogState extends State<BookingDialog> {
   }
 
   Future<void> _selectDate() async {
-    print('📅 Opening date picker...');
-    print('Loading dates: $_loadingDates');
-    print('Unavailable dates: ${_unavailableDates.length}');
+    if (kDebugMode) debugPrint('📅 Opening date picker...');
+    if (kDebugMode) debugPrint('Loading dates: $_loadingDates');
+    if (kDebugMode) debugPrint('Unavailable dates: ${_unavailableDates.length}');
 
     try {
       // ✅ Find the first available date
@@ -947,7 +1074,7 @@ class _BookingDialogState extends State<BookingDialog> {
 
         if (!_unavailableDates.contains(normalizedDate)) {
           initialDate = testDate;
-          print('✅ First available date: $initialDate');
+          if (kDebugMode) debugPrint('✅ First available date: $initialDate');
           break;
         }
       }
@@ -963,7 +1090,7 @@ class _BookingDialogState extends State<BookingDialog> {
             final normalizedDate = DateTime(date.year, date.month, date.day);
             return !_unavailableDates.contains(normalizedDate);
           } catch (e) {
-            print('❌ Error in selectableDayPredicate: $e');
+            if (kDebugMode) debugPrint('❌ Error in selectableDayPredicate: $e');
             return true;
           }
         },
@@ -980,7 +1107,7 @@ class _BookingDialogState extends State<BookingDialog> {
         },
       );
 
-      print('✅ Date picker result: $picked');
+      if (kDebugMode) debugPrint('✅ Date picker result: $picked');
 
       if (picked != null && picked != _selectedDate) {
         setState(() {
@@ -990,7 +1117,7 @@ class _BookingDialogState extends State<BookingDialog> {
         await _loadAvailableSlots();
       }
     } catch (e) {
-      print('❌ Error opening date picker: $e');
+      if (kDebugMode) debugPrint('❌ Error opening date picker: $e');
 
       Get.snackbar(
         'Error',

@@ -1,7 +1,8 @@
-import 'package:fixilya_app/core/constants/app_colors.dart';
-import 'package:fixilya_app/features/handyman/presentation/screens/bookings_service.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/services/notification_api_service.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 class ClientNotificationsPage extends StatefulWidget {
@@ -13,14 +14,95 @@ class ClientNotificationsPage extends StatefulWidget {
 }
 
 class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
-  final BookingsService _bookingsService = BookingsService();
+  final NotificationApiService _notificationApi = NotificationApiService();
+
+  late final Stream<List<Map<String, dynamic>>> _notificationsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _notificationsStream = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((s) => s.docs.map((d) => <String, dynamic>{'id': d.id, ...d.data()}).toList());
+  }
+
+  Future<void> _markAsRead(String notificationId) async {
+    try {
+      await _notificationApi.markAsRead(notificationId);
+    } catch (e) {
+      debugPrint('markAsRead error: $e');
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    try {
+      await _notificationApi.markAllAsRead();
+    } catch (e) {
+      debugPrint('markAllAsRead error: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // Timestamp helper
+  // SSE service parses ISO strings → DateTime objects
+  // but we guard against raw strings too
+  // ─────────────────────────────────────────────
+
+  String _formatTime(dynamic value) {
+    if (value == null) return 'Just now';
+
+    DateTime? dt;
+    if (value is DateTime) {
+      dt = value;
+    } else if (value is String) {
+      dt = DateTime.tryParse(value);
+    } else if (value is Timestamp) {
+      dt = value
+          .toDate(); // legacy Firestore Timestamp (shouldn't happen via SSE)
+    }
+
+    return dt != null ? timeago.format(dt) : 'Just now';
+  }
+
+  // ─────────────────────────────────────────────
+  // Icon / colour by notification type
+  // ─────────────────────────────────────────────
+
+  ({IconData icon, Color color}) _typeStyle(String? type) {
+    return switch (type) {
+      'booking_accepted' => (icon: Icons.check_circle, color: Colors.green),
+      'booking_declined' => (icon: Icons.cancel, color: Colors.red),
+      'booking_created' => (icon: Icons.schedule, color: Colors.blue),
+      'booking_confirmed' => (icon: Icons.check_circle, color: Colors.green),
+      'job_started' => (icon: Icons.play_circle, color: Colors.orange),
+      'job_completed' => (
+        icon: Icons.check_circle_outline,
+        color: Colors.green,
+      ),
+      'booking_cancelled' => (icon: Icons.close, color: Colors.grey),
+      'new_request' => (
+        icon: Icons.notification_important,
+        color: Colors.orange,
+      ),
+      _ => (icon: Icons.notifications, color: AppColors.primaryColor),
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor(context),
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           'Notifications',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
@@ -28,50 +110,12 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
         backgroundColor: AppColors.pagesAppBar(context),
         foregroundColor: AppColors.white,
         elevation: 0,
-        actions: [
-          // Mark all as read button
-          StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _bookingsService.streamNotifications(),
-            builder: (context, snapshot) {
-              final hasUnread =
-                  snapshot.hasData &&
-                  snapshot.data!.any((notif) => notif['read'] == false);
-
-              if (!hasUnread) return SizedBox.shrink();
-
-              return TextButton(
-                onPressed: () async {
-                  await _bookingsService.markAllNotificationsAsRead();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('All notifications marked as read'),
-                        backgroundColor: AppColors.success,
-                        behavior: SnackBarBehavior.floating,
-                        margin: EdgeInsets.all(16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: Text(
-                  'Mark all read',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+        actions: [_buildMarkAllButton()],
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _bookingsService.streamNotifications(),
+        stream: _notificationsStream,
         builder: (context, snapshot) {
+          // ── Loading ──────────────────────────
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
               child: CircularProgressIndicator(
@@ -82,16 +126,20 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
             );
           }
 
+          // ── Error ────────────────────────────
           if (snapshot.hasError) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 60, color: Colors.red),
-                  SizedBox(height: 16),
+                  const Icon(Icons.error_outline, size: 60, color: Colors.red),
+                  const SizedBox(height: 16),
                   Text(
                     'Error loading notifications',
-                    style: TextStyle(fontSize: 16, color: Colors.red),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.textPrimaryColor(context),
+                    ),
                   ),
                 ],
               ),
@@ -100,74 +148,72 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
 
           final notifications = snapshot.data ?? [];
 
-          if (notifications.isEmpty) {
-            return _buildEmptyState();
-          }
+          if (notifications.isEmpty) return _buildEmptyState();
 
           return ListView.builder(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             itemCount: notifications.length,
-            itemBuilder: (context, index) {
-              final notification = notifications[index];
-              return _buildNotificationCard(notification);
-            },
+            itemBuilder: (context, index) => _buildCard(notifications[index]),
           );
         },
       ),
     );
   }
 
-  Widget _buildNotificationCard(Map<String, dynamic> notification) {
+  // ─────────────────────────────────────────────
+  // "Mark all read" — only shown when unread exist
+  // ─────────────────────────────────────────────
+
+  Widget _buildMarkAllButton() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _notificationsStream,
+      builder: (context, snapshot) {
+        final hasUnread =
+            snapshot.hasData && snapshot.data!.any((n) => n['read'] == false);
+
+        if (!hasUnread) return const SizedBox.shrink();
+
+        return TextButton(
+          onPressed: () async {
+            await _markAllAsRead();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('All notifications marked as read'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.all(16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              );
+            }
+          },
+          child: const Text(
+            'Mark all read',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // Notification card
+  // ─────────────────────────────────────────────
+
+  Widget _buildCard(Map<String, dynamic> notification) {
     final isRead = notification['read'] == true;
-    final type = notification['type'] as String? ?? 'info';
-    final timestamp = notification['createdAt'] as Timestamp?;
-
-    // Get time ago
-    String timeAgo = 'Just now';
-    if (timestamp != null) {
-      timeAgo = timeago.format(timestamp.toDate());
-    }
-
-    // Get icon and color based on notification type
-    IconData icon;
-    Color iconColor;
-
-    switch (type) {
-      case 'booking_accepted':
-        icon = Icons.check_circle;
-        iconColor = Colors.green;
-        break;
-      case 'booking_declined':
-        icon = Icons.cancel;
-        iconColor = Colors.red;
-        break;
-      case 'booking_created':
-        icon = Icons.schedule;
-        iconColor = Colors.blue;
-        break;
-      case 'job_started':
-        icon = Icons.play_circle;
-        iconColor = Colors.orange;
-        break;
-      case 'job_completed':
-        icon = Icons.check_circle_outline;
-        iconColor = Colors.green;
-        break;
-      case 'booking_cancelled':
-        icon = Icons.close;
-        iconColor = Colors.grey;
-        break;
-      case 'new_request':
-        icon = Icons.notification_important;
-        iconColor = Colors.orange;
-        break;
-      default:
-        icon = Icons.notifications;
-        iconColor = AppColors.primaryColor;
-    }
+    final style = _typeStyle(notification['type'] as String?);
+    final timeText = _formatTime(notification['createdAt']);
 
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isRead
             ? AppColors.cardColor(context)
@@ -183,7 +229,7 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -192,43 +238,37 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () async {
-            // Mark as read
-            if (!isRead) {
-              await _bookingsService.markNotificationAsRead(notification['id']);
-            }
-
-            // Navigate to booking if applicable
+            if (!isRead) await _markAsRead(notification['id'] as String);
             final bookingId = notification['bookingId'] as String?;
             if (bookingId != null) {
-              // TODO: Navigate to booking details
-              print('Navigate to booking: $bookingId');
+              debugPrint('Navigate to booking: $bookingId');
+              // TODO: AppRoutes.toBookingDetails(bookingId)
             }
           },
           child: Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Icon
+                // ── Icon ──────────────────────
                 Container(
-                  padding: EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: style.color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: iconColor, size: 24),
+                  child: Icon(style.icon, color: style.color, size: 24),
                 ),
 
-                SizedBox(width: 14),
+                const SizedBox(width: 14),
 
-                // Content
+                // ── Content ───────────────────
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title
                       Text(
-                        notification['title'] ?? 'Notification',
+                        notification['title'] as String? ?? 'Notification',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: isRead
@@ -237,24 +277,18 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
                           color: AppColors.textPrimaryColor(context),
                         ),
                       ),
-
-                      SizedBox(height: 6),
-
-                      // Message
+                      const SizedBox(height: 6),
                       Text(
-                        notification['message'] ?? '',
+                        notification['message'] as String? ?? '',
                         style: TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondaryColor(context),
                           height: 1.4,
                         ),
                       ),
-
-                      SizedBox(height: 8),
-
-                      // Time
+                      const SizedBox(height: 8),
                       Text(
-                        timeAgo,
+                        timeText,
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondaryColor(context),
@@ -264,7 +298,7 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
                   ),
                 ),
 
-                // Unread indicator
+                // ── Unread dot ────────────────
                 if (!isRead)
                   Container(
                     width: 10,
@@ -282,13 +316,17 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // Empty state
+  // ─────────────────────────────────────────────
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.notifications_none, size: 80, color: Colors.grey[300]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           Text(
             'No notifications yet',
             style: TextStyle(
@@ -297,9 +335,9 @@ class _ClientNotificationsPageState extends State<ClientNotificationsPage> {
               color: Colors.grey[600],
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'You\'ll see updates about your bookings here',
+            "You'll see updates about your bookings here",
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),

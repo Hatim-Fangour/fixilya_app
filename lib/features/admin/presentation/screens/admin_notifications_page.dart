@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
@@ -56,8 +57,8 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  primaryGold.withValues(alpha:0.2),
-                  primaryGold.withValues(alpha:0.1),
+                  primaryGold.withValues(alpha: 0.2),
+                  primaryGold.withValues(alpha: 0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(10),
@@ -131,7 +132,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
           border: Border.all(
             color: isSelected
                 ? Colors.transparent
-                : primaryGold.withValues(alpha:0.3),
+                : primaryGold.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -140,14 +141,14 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
           children: [
             Icon(
               icon,
-              color: isSelected ? deepNavy : softWhite.withValues(alpha:0.7),
+              color: isSelected ? deepNavy : softWhite.withValues(alpha: 0.7),
               size: 18,
             ),
             SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? deepNavy : softWhite.withValues(alpha:0.7),
+                color: isSelected ? deepNavy : softWhite.withValues(alpha: 0.7),
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               ),
@@ -179,6 +180,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
         }
 
         final notifications = snapshot.data!.docs;
+        if (kDebugMode) debugPrint("notifications : ${notifications}");
 
         return ListView.builder(
           padding: EdgeInsets.all(20),
@@ -187,6 +189,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
             final notification =
                 notifications[index].data() as Map<String, dynamic>;
             final notificationId = notifications[index].id;
+            if (kDebugMode) debugPrint("notification : ${notification}");
             return _buildNotificationCard(notification, notificationId);
           },
         );
@@ -195,7 +198,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
   }
 
   Stream<QuerySnapshot> _getNotificationsStream() {
-    Query query = _firestore.collection('admin_notifications');
+    Query query = _firestore.collection("adminNotifications");
 
     switch (_selectedFilter) {
       case 'pending':
@@ -212,6 +215,8 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
         break;
     }
 
+    if (kDebugMode) debugPrint("query : ${query}");
+
     return query.orderBy('createdAt', descending: true).limit(50).snapshots();
   }
 
@@ -223,7 +228,12 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
     final title = notification['title'] ?? 'Notification';
     final message = notification['message'] ?? '';
     final isRead = notification['isRead'] ?? false;
-    final createdAt = (notification['createdAt'] as Timestamp?)?.toDate();
+    final _raw = notification['createdAt'];
+    final createdAt = _raw is Timestamp
+        ? _raw.toDate()
+        : _raw is String
+        ? DateTime.tryParse(_raw)
+        : null;
 
     Color typeColor;
     IconData typeIcon;
@@ -255,12 +265,15 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isRead
-              ? [charcoal.withValues(alpha:0.5), deepNavy.withValues(alpha:0.5)]
+              ? [
+                  charcoal.withValues(alpha: 0.5),
+                  deepNavy.withValues(alpha: 0.5),
+                ]
               : [charcoal, deepNavy],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isRead ? Colors.transparent : typeColor.withValues(alpha:0.3),
+          color: isRead ? Colors.transparent : typeColor.withValues(alpha: 0.3),
           width: isRead ? 0 : 1.5,
         ),
       ),
@@ -279,7 +292,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [typeColor, typeColor.withValues(alpha:0.7)],
+                      colors: [typeColor, typeColor.withValues(alpha: 0.7)],
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -319,7 +332,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
                       Text(
                         message,
                         style: TextStyle(
-                          color: softWhite.withValues(alpha:0.7),
+                          color: softWhite.withValues(alpha: 0.7),
                           fontSize: 13,
                           height: 1.4,
                         ),
@@ -331,7 +344,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
                         Text(
                           timeago.format(createdAt),
                           style: TextStyle(
-                            color: softWhite.withValues(alpha:0.5),
+                            color: softWhite.withValues(alpha: 0.5),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -344,7 +357,7 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
                 // Action arrow
                 Icon(
                   Icons.chevron_right,
-                  color: softWhite.withValues(alpha:0.3),
+                  color: softWhite.withValues(alpha: 0.3),
                   size: 20,
                 ),
               ],
@@ -365,15 +378,15 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  primaryGold.withValues(alpha:0.2),
-                  primaryGold.withValues(alpha:0.05),
+                  primaryGold.withValues(alpha: 0.2),
+                  primaryGold.withValues(alpha: 0.05),
                 ],
               ),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.notifications_off_outlined,
-              color: primaryGold.withValues(alpha:0.5),
+              color: primaryGold.withValues(alpha: 0.5),
               size: 60,
             ),
           ),
@@ -389,7 +402,10 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
           SizedBox(height: 8),
           Text(
             'You\'re all caught up!',
-            style: TextStyle(color: softWhite.withValues(alpha:0.6), fontSize: 14),
+            style: TextStyle(
+              color: softWhite.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
           ),
         ],
       ),
@@ -446,17 +462,16 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
   Future<void> _markAsRead(String notificationId) async {
     try {
       await _firestore
-          .collection('admin_notifications')
+          .collection('adminNotifications')
           .doc(notificationId)
           .update({'isRead': true, 'readAt': FieldValue.serverTimestamp()});
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _markAllAsRead() async {
     try {
       final unreadNotifications = await _firestore
-          .collection('admin_notifications')
+          .collection('adminNotifications')
           .where('isRead', isEqualTo: false)
           .get();
 
@@ -480,7 +495,6 @@ class _AdminNotificationsPageState extends State<AdminNotificationsPage> {
         margin: EdgeInsets.all(16),
         borderRadius: 12,
       );
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 }

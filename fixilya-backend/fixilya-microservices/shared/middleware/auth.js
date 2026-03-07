@@ -1,5 +1,10 @@
 const admin = require('../../shared/config/firebase');
+const logger = require('../../shared/utils/logger');
 
+/**
+ * Basic authentication — verifies Firebase ID token and attaches user to req.
+ * Does NOT enforce email verification (use `requireVerifiedEmail` for that).
+ */
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -12,21 +17,27 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split('Bearer ')[1];
-
-
-     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(token);
 
-     // Attach user info to request
     req.user = {
       uid: decodedToken.uid,
       email: decodedToken.email,
-      emailVerified: decodedToken.email_verified,
+      emailVerified: decodedToken.email_verified === true,
       userType: decodedToken.userType || null,
+      role: decodedToken.role || decodedToken.userType || null,
     };
 
     next();
   } catch (error) {
+    logger.error('Token verification failed:', error.code || error.message);
+
+    if (error.code === 'auth/id-token-expired') {
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired - please sign in again',
+      });
+    }
+
     return res.status(401).json({
       success: false,
       message: 'Invalid or expired token',
@@ -34,63 +45,45 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+/**
+ * Stricter authentication — verifies token AND enforces email verification.
+ * Use on protected routes where verified identity is required (bookings, payments, etc.).
+ */
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('❌ No authorization header provided');
-      throw new AppError('No token provided', 401);
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided',
+      });
     }
 
     const token = authHeader.split(' ')[1];
-
-    // Verify the token
     const decodedToken = await admin.auth().verifyIdToken(token);
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('✅ Token verified for user:', decodedToken.uid);
-    console.log('📋 Full decoded token claims:');
-    console.log(JSON.stringify(decodedToken, null, 2)); // ✅ Log everything
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    const emailVerified = decodedToken.email_verified === true;
 
-    // ✅ FIXED: Check BOTH Firebase native claim AND custom claim
-    const emailVerified = 
-      decodedToken.email_verified === true || // Firebase native claim
-      decodedToken.email_verified === true;    // Custom claim (we set this)
-    
-    console.log('📧 Email verification check:');
-    console.log('   Firebase email_verified:', decodedToken.email_verified);
-    console.log('   Custom email_verified:', decodedToken.email_verified);
-    console.log('   Final emailVerified:', emailVerified);
-
-    // ✅ RELAXED: Allow users with emailVerified OR if they just completed registration
-    // (Some endpoints like complete-profile-skip should work even if email isn't verified yet)
     if (!emailVerified) {
-      console.log('⚠️ Email not verified, but allowing request to proceed');
-      // Don't throw error - just log warning
+      return res.status(403).json({
+        success: false,
+        message: 'Email not verified. Please verify your email to continue.',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
     }
 
-    // Attach user info to request
     req.user = {
       uid: decodedToken.uid,
       email: decodedToken.email,
       userType: decodedToken.userType || 'client',
-      role: decodedToken.role || 'client',
-      emailVerified: emailVerified,
+      role: decodedToken.role || decodedToken.userType || 'client',
+      emailVerified: true,
     };
-
-    console.log('✅ User authenticated:', req.user);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     next();
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ Token verification failed');
-    console.error('Error:', error.message);
-    console.error('Code:', error.code);
-    console.error('Stack:', error.stack);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.error('Token verification failed:', error.code || error.message);
 
     if (error.code === 'auth/id-token-expired') {
       return res.status(401).json({
@@ -108,9 +101,34 @@ const verifyToken = async (req, res, next) => {
 
     return res.status(401).json({
       success: false,
-      message: error.message || 'Invalid or expired token',
+      message: 'Invalid or expired token',
     });
   }
 };
 
-module.exports = { authenticate, verifyToken };
+/**
+ * Role-based access control middleware.
+ * Usage: requireRole('admin') or requireRole('handyman', 'admin')
+ */
+const requireRole = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const userRole = req.user.role || req.user.userType;
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions',
+      });
+    }
+
+    next();
+  };
+};
+
+module.exports = { authenticate, verifyToken, requireRole };

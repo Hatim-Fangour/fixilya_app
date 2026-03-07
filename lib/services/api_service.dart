@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:fixilya_app/core/config/app_config.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -8,11 +10,7 @@ class ApiService {
 
   late final Dio _dio;
 
-  // ✅ Base URL Configuration
-  static const String _baseUrl = 'http://localhost:3001/api';
-  // For Android Emulator: 'http://10.0.2.2:3001/api'
-  // For iOS Simulator: 'http://localhost:3001/api'
-  // For Real Device: 'http://YOUR_LOCAL_IP:3001/api' (e.g., 'http://192.168.1.100:3001/api')
+  static String get _baseUrl => AppConfig.authServiceUrl;
 
   void init() {
     _dio = Dio(
@@ -38,24 +36,15 @@ class ApiService {
             options.headers['Authorization'] = 'Bearer $token';
           }
 
-          print('🌐 REQUEST[${options.method}] => ${options.path}');
+          if (kDebugMode) debugPrint('REQUEST[${options.method}] => ${options.path}');
           return handler.next(options);
         },
         onResponse: (response, handler) {
-          print('✅ RESPONSE[${response.statusCode}] => ${response.data}');
+          if (kDebugMode) debugPrint('RESPONSE[${response.statusCode}] => ${response.requestOptions.path}');
           return handler.next(response);
         },
         onError: (DioException e, handler) {
-          print('❌ ERROR[${e.response?.statusCode}] => ${e.message}');
-          
-          // ✅ Handle common errors
-          if (e.type == DioExceptionType.connectionTimeout) {
-            print('⏱️ Connection timeout');
-          } else if (e.type == DioExceptionType.receiveTimeout) {
-            print('⏱️ Receive timeout');
-          } else if (e.response?.statusCode == 401) {
-            print('🔐 Unauthorized - token expired');
-          }
+          if (kDebugMode) debugPrint('ERROR[${e.response?.statusCode}] => ${e.message}');
           
           return handler.next(e);
         },

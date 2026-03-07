@@ -1,359 +1,198 @@
-const { db } = require('../config/firebase');
-const logger = require('../utils/logger');
-const { sendNotification } = require('../services/notificationService');
+const bookingService = require('../services/booking.service');
+const audit          = require('../../../../shared/utils/auditLogger');
 
-// Create new booking
+const SVC = 'booking-service';
+
+// ─────────────────────────────────────────────
+// CREATE
+// ─────────────────────────────────────────────
+
+/** POST /api/bookings */
 exports.createBooking = async (req, res, next) => {
+  const { handymanId, providerId, handymanName, service, scheduledDate, scheduledAt, address, city } = req.body;
   try {
-    const clientId = req.user.uid;
-    const {
-      handymanId,
-      serviceType,
-      scheduledDate,
+    const result = await bookingService.createBooking(req.user.uid, req.body);
+    audit.log(SVC, 'BOOKING_CREATE', {
+      actor:     audit.actor(req),
+      bookingId: result.bookingId,
+      handymanId: handymanId || providerId,
+      handymanName,
+      service,
+      scheduledFor: scheduledDate || scheduledAt,
       address,
-      notes,
-      estimatedPrice
-    } = req.body;
-
-    // Validate required fields
-    if (!handymanId || !serviceType || !scheduledDate || !address) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields',
-      });
-    }
-
-    // Check if handyman exists and is available
-    const handymanDoc = await db.collection('handymen').doc(handymanId).get();
-    
-    if (!handymanDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        message: 'Handyman not found',
-      });
-    }
-
-    const handymanData = handymanDoc.data();
-    
-    if (!handymanData.isAvailable) {
-      return res.status(400).json({
-        success: false,
-        message: 'Handyman is not available',
-      });
-    }
-
-    // Create booking
-    const bookingData = {
-      clientId,
-      handymanId,
-      serviceType,
-      scheduledDate: new Date(scheduledDate),
-      address,
-      notes: notes || '',
-      estimatedPrice: estimatedPrice || null,
-      status: 'pending',
-      paymentStatus: 'pending',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const bookingRef = await db.collection('bookings').add(bookingData);
-
-    // Get client data for notification
-    const clientDoc = await db.collection('users').doc(clientId).get();
-    const clientData = clientDoc.data();
-
-    // Send notification to handyman
-    await sendNotification({
-      userId: handymanId,
-      type: 'new_booking',
-      title: 'New Booking Request',
-      message: `${clientData.fullName} has requested a ${serviceType} service`,
-      data: {
-        bookingId: bookingRef.id,
-        clientId,
-        serviceType,
-      },
+      city,
     });
-
-    logger.info(`Booking created: ${bookingRef.id}`);
-
-    res.status(201).json({
-      success: true,
-      message: 'Booking created successfully',
-      data: {
-        bookingId: bookingRef.id,
-        ...bookingData,
-      },
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_CREATE', err, {
+      actor:      audit.actor(req),
+      handymanId: handymanId || providerId,
+      service,
     });
-  } catch (error) {
-    next(error);
+    next(err);
   }
 };
 
-// Get all bookings for current user
-exports.getMyBookings = async (req, res, next) => {
-  try {
-    const userId = req.user.uid;
-    const { status, limit = 20, offset = 0 } = req.query;
+// ─────────────────────────────────────────────
+// READ
+// ─────────────────────────────────────────────
 
-    // Determine user type
-    const userDoc = await db.collection('users').doc(userId).get();
-    const userType = userDoc.data()?.userType;
-
-    // Build query
-    let query = db.collection('bookings');
-
-    if (userType === 'client') {
-      query = query.where('clientId', '==', userId);
-    } else if (userType === 'handyman') {
-      query = query.where('handymanId', '==', userId);
-    }
-
-    if (status) {
-      query = query.where('status', '==', status);
-    }
-
-    query = query
-      .orderBy('createdAt', 'desc')
-      .limit(parseInt(limit))
-      .offset(parseInt(offset));
-
-    const snapshot = await query.get();
-
-    const bookings = [];
-    for (const doc of snapshot.docs) {
-      const bookingData = doc.data();
-      
-      // Get client and handyman details
-      const [clientDoc, handymanDoc] = await Promise.all([
-        db.collection('users').doc(bookingData.clientId).get(),
-        db.collection('handymen').doc(bookingData.handymanId).get(),
-      ]);
-
-      bookings.push({
-        id: doc.id,
-        ...bookingData,
-        scheduledDate: bookingData.scheduledDate.toDate().toISOString(),
-        createdAt: bookingData.createdAt.toDate().toISOString(),
-        client: {
-          name: clientDoc.data()?.fullName,
-          phone: clientDoc.data()?.phone,
-        },
-        handyman: {
-          name: handymanDoc.data()?.fullName,
-          phone: handymanDoc.data()?.phone,
-          rating: handymanDoc.data()?.rating,
-        },
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        bookings,
-        total: bookings.length,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Get booking by ID
+/** GET /api/bookings/:id */
 exports.getBooking = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const userId = req.user.uid;
-
-    const bookingDoc = await db.collection('bookings').doc(id).get();
-
-    if (!bookingDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found',
-      });
-    }
-
-    const bookingData = bookingDoc.data();
-
-    // Verify user has access to this booking
-    if (bookingData.clientId !== userId && bookingData.handymanId !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied',
-      });
-    }
-
-    // Get full details
-    const [clientDoc, handymanDoc] = await Promise.all([
-      db.collection('users').doc(bookingData.clientId).get(),
-      db.collection('handymen').doc(bookingData.handymanId).get(),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        id: bookingDoc.id,
-        ...bookingData,
-        scheduledDate: bookingData.scheduledDate.toDate().toISOString(),
-        createdAt: bookingData.createdAt.toDate().toISOString(),
-        client: {
-          id: bookingData.clientId,
-          name: clientDoc.data()?.fullName,
-          phone: clientDoc.data()?.phone,
-          profilePicture: clientDoc.data()?.profilePicture,
-        },
-        handyman: {
-          id: bookingData.handymanId,
-          name: handymanDoc.data()?.fullName,
-          phone: handymanDoc.data()?.phone,
-          rating: handymanDoc.data()?.rating,
-          profilePicture: handymanDoc.data()?.profilePicture,
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+    const booking = await bookingService.getBookingById(
+      req.params.id,
+      req.user.uid,
+      req.user.role
+    );
+    res.json({ success: true, data: booking });
+  } catch (err) { next(err); }
 };
 
-// Update booking status
-exports.updateBookingStatus = async (req, res, next) => {
+/** GET /api/bookings  —  query: ?status=&page=&limit= */
+exports.listBookings = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const userId = req.user.uid;
+    const { status, page, limit } = req.query;
+    const result = await bookingService.getUserBookings(
+      req.user.uid,
+      req.user.role,
+      {
+        status,
+        page:  page  ? parseInt(page,  10) : 1,
+        limit: limit ? parseInt(limit, 10) : 20,
+      }
+    );
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+};
 
-    const validStatuses = ['pending', 'accepted', 'in_progress', 'completed', 'cancelled', 'rejected'];
-    
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status',
-      });
-    }
+// ─────────────────────────────────────────────
+// STATUS TRANSITIONS
+// ─────────────────────────────────────────────
 
-    const bookingDoc = await db.collection('bookings').doc(id).get();
-
-    if (!bookingDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found',
-      });
-    }
-
-    const bookingData = bookingDoc.data();
-
-    // Verify user has permission to update
-    const userDoc = await db.collection('users').doc(userId).get();
-    const userType = userDoc.data()?.userType;
-
-    if (userType === 'handyman' && bookingData.handymanId !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied',
-      });
-    }
-
-    if (userType === 'client' && bookingData.clientId !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied',
-      });
-    }
-
-    // Update booking
-    await db.collection('bookings').doc(id).update({
-      status,
-      updatedAt: new Date(),
-      ...(status === 'completed' && { completedDate: new Date() }),
+/** PUT /api/bookings/:id/accept  — provider only */
+exports.acceptBooking = async (req, res, next) => {
+  try {
+    const result = await bookingService.acceptBooking(
+      req.params.id, req.user.uid, req.user.role
+    );
+    audit.log(SVC, 'BOOKING_ACCEPT', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
     });
-
-    // Send notification
-    const notifyUserId = userType === 'handyman' ? bookingData.clientId : bookingData.handymanId;
-    const notifyMessage = {
-      accepted: 'Your booking has been accepted',
-      rejected: 'Your booking has been rejected',
-      in_progress: 'Your service is in progress',
-      completed: 'Your service has been completed',
-      cancelled: 'Booking has been cancelled',
-    }[status];
-
-    await sendNotification({
-      userId: notifyUserId,
-      type: 'booking_status_update',
-      title: 'Booking Update',
-      message: notifyMessage,
-      data: { bookingId: id, status },
+    res.json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_ACCEPT', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
     });
-
-    logger.info(`Booking ${id} status updated to ${status}`);
-
-    res.json({
-      success: true,
-      message: 'Booking status updated',
-      data: { status },
-    });
-  } catch (error) {
-    next(error);
+    next(err);
   }
 };
 
-// Cancel booking
+/** PUT /api/bookings/:id/decline  — provider only  |  body: { reason? } */
+exports.declineBooking = async (req, res, next) => {
+  try {
+    const result = await bookingService.declineBooking(
+      req.params.id, req.user.uid, req.user.role, req.body.reason
+    );
+    audit.log(SVC, 'BOOKING_DECLINE', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+      reason:    req.body.reason ?? null,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_DECLINE', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    next(err);
+  }
+};
+
+/** PUT /api/bookings/:id/start  — provider only */
+exports.startBooking = async (req, res, next) => {
+  try {
+    const result = await bookingService.startBooking(
+      req.params.id, req.user.uid, req.user.role
+    );
+    audit.log(SVC, 'BOOKING_START', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_START', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    next(err);
+  }
+};
+
+/** PUT /api/bookings/:id/complete  — provider only */
+exports.completeBooking = async (req, res, next) => {
+  try {
+    const result = await bookingService.completeBooking(
+      req.params.id, req.user.uid, req.user.role
+    );
+    audit.log(SVC, 'BOOKING_COMPLETE', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_COMPLETE', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    next(err);
+  }
+};
+
+/** PUT /api/bookings/:id/cancel  — client or provider  |  body: { reason? } */
 exports.cancelBooking = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const userId = req.user.uid;
-
-    const bookingDoc = await db.collection('bookings').doc(id).get();
-
-    if (!bookingDoc.exists) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found',
-      });
-    }
-
-    const bookingData = bookingDoc.data();
-
-    // Only client can cancel
-    if (bookingData.clientId !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only the client can cancel this booking',
-      });
-    }
-
-    // Can't cancel completed bookings
-    if (bookingData.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot cancel completed booking',
-      });
-    }
-
-    await db.collection('bookings').doc(id).update({
-      status: 'cancelled',
-      updatedAt: new Date(),
+    const result = await bookingService.cancelBooking(
+      req.params.id, req.user.uid, req.user.role, req.body.reason
+    );
+    audit.log(SVC, 'BOOKING_CANCEL', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+      reason:    req.body.reason ?? null,
     });
-
-    // Notify handyman
-    await sendNotification({
-      userId: bookingData.handymanId,
-      type: 'booking_cancelled',
-      title: 'Booking Cancelled',
-      message: 'A booking has been cancelled by the client',
-      data: { bookingId: id },
+    res.json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'BOOKING_CANCEL', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
     });
+    next(err);
+  }
+};
 
-    logger.info(`Booking ${id} cancelled by client ${userId}`);
+// ─────────────────────────────────────────────
+// REVIEWS
+// ─────────────────────────────────────────────
 
-    res.json({
-      success: true,
-      message: 'Booking cancelled successfully',
+/** POST /api/bookings/:id/review  — client only  |  body: { rating, comment? } */
+exports.submitReview = async (req, res, next) => {
+  try {
+    const result = await bookingService.submitReview(
+      req.params.id, req.user.uid, req.body
+    );
+    audit.log(SVC, 'REVIEW_SUBMIT', {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+      rating:    req.body.rating,
     });
-  } catch (error) {
-    next(error);
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    audit.error(SVC, 'REVIEW_SUBMIT', err, {
+      actor:     audit.actor(req),
+      bookingId: req.params.id,
+    });
+    next(err);
   }
 };

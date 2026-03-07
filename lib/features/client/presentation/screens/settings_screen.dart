@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'package:fixilya_app/services/language_service.dart';
@@ -37,7 +38,7 @@ class _ClientSettingsPageState extends State<ClientSettingsPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        print('❌ No user logged in');
+        if (kDebugMode) debugPrint('❌ No user logged in');
         setState(() => _isLoading = false);
         return;
       }
@@ -57,14 +58,14 @@ class _ClientSettingsPageState extends State<ClientSettingsPage> {
           _isLoading = false;
         });
 
-        print('✅ Settings loaded successfully');
+        if (kDebugMode) debugPrint('✅ Settings loaded successfully');
       } else {
         // Create default settings if document doesn't exist
         await _saveSettingsToFirebase();
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      print('❌ Error loading settings: $e');
+      if (kDebugMode) debugPrint('❌ Error loading settings: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -84,9 +85,9 @@ class _ClientSettingsPageState extends State<ClientSettingsPage> {
             'settingsUpdatedAt': FieldValue.serverTimestamp(),
           });
 
-      print('✅ Settings saved to Firebase');
+      if (kDebugMode) debugPrint('✅ Settings saved to Firebase');
     } catch (e) {
-      print('❌ Error saving settings: $e');
+      if (kDebugMode) debugPrint('❌ Error saving settings: $e');
 
       // Show error to user
       Get.snackbar(

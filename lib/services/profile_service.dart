@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ProfileService {
@@ -15,7 +16,7 @@ class ProfileService {
         return await _calculateClientCompletion(userId);
       }
     } catch (e) {
-      print('Error calculating completion: $e');
+      if (kDebugMode) debugPrint('Error calculating completion: $e');
       return 0;
     }
   }
@@ -127,7 +128,7 @@ class ProfileService {
 
       return {'percentage': percentage, 'missingFields': missingFields};
     } catch (e) {
-      print('Error getting completion details: $e');
+      if (kDebugMode) debugPrint('Error getting completion details: $e');
       return {'percentage': 0, 'missingFields': []};
     }
   }

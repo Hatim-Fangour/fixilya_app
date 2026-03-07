@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/guest/presentation/pages/guest_home_page.dart
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
@@ -18,7 +19,7 @@ class GuestHomePage extends StatefulWidget {
 }
 
 class _GuestHomePageState extends State<GuestHomePage> {
-  final HandymanDataService _handymanService = HandymanDataService();
+  final HandymanApiService _handymanService = HandymanApiService();
   List<Map<String, dynamic>> _allHandymen = [];
   final String _searchQuery = '';
   bool _isLoading = true;
@@ -39,10 +40,10 @@ class _GuestHomePageState extends State<GuestHomePage> {
           _isLoading = false;
         });
 
-        print('✅ Loaded ${_allHandymen.length} handymen (Guest Mode)');
+        if (kDebugMode) debugPrint('✅ Loaded ${_allHandymen.length} handymen (Guest Mode)');
       }
     } catch (e) {
-      print('❌ Error loading handymen: $e');
+      if (kDebugMode) debugPrint('❌ Error loading handymen: $e');
 
       if (mounted) {
         setState(() => _isLoading = false);

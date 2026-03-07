@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -23,7 +24,7 @@ class EmailService {
     required String bookingId,
   }) async {
     try {
-      print('📧 Sending acceptance email to: $clientEmail');
+      if (kDebugMode) debugPrint('📧 Sending acceptance email to: $clientEmail');
 
       // ✅ OPTION 1: Using Firebase Cloud Functions
       final response = await http.post(
@@ -41,7 +42,7 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        print('✅ Email sent successfully');
+        if (kDebugMode) debugPrint('✅ Email sent successfully');
 
         // Log email in Firestore
         await _logEmailSent(
@@ -52,11 +53,11 @@ class EmailService {
 
         return true;
       } else {
-        print('❌ Email send failed: ${response.statusCode}');
+        if (kDebugMode) debugPrint('❌ Email send failed: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('❌ Error sending email: $e');
+      if (kDebugMode) debugPrint('❌ Error sending email: $e');
       return false;
     }
   }
@@ -71,7 +72,7 @@ class EmailService {
     required String bookingId,
   }) async {
     try {
-      print('📧 Sending decline email to: $clientEmail');
+      if (kDebugMode) debugPrint('📧 Sending decline email to: $clientEmail');
 
       final response = await http.post(
         Uri.parse('$CLOUD_FUNCTION_URL/sendBookingDeclinedEmail'),
@@ -87,7 +88,7 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        print('✅ Email sent successfully');
+        if (kDebugMode) debugPrint('✅ Email sent successfully');
 
         await _logEmailSent(
           recipient: clientEmail,
@@ -97,11 +98,11 @@ class EmailService {
 
         return true;
       } else {
-        print('❌ Email send failed: ${response.statusCode}');
+        if (kDebugMode) debugPrint('❌ Email send failed: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('❌ Error sending email: $e');
+      if (kDebugMode) debugPrint('❌ Error sending email: $e');
       return false;
     }
   }
@@ -117,7 +118,7 @@ class EmailService {
     required String bookingId,
   }) async {
     try {
-      print('📧 Sending new request email to handyman: $handymanEmail');
+      if (kDebugMode) debugPrint('📧 Sending new request email to handyman: $handymanEmail');
 
       final response = await http.post(
         Uri.parse('$CLOUD_FUNCTION_URL/sendNewBookingRequestEmail'),
@@ -134,7 +135,7 @@ class EmailService {
       );
 
       if (response.statusCode == 200) {
-        print('✅ Email sent successfully');
+        if (kDebugMode) debugPrint('✅ Email sent successfully');
 
         await _logEmailSent(
           recipient: handymanEmail,
@@ -144,11 +145,11 @@ class EmailService {
 
         return true;
       } else {
-        print('❌ Email send failed: ${response.statusCode}');
+        if (kDebugMode) debugPrint('❌ Email send failed: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('❌ Error sending email: $e');
+      if (kDebugMode) debugPrint('❌ Error sending email: $e');
       return false;
     }
   }
@@ -168,7 +169,7 @@ class EmailService {
         'status': 'sent',
       });
     } catch (e) {
-      print('❌ Error logging email: $e');
+      if (kDebugMode) debugPrint('❌ Error logging email: $e');
     }
   }
 }

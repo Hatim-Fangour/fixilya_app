@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +23,7 @@ class LanguageService extends GetxController {
       _locale.value = Locale(languageCode);
       Get.updateLocale(_locale.value);
     } catch (e) {
-      print('Error loading language: $e');
+      if (kDebugMode) debugPrint('Error loading language: $e');
     }
   }
 
@@ -35,9 +36,9 @@ class LanguageService extends GetxController {
       _locale.value = Locale(languageCode);
       Get.updateLocale(_locale.value);
 
-      print('✅ Language changed to: $languageCode');
+      if (kDebugMode) debugPrint('✅ Language changed to: $languageCode');
     } catch (e) {
-      print('❌ Error changing language: $e');
+      if (kDebugMode) debugPrint('❌ Error changing language: $e');
     }
   }
 

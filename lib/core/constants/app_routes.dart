@@ -9,9 +9,13 @@
 /// - Deep linking support
 library;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fixilya_app/features/admin/presentation/screens/admin_home_page.dart';
 import 'package:fixilya_app/features/auth/presentation/screens/forgot_password_screen.dart';
+import 'package:fixilya_app/features/chat/presentation/screens/chat_list_screen.dart';
+import 'package:fixilya_app/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:fixilya_app/features/client/presentation/screens/client_bookings_page.dart';
+import 'package:fixilya_app/features/client/presentation/screens/handymen_map_page.dart';
 import 'package:fixilya_app/features/client/presentation/screens/favorites_page.dart';
 import 'package:fixilya_app/features/guest/presentation/screens/guest_home_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_details_page.dart';
@@ -36,6 +40,30 @@ import '../../features/client/presentation/screens/client_profile_setup.dart';
 import '../../features/client/presentation/screens/client_profile_page.dart';
 import '../../features/handyman/presentation/screens/handyman_profile_page.dart';
 import '../../views/widget_tree.dart';
+
+/// Routes that don't require authentication.
+const _publicRoutes = {
+  AppRoutes.splash,
+  AppRoutes.welcome,
+  AppRoutes.login,
+  AppRoutes.signup,
+  AppRoutes.userTypeSelection,
+  AppRoutes.forgotPassword,
+  AppRoutes.guestHome,
+};
+
+/// GetX middleware that redirects unauthenticated users to the welcome screen.
+class AuthGuard extends GetMiddleware {
+  @override
+  RouteSettings? redirect(String? route) {
+    if (_publicRoutes.contains(route)) return null;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const RouteSettings(name: AppRoutes.welcome);
+    }
+    return null;
+  }
+}
 
 class AppRoutes {
   AppRoutes._(); // Private constructor
@@ -110,6 +138,9 @@ class AppRoutes {
   // Review Routes
   static const String reviews = '/reviews';
   static const String writeReview = '/write-review';
+
+  // Map Routes
+  static const String handymenMap = '/handymen-map';
 
   // Quick Action Routes
   static const String invoices = '/invoices';
@@ -249,12 +280,14 @@ class AppRoutes {
       name: widgetTree,
       page: () => const WidgetTree(),
       transition: Transition.fadeIn,
+      middlewares: [AuthGuard()],
     ),
 
     GetPage(
       name: home,
       page: () => const WidgetTree(),
       transition: Transition.fadeIn,
+      middlewares: [AuthGuard()],
     ),
 
     // Profile Pages
@@ -316,6 +349,7 @@ class AppRoutes {
       name: admin,
       page: () => AdminDashboardPage(),
       transition: Transition.rightToLeft,
+      middlewares: [AuthGuard()],
     ),
 
     GetPage(
@@ -325,7 +359,35 @@ class AppRoutes {
     ),
     GetPage(name: AppRoutes.clientFavorites, page: () => FavoritesPage()),
     GetPage(name: clientBookings, page: () => ClientBookingsPage()),
+    GetPage(
+      name: handymenMap,
+      page: () => const HandymenMapPage(),
+      transition: Transition.rightToLeft,
+    ),
+
+    // Chat
+    GetPage(
+      name: chatList,
+      page: () => const ChatListScreen(),
+      transition: Transition.rightToLeft,
+      middlewares: [AuthGuard()],
+    ),
+    GetPage(
+      name: chatRoom,
+      page: () {
+        final args = Get.arguments as Map<String, dynamic>;
+        return ChatRoomScreen(
+          chatId: args[paramChatId] ?? '',
+          otherUserId: args[paramHandymanId] ?? args['otherUserId'] ?? '',
+          otherUserName: args['otherUserName'] ?? '',
+          otherUserPicture: args['otherUserPicture'] as String?,
+        );
+      },
+      transition: Transition.rightToLeft,
+    ),
   ];
+
+  static void toHandymenMap() => Get.toNamed(handymenMap);
 
   static void toFavorites() {
     Get.toNamed(clientFavorites);
@@ -488,20 +550,13 @@ class AppRoutes {
 
   // ==================== Route Guards ====================
 
-  /// Check if user is authenticated
-  static bool get isAuthenticated {
-    // Implement authentication check
-    // return Get.find<AuthService>().isAuthenticated;
-    return false; // Placeholder
-  }
+  /// Returns true when a Firebase user is signed in.
+  static bool get isAuthenticated =>
+      FirebaseAuth.instance.currentUser != null;
 
   /// Get initial route based on auth state
-  static String get initialRoute {
-    if (isAuthenticated) {
-      return widgetTree;
-    }
-    return welcome;
-  }
+  static String get initialRoute =>
+      isAuthenticated ? widgetTree : welcome;
 
   // ==================== Deep Linking Support ====================
 

@@ -4,9 +4,13 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
     <string>We need your location to show nearby handymen</string>
-    
+
     <key>NSLocationAlwaysUsageDescription</key>
     <string>We need your location to provide better service</string>
+
+    <!-- In-app calling (Agora RTC) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Fixilya needs microphone access to make voice calls with handymen</string>
 
 	
 	<key>CFBundleDevelopmentRegion</key>
