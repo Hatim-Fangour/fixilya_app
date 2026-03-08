@@ -22,64 +22,59 @@ class AppConfig {
   /// Returns the correct host depending on whether we're on emulator or real device.
   /// Can always be overridden via --dart-define.
   static String get _localHost {
-    // If dart-define override is provided, it takes priority (handled per-service below)
-    // Otherwise auto-detect: emulator uses 10.0.2.2, real device uses LAN IP
     return _isEmulator ? _emulatorHost : _physicalDeviceHost;
   }
 
-  /// Simple emulator detection based on known emulator model names.
+  /// Detects Android emulator. Pass --dart-define=IS_EMULATOR=true when running
+  /// on an emulator that needs to reach a local backend via 10.0.2.2.
   static bool get _isEmulator {
     try {
-      return Platform.environment['ANDROID_EMULATOR'] == 'true' ||
-          // Flutter sets this for emulators
-          const bool.fromEnvironment('IS_EMULATOR', defaultValue: false);
+      return const bool.fromEnvironment('IS_EMULATOR', defaultValue: false);
     } catch (_) {
       return false;
     }
   }
 
   // ─── Microservice URLs ─────────────────────────────────────────────────
-  // Override via --dart-define for CI/CD or staging:
-  //   flutter run --dart-define=AUTH_SERVICE_URL=https://auth.fixilya.ma/api
+  // Production (VPS + nginx gateway) — single base URL for all services:
+  //   flutter run --dart-define=API_GATEWAY_URL=https://api.fixilya.pro/api
+  //
+  // Local dev (emulator hitting PC):
+  //   flutter run --dart-define=IS_EMULATOR=true
+  //
+  // Or override a single service:
+  //   flutter run --dart-define=AUTH_SERVICE_URL=https://api.fixilya.pro/api
+
+  static const String _gateway = String.fromEnvironment(
+    'API_GATEWAY_URL',
+    defaultValue: '',
+  );
+  static bool get _useGateway => _gateway.isNotEmpty;
+
   static String get authServiceUrl =>
-      const String.fromEnvironment(
-        'AUTH_SERVICE_URL',
-        defaultValue: '',
-      ).isNotEmpty
-      ? const String.fromEnvironment('AUTH_SERVICE_URL')
-      : 'http://$_localHost:3001/api';
+      const String.fromEnvironment('AUTH_SERVICE_URL', defaultValue: '').isNotEmpty
+          ? const String.fromEnvironment('AUTH_SERVICE_URL')
+          : _useGateway ? _gateway : 'http://$_localHost:3001/api';
 
   static String get userServiceUrl =>
-      const String.fromEnvironment(
-        'USER_SERVICE_URL',
-        defaultValue: '',
-      ).isNotEmpty
-      ? const String.fromEnvironment('USER_SERVICE_URL')
-      : 'http://$_localHost:3002/api';
+      const String.fromEnvironment('USER_SERVICE_URL', defaultValue: '').isNotEmpty
+          ? const String.fromEnvironment('USER_SERVICE_URL')
+          : _useGateway ? _gateway : 'http://$_localHost:3002/api';
 
   static String get bookingServiceUrl =>
-      const String.fromEnvironment(
-        'BOOKING_SERVICE_URL',
-        defaultValue: '',
-      ).isNotEmpty
-      ? const String.fromEnvironment('BOOKING_SERVICE_URL')
-      : 'http://$_localHost:3003';
+      const String.fromEnvironment('BOOKING_SERVICE_URL', defaultValue: '').isNotEmpty
+          ? const String.fromEnvironment('BOOKING_SERVICE_URL')
+          : _useGateway ? _gateway : 'http://$_localHost:3003';
 
   static String get notificationServiceUrl =>
-      const String.fromEnvironment(
-        'NOTIFICATION_SERVICE_URL',
-        defaultValue: '',
-      ).isNotEmpty
-      ? const String.fromEnvironment('NOTIFICATION_SERVICE_URL')
-      : 'http://$_localHost:3005';
+      const String.fromEnvironment('NOTIFICATION_SERVICE_URL', defaultValue: '').isNotEmpty
+          ? const String.fromEnvironment('NOTIFICATION_SERVICE_URL')
+          : _useGateway ? _gateway : 'http://$_localHost:3005';
 
   static String get callServiceUrl =>
-      const String.fromEnvironment(
-        'CALL_SERVICE_URL',
-        defaultValue: '',
-      ).isNotEmpty
-      ? const String.fromEnvironment('CALL_SERVICE_URL')
-      : 'http://$_localHost:3007/api';
+      const String.fromEnvironment('CALL_SERVICE_URL', defaultValue: '').isNotEmpty
+          ? const String.fromEnvironment('CALL_SERVICE_URL')
+          : _useGateway ? _gateway : 'http://$_localHost:3007/api';
   // ─────────────────────────────────────────────────────────────────────────
 
   // ─── Agora RTC ───────────────────────────────────────────────────────────
