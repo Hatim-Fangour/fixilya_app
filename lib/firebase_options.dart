@@ -51,11 +51,11 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDvAkZWsSmove4nEi-UBJPFbatwHjf2vYM',
-    appId: '1:888831484326:android:8bdcde25e4a0a0d4562f67',
-    messagingSenderId: '888831484326',
-    projectId: 'fixilyaapp-10ca8',
-    storageBucket: 'fixilyaapp-10ca8.firebasestorage.app',
+    apiKey: 'AIzaSyA9EI7TjtbXrH9xZsl0V5tuW69iz1cr_7g',
+    appId: '1:353604172058:android:9de6908864555b0f2914a3',
+    messagingSenderId: '353604172058',
+    projectId: 'fixilyaappbackend',
+    storageBucket: 'fixilyaappbackend.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
