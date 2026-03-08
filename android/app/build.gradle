@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace 'com.fixilya.app'
+    namespace 'pro.fixilya.app'
     compileSdk flutter.compileSdkVersion
     ndkVersion "28.2.13676358"
 
@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.fixilya.app"
+        applicationId "pro.fixilya.app"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutter.versionCode

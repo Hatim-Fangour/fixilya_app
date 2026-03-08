@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:888831484326:android:fea84da4692f6717562f67",
         "android_client_info": {
-          "package_name": "com.fixilya.app"
+          "package_name": "com.example.android"
         }
       },
       "oauth_client": [],
@@ -48,6 +48,25 @@
         "mobilesdk_app_id": "1:888831484326:android:8123ad865032bd99562f67",
         "android_client_info": {
           "package_name": "com.fixilya.fixilya_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvAkZWsSmove4nEi-UBJPFbatwHjf2vYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:888831484326:android:8bdcde25e4a0a0d4562f67",
+        "android_client_info": {
+          "package_name": "pro.fixilya.app"
         }
       },
       "oauth_client": [],

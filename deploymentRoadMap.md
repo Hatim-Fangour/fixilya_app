@@ -272,7 +272,7 @@ docker compose ps
 
 Test the gateway is reachable:
 ```bash
-curl https://api.fixilya.ma/health
+curl https://api.fixilya.pro/health
 # Expected: {"status":"healthy","gateway":"nginx"}
 ```
 
@@ -413,12 +413,12 @@ flutter clean
 flutter pub get
 
 flutter build appbundle --release \
-  --dart-define=AUTH_SERVICE_URL=https://api.fixilya.ma/api/auth \
-  --dart-define=USER_SERVICE_URL=https://api.fixilya.ma/api/users \
-  --dart-define=BOOKING_SERVICE_URL=https://api.fixilya.ma/api/bookings \
-  --dart-define=NOTIFICATION_SERVICE_URL=https://api.fixilya.ma/api/notifications \
-  --dart-define=CALL_SERVICE_URL=https://api.fixilya.ma/api/calls \
-  --dart-define=AGORA_APP_ID=100dfbc4a86d4affbe7eaabe0808a6d8
+    --dart-define=AUTH_SERVICE_URL=https://api.fixilya.pro/api/auth \
+    --dart-define=USER_SERVICE_URL=https://api.fixilya.pro/api/users \
+    --dart-define=BOOKING_SERVICE_URL=https://api.fixilya.pro/api/bookings \
+    --dart-define=NOTIFICATION_SERVICE_URL=https://api.fixilya.pro/api/notifications \
+    --dart-define=CALL_SERVICE_URL=https://api.fixilya.pro/api/calls \
+    --dart-define=AGORA_APP_ID=100dfbc4a86d4affbe7eaabe0808a6d8
 ```
 
 Output file location:
