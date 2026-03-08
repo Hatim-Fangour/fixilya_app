@@ -145,9 +145,12 @@ class NotificationService {
 
   /// Shows a local notification when a FCM message arrives in the foreground
   /// (FCM does NOT automatically show a banner while the app is open).
+  /// Incoming call notifications use full-screen intent to appear over the lock screen.
   void _onForeground(RemoteMessage message) {
     final notification = message.notification;
     if (notification == null) return;
+
+    final isCall = (message.data['type'] as String?) == 'incoming_call';
 
     _local.show(
       message.hashCode,
@@ -161,6 +164,7 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
+          fullScreenIntent: isCall,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
