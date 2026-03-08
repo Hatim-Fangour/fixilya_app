@@ -13,7 +13,15 @@
       "Bash(grep:*)",
       "Bash(npm install:*)",
       "Bash(git:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:support.google.com)",
+      "WebSearch",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter run:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

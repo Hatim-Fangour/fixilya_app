@@ -17,10 +17,31 @@ import "package:fixilya_app/services/language_service.dart";
 import "package:fixilya_app/shared/animations/animated_theme_wrapper.dart";
 import "package:flutter/material.dart";
 import "package:flutter_localizations/flutter_localizations.dart";
+import "dart:async";
 
 import "package:get/get.dart";
 
-void main() async {
+void main() {
+  runZonedGuarded(_bootstrap, (error, stack) {
+    debugPrint('FATAL STARTUP ERROR: $error\n$stack');
+    runApp(MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.red[50],
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: SelectableText(
+              'STARTUP CRASH\n\n$error\n\n$stack',
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ),
+        ),
+      ),
+    ));
+  });
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final languageService = Get.put(LanguageService());
   // languageService.onInit();
