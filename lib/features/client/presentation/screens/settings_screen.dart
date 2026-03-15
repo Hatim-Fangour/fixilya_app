@@ -1336,18 +1336,6 @@ class _ClientSettingsPageState extends State<ClientSettingsPage> {
               ),
         onTap: () async {
           await themeController.setThemePreference(value);
-
-          Get.snackbar(
-            'Theme Updated',
-            'Switched to ${title.toLowerCase()}',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            margin: EdgeInsets.all(16),
-            borderRadius: 12,
-            duration: Duration(seconds: 2),
-            icon: Icon(Icons.check_circle, color: Colors.white),
-          );
         },
       );
     });

@@ -214,6 +214,8 @@ class ClientDataService {
         'profilePicture',
         'favoriteHandymen',
         'favoriteServices',
+        'themePreference',
+        'themeUpdatedAt',
       ];
 
       // Fields that go to users collection

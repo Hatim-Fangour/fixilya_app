@@ -17,7 +17,7 @@ flutter build apk --release
 flutter build ios --release
 
 # Backend microservices (each service independently)
-cd fixilya-backend/fixilya-microservices/services/auth-service && npm install && npm start
+cd ../fixilya-backend/fixilya-microservices/services/auth-service && npm install && npm start
 # Services: auth-service(:3001), user-service(:3002), booking-service(:3003),
 #           payment-service(:3004), notification-service(:3005), media-service(:3006)
 
@@ -45,7 +45,7 @@ Features: `auth`, `client`, `handyman`, `admin`, `booking`, `chat`, `call`, `gue
 
 **Page switching**: `WidgetTree` (`lib/views/widget_tree.dart`) uses `selectedPageNotifier` (ValueNotifier) for bottom nav page index.
 
-### Backend (fixilya-backend/fixilya-microservices/)
+### Backend (../fixilya-backend/fixilya-microservices/)
 
 Node.js/Express microservices behind Nginx gateway. Each service has `src/{app.js, controllers/, routes/, services/}`. Shared code in `shared/{middleware/, utils/, config/}`.
 

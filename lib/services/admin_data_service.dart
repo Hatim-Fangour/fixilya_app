@@ -25,7 +25,9 @@ class AdminDataService {
           .doc(user.uid)
           .get();
 
-      return adminDoc.exists && (adminDoc.data()?['isAdmin'] == true);
+      if (!adminDoc.exists) return false;
+      final data = adminDoc.data()!;
+      return data['isAdmin'] == true || data['role'] == 'admin';
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error checking admin status: $e');
       return false;
@@ -41,7 +43,11 @@ class AdminDataService {
         .collection('admins')
         .doc(user.uid)
         .snapshots()
-        .map((doc) => doc.exists && (doc.data()?['isAdmin'] == true));
+        .map((doc) {
+          if (!doc.exists) return false;
+          final data = doc.data()!;
+          return data['isAdmin'] == true || data['role'] == 'admin';
+        });
   }
 
   /// ✅ NEW: Check if a specific user is admin
@@ -49,7 +55,9 @@ class AdminDataService {
     try {
       final adminDoc = await _firestore.collection('admins').doc(userId).get();
 
-      return adminDoc.exists && (adminDoc.data()?['isAdmin'] == true);
+      if (!adminDoc.exists) return false;
+      final data = adminDoc.data()!;
+      return data['isAdmin'] == true || data['role'] == 'admin';
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error checking user admin status: $e');
       return false;

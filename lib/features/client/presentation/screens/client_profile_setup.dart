@@ -1,3 +1,6 @@
+import 'package:fixilya_app/core/config/global_variables.dart';
+import 'package:fixilya_app/services/app_config_service.dart';
+import 'package:fixilya_app/shared/widgets/dropdown_list.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:ui';
@@ -32,12 +35,15 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
   late final FirebaseImageService _firebaseImageService;
 
   // Controllers
-  final _cityController = TextEditingController();
+  final _cityController = GenericDropdownController<String>();
   final _addressController = TextEditingController();
 
   // State
   File? _profileImage;
   bool _isLoading = false;
+
+  // Dynamic data from Firestore (falls back to GlobalVariables)
+  List<String> _cities = GlobalVariables.cities.skip(1).toList();
 
   // Animation
   // Animation Controllers
@@ -57,12 +63,22 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
 
       if (kDebugMode) debugPrint('Cloud Name: ${_cloudinaryService.cloudName}');
       if (kDebugMode) debugPrint('✅ Services loaded successfully');
-      if (kDebugMode) debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
-      if (kDebugMode) debugPrint('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
+      if (kDebugMode)
+        debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode)
+        debugPrint(
+          '🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}',
+        );
     } catch (e) {
       if (kDebugMode) debugPrint('❌ ERROR: Services not found!');
       if (kDebugMode) debugPrint('Error: $e');
     }
+    // Load cities from Firestore (non-blocking)
+    AppConfigService().getCities().then((cities) {
+      if (mounted && cities.isNotEmpty) {
+        setState(() => _cities = cities);
+      }
+    });
 
     _fadeController = AnimationController(
       duration: Duration(milliseconds: 1000),
@@ -115,8 +131,9 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
 
       if (kDebugMode) debugPrint('✅ User found: ${user.uid}');
       if (kDebugMode) debugPrint('📋 Profile data:');
-      if (kDebugMode) debugPrint('   City: ${_cityController.text.trim()}');
-      if (kDebugMode) debugPrint('   Address: ${_addressController.text.trim()}');
+      // if (kDebugMode) debugPrint('   City: ${_cityController.text.trim()}');
+      if (kDebugMode)
+        debugPrint('   Address: ${_addressController.text.trim()}');
 
       // Show upload progress dialog
       Get.dialog(
@@ -168,11 +185,12 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
       // ✅ Upload profile picture to Cloudinary
       String? profileImageUrl;
 
-      if (kDebugMode) debugPrint(
-        _profileImage == null
-            ? 'ℹ️ No profile image selected'
-            : '📸 Profile image selected: ${_profileImage!.path}',
-      );
+      if (kDebugMode)
+        debugPrint(
+          _profileImage == null
+              ? 'ℹ️ No profile image selected'
+              : '📸 Profile image selected: ${_profileImage!.path}',
+        );
       if (_profileImage != null) {
         if (kDebugMode) debugPrint('📤 Uploading profile image...');
 
@@ -193,7 +211,8 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
               );
 
           if (profileImageUrl != null) {
-            if (kDebugMode) debugPrint('✅ Profile picture uploaded: $profileImageUrl');
+            if (kDebugMode)
+              debugPrint('✅ Profile picture uploaded: $profileImageUrl');
 
             // Save URL to Firebase
             await _firebaseImageService.saveProfileImageUrl(
@@ -201,9 +220,11 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
               imageUrl: profileImageUrl,
               userType: 'clients',
             );
-            if (kDebugMode) debugPrint('✅ Profile picture URL saved to Firebase');
+            if (kDebugMode)
+              debugPrint('✅ Profile picture URL saved to Firebase');
           } else {
-            if (kDebugMode) debugPrint('⚠️ Profile picture upload returned null');
+            if (kDebugMode)
+              debugPrint('⚠️ Profile picture upload returned null');
           }
         } catch (e) {
           if (kDebugMode) debugPrint('❌ Profile picture upload failed: $e');
@@ -216,7 +237,7 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
       if (kDebugMode) debugPrint('💾 Saving profile to Firestore...');
 
       final profileData = {
-        'city': _cityController.text.trim(),
+        'city': _cityController.value ?? '',
         'address': _addressController.text.trim(),
         'profilePicture': profileImageUrl ?? '',
         'profileCompleted': true,
@@ -558,17 +579,29 @@ class _ClientProfileSetupState extends State<ClientProfileSetup>
               mainAxisSize: MainAxisSize.min,
               children: [
                 // City Field
-                _buildCompactTextField(
+                // _buildCompactTextField(
+                //   controller: _cityController,
+                //   label: 'City',
+                //   hint: 'Your city',
+                //   icon: Icons.location_city_rounded,
+                //   validator: (value) {
+                //     if (value == null || value.isEmpty) {
+                //       return 'Required';
+                //     }
+                //     return null;
+                //   },
+                // ),
+                GenericDropdown<String>(
                   controller: _cityController,
+                  items: _cities,
                   label: 'City',
-                  hint: 'Your city',
-                  icon: Icons.location_city_rounded,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Required';
-                    }
-                    return null;
+                  hint: 'Select your city',
+                  itemLabel: (city) => city,
+                  onChanged: (value) {
+                    if (kDebugMode) debugPrint('Selected: $value');
                   },
+                  validator: (value) =>
+                      value == null ? 'Please select a city' : null,
                 ),
 
                 SizedBox(height: 16),

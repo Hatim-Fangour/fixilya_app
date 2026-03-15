@@ -49,3 +49,13 @@ account :handyman
 
  C:\Users\Windows\OneDrive\Bureau\fixilya_app\lib\features\handyman\presentation\screens\handyman_notifications_page.dart the notifications when i accept or decline from home page, but i still have the te
   accept and decline button in notification page, it should not be that
+
+flutter run --dart-define=API_GATEWAY_URL=https://api.fixilya.pro/api
+flutter run --dart-define=IS_EMULATOR=true
+
+from all the test you did, make testPlan to do it manualy with the action, expected result, and the actual resual that i should fill by my self, make section, handyman, client, calls, booking,
+  notification, admin, you find other testplan file merge it with what you are going to give me
+
+
+  + after changing the profile page in handyman setting page and go back to profile page the profile picture should be updated automatiqualy and instantly without reloading the data
+  + in  handyman home page, reviews section, the see all should not be shoen if there is no reviews

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:fixilya_app/features/admin/presentation/screens/admin_analytics_page.dart';
+import 'package:fixilya_app/features/admin/presentation/screens/admin_config_page.dart';
 import 'package:fixilya_app/features/admin/presentation/screens/admin_notifications_page.dart';
 import 'package:fixilya_app/features/admin/presentation/screens/admin_user_management_page.dart';
 import 'package:fixilya_app/services/admin_data_service.dart';
@@ -76,8 +77,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
     // ✅ Start auto-refresh every 30 seconds
     _startAutoRefresh();
-    _tabController = TabController(length: 5, vsync: this);
-    _checkAdminAccess();
+    _tabController = TabController(length: 6, vsync: this);
+    // Defer until after first frame so GetMaterialApp navigator is mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAdminAccess());
   }
 
   @override
@@ -277,53 +279,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
-  // Widget _buildLoadingState() {
-  //   return Center(
-  //     child: Column(
-  //       mainAxisAlignment: MainAxisAlignment.center,
-  //       children: [
-  //         Container(
-  //           width: 80,
-  //           height: 80,
-  //           decoration: BoxDecoration(
-  //             shape: BoxShape.circle,
-  //             gradient: RadialGradient(
-  //               colors: [
-  //                 primaryGold.withValues(alpha: 0.3),
-  //                 Colors.transparent,
-  //               ],
-  //             ),
-  //           ),
-  //           child: Center(
-  //             child: CircularProgressIndicator(
-  //               valueColor: AlwaysStoppedAnimation<Color>(primaryGold),
-  //               strokeWidth: 3,
-  //             ),
-  //           ),
-  //         ),
-  //         SizedBox(height: 32),
-  //         Text(
-  //           'Loading Dashboard',
-  //           style: TextStyle(
-  //             color: softWhite,
-  //             fontSize: 18,
-  //             fontWeight: FontWeight.w600,
-  //             letterSpacing: 0.5,
-  //           ),
-  //         ),
-  //         SizedBox(height: 8),
-  //         Text(
-  //           'Fetching real-time data...',
-  //           style: TextStyle(
-  //             color: softWhite.withValues(alpha: 0.6),
-  //             fontSize: 14,
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
+  
   Widget _buildDashboard() {
     return CustomScrollView(
       slivers: [
@@ -694,6 +650,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           Tab(text: 'HANDYMEN'),
           Tab(text: 'CLIENTS'),
           Tab(text: 'ACTIVITY'),
+          Tab(text: 'CONFIG'),
         ],
       ),
     );
@@ -701,7 +658,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   Widget _buildTabContent() {
     return SizedBox(
-      height: 500,
+      height: 700,
       child: TabBarView(
         controller: _tabController,
         children: [
@@ -710,6 +667,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           _buildHandymenTab(),
           _buildClientsTab(),
           _buildActivityTab(),
+          const AdminConfigPage(),
         ],
       ),
     );

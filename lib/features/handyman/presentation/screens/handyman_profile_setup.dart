@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/services/app_config_service.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/services/admin_notification_service.dart';
 import 'package:fixilya_app/services/api_client.dart';
@@ -41,6 +42,11 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
   List<File> _workImages = [];
   final List<Map<String, dynamic>> _selectedSkills = [];
   bool _isLoading = false;
+
+  // Dynamic data from Firestore (falls back to GlobalVariables)
+  List<String> _cities = GlobalVariables.cities.skip(1).toList();
+  List<Map<String, dynamic>> _availableSkills =
+      GlobalVariables.availableSkills.skip(1).toList();
   bool _isDetectingCity = false;
   int _currentStep = 0;
   static const double _maxStepWidth = 500.0;
@@ -71,12 +77,27 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
 
       if (kDebugMode) debugPrint('Cloud Name: ${_cloudinaryService.cloudName}');
       if (kDebugMode) debugPrint('✅ Services loaded successfully');
-      if (kDebugMode) debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
-      if (kDebugMode) debugPrint('🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}');
+      if (kDebugMode)
+        debugPrint('🔍 Cloudinary Cloud Name: ${_cloudinaryService.cloudName}');
+      if (kDebugMode)
+        debugPrint(
+          '🔍 Cloudinary Upload Preset: ${_cloudinaryService.uploadPreset}',
+        );
     } catch (e) {
       if (kDebugMode) debugPrint('❌ ERROR: Services not found!');
       if (kDebugMode) debugPrint('Error: $e');
     }
+    // Load cities and skills from Firestore (non-blocking; UI updates when ready)
+    AppConfigService().getCities().then((cities) {
+      if (mounted && cities.isNotEmpty) {
+        setState(() => _cities = cities);
+      }
+    });
+    AppConfigService().getSkills().then((skills) {
+      if (mounted && skills.isNotEmpty) {
+        setState(() => _availableSkills = skills);
+      }
+    });
     _fadeController = AnimationController(
       duration: Duration(milliseconds: 1000),
       vsync: this,
@@ -302,7 +323,8 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           );
 
           if (profilePictureUrl != null) {
-            if (kDebugMode) debugPrint('✅ Profile picture uploaded to Cloudinary');
+            if (kDebugMode)
+              debugPrint('✅ Profile picture uploaded to Cloudinary');
             if (kDebugMode) debugPrint('🔗 URL: $profilePictureUrl');
 
             if (mounted) {
@@ -337,9 +359,10 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
           );
 
           if (workImageUrls.isNotEmpty) {
-            if (kDebugMode) debugPrint(
-              '✅ ${workImageUrls.length} work images uploaded to Cloudinary',
-            );
+            if (kDebugMode)
+              debugPrint(
+                '✅ ${workImageUrls.length} work images uploaded to Cloudinary',
+              );
             if (kDebugMode) debugPrint('🔗 URLs: $workImageUrls');
 
             if (mounted) {
@@ -382,7 +405,6 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         }; 
         */
 
-
       // ✅ Close dialog
       if (Get.isDialogOpen ?? false) {
         Get.back();
@@ -398,8 +420,10 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
         // final isNewUser = result['isNewUser'] ?? false;
 
         if (kDebugMode) debugPrint('✅ Profile setup complete!');
-        if (kDebugMode) debugPrint('   Profile Picture: ${profilePictureUrl ?? "None"}');
-        if (kDebugMode) debugPrint('   Work Images: ${workImageUrls.length} images');
+        if (kDebugMode)
+          debugPrint('   Profile Picture: ${profilePictureUrl ?? "None"}');
+        if (kDebugMode)
+          debugPrint('   Work Images: ${workImageUrls.length} images');
         // print(
         //   '   New User: ${isNewUser ? "Yes - Admin notified" : "No - Update only"}',
         // );
@@ -885,7 +909,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                     Expanded(
                       child: GenericDropdown<String>(
                         controller: _cityController,
-                        items: GlobalVariables.cities.skip(1).toList(),
+                        items: _cities,
                         label: 'City',
                         hint: 'Select your city',
                         itemLabel: (city) => city,
@@ -896,6 +920,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                             value == null ? 'Please select a city' : null,
                       ),
                     ),
+
                     SizedBox(width: 8),
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -1101,9 +1126,7 @@ class _HandymanProfileSetupState extends State<HandymanProfileSetup>
                   spacing: 10,
                   runSpacing: 8,
                   alignment: WrapAlignment.center,
-                  children: GlobalVariables.availableSkills
-                      .skip(1)
-                      .toList()
+                  children: _availableSkills
                       .map((skill) {
                         final isSelected = _selectedSkills.any(
                           (s) => s['name'] == skill['name'],

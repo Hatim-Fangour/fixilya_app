@@ -90,11 +90,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   font_awesome_flutter: ^10.7.0
 
-# Pin google_maps_flutter_android to the last version before the
-# PlatformMarkerType regression (introduced in 2.14.0) which causes a
-# NullPointerException crash when adding markers on Android.
+# 2.14.2 implements updateGroundOverlays() (required by google_maps_flutter 2.14.x)
+# and also patches the PlatformMarkerType NullPointerException from 2.14.0.
 dependency_overrides:
-  google_maps_flutter_android: 2.13.0
+  google_maps_flutter_android: 2.14.2
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

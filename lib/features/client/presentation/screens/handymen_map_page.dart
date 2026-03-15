@@ -325,7 +325,22 @@ class _HandymenMapPageState extends State<HandymenMapPage> {
 
   // ─── Details popup ──────────────────────────────────────────────────────────
 
-  void _showHandymanDetails(Map<String, dynamic> handyman) {
+  Future<bool> _hasConfirmedBooking(String handymanId) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return false;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('bookings')
+        .where('clientId', isEqualTo: currentUser.uid)
+        .where('handymanId', isEqualTo: handymanId)
+        .where('status', whereIn: ['confirmed', 'in_progress'])
+        .limit(1)
+        .get();
+
+    return snapshot.docs.isNotEmpty;
+  }
+
+  Future<void> _showHandymanDetails(Map<String, dynamic> handyman) async {
     final String? imageUrl = handyman['profilePicture'] as String?;
     final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
     final String name = handyman['fullName'] as String? ?? 'Handyman';
@@ -337,6 +352,11 @@ class _HandymenMapPageState extends State<HandymenMapPage> {
     final String? phone = handyman['phoneNumber'] as String?;
     final bool isAvailable = handyman['isAvailable'] as bool? ?? false;
     final bool isCityLevel = handyman['isCityLevel'] == true;
+
+    final handymanId = (handyman['uid'] ?? handyman['id']) as String? ?? '';
+    final bool canCall = await _hasConfirmedBooking(handymanId);
+
+    if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -525,19 +545,21 @@ class _HandymenMapPageState extends State<HandymenMapPage> {
               ),
             ],
 
-            // Action buttons row: Call | Book | Navigate
+            // Action buttons row: Call (if confirmed booking) | Book | Navigate
             Row(
               children: [
-                // Call
-                Expanded(
-                  child: _ActionButton(
-                    icon: Icons.phone_rounded,
-                    label: 'Call',
-                    color: Colors.green,
-                    onTap: () => _startCall(sheetCtx, handyman),
+                // Call — only visible when a confirmed/in-progress booking exists
+                if (canCall) ...[
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.phone_rounded,
+                      label: 'Call',
+                      color: Colors.green,
+                      onTap: () => _startCall(sheetCtx, handyman),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
+                  const SizedBox(width: 10),
+                ],
 
                 // Book
                 Expanded(

@@ -21,7 +21,16 @@
       "Bash(flutter clean:*)",
       "Bash(flutter pub:*)",
       "Bash(flutter run:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "WebFetch(domain:orangeoma.zendesk.com)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "Bash(curl:*)",
+      "Read(//c/Users/Windows/OneDrive/Bureau/Fixilya project/app/fixilya-backend/fixilya-microservices/**)",
+      "Read(//c/Users/Windows/OneDrive/Bureau/Fixilya project/app/fixilya-backend/**)",
+      "Bash(netstat:*)",
+      "Bash(flutter:*)",
+      "Bash(ipconfig:*)"
     ]
   }
 }

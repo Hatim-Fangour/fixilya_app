@@ -122,6 +122,8 @@ class AuthController extends GetxController {
         if (userType == 'handyman') {
           Get.offAllNamed('/handyman-home');
         } else {
+          // client and admin both land on client-home;
+          // admin badge in the header provides access to /admin
           Get.offAllNamed('/client-home');
         }
 

@@ -9,7 +9,7 @@ class AppConfig {
   static const int appBuildNumber = 1;
 
   // API Configuration
-  static const String apiBaseUrl = 'https://api.fixilya.ma';
+  static const String apiBaseUrl = 'https://api.fixilya.pro';
   static const String apiVersion = 'v1';
   static const Duration apiTimeout = Duration(seconds: 30);
 
@@ -17,7 +17,7 @@ class AppConfig {
   // 10.0.2.2  = Android emulator loopback to PC
   // YOUR_IP   = Physical device on same WiFi (change this to your PC's IP)
   static const String _emulatorHost = '10.0.2.2';
-  static const String _physicalDeviceHost = '192.168.1.16'; // ← YOUR PC IP HERE
+  static const String _physicalDeviceHost = '192.168.1.10'; // ← YOUR PC IP HERE
 
   /// Returns the correct host depending on whether we're on emulator or real device.
   /// Can always be overridden via --dart-define.

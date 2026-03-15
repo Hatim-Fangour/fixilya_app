@@ -17,12 +17,24 @@ import "package:fixilya_app/services/language_service.dart";
 import "package:fixilya_app/shared/animations/animated_theme_wrapper.dart";
 import "package:flutter/material.dart";
 import "package:flutter_localizations/flutter_localizations.dart";
-import "dart:async";
+import "package:flutter/foundation.dart";
 
 import "package:get/get.dart";
 
-void main() {
-  runZonedGuarded(_bootstrap, (error, stack) {
+void main() async {
+  // ensureInitialized and ALL runApp calls must be in the same zone.
+  // Using async main (no runZonedGuarded) eliminates zone mismatch entirely.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Catch unhandled async platform errors without creating a new zone.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled platform error: $error\n$stack');
+    return true;
+  };
+
+  try {
+    await _bootstrap();
+  } catch (error, stack) {
     debugPrint('FATAL STARTUP ERROR: $error\n$stack');
     runApp(MaterialApp(
       home: Scaffold(
@@ -38,13 +50,10 @@ void main() {
         ),
       ),
     ));
-  });
+  }
 }
 
 Future<void> _bootstrap() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // final languageService = Get.put(LanguageService());
-  // languageService.onInit();
 
   await LocalStorageService().init();
   await LocalStorageService().migrateDarkModeToThemePreference();

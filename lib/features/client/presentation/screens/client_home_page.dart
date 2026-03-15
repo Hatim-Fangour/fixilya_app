@@ -1,5 +1,6 @@
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/services/app_config_service.dart';
 import 'package:fixilya_app/features/call/presentation/widgets/call_listener.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/features/handyman/presentation/widgets/handyman_card.dart';
@@ -29,6 +30,11 @@ class _ClientHomePageState extends State<ClientHomePage>
   // ─── State ───────────────────────────────────
   List<Map<String, dynamic>> _allHandymen = [];
   bool _isLoading = true;
+  bool _isAdmin = false;
+
+  List<String> _cities = GlobalVariables.cities;
+  List<Map<String, dynamic>> _availableSkills =
+      GlobalVariables.availableSkills;
 
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -45,7 +51,23 @@ class _ClientHomePageState extends State<ClientHomePage>
         .where('read', isEqualTo: false)
         .snapshots()
         .map((snap) => snap.docs.length);
+    _checkIsAdmin();
     _loadHandymen();
+    _loadConfig();
+  }
+
+  void _loadConfig() {
+    AppConfigService().getCities().then((list) {
+      if (mounted && list.isNotEmpty) {
+        setState(() => _cities = ['All Cities', ...list]);
+      }
+    });
+    AppConfigService().getSkills().then((list) {
+      if (mounted && list.isNotEmpty) {
+        final allEntry = GlobalVariables.availableSkills.first;
+        setState(() => _availableSkills = [allEntry, ...list]);
+      }
+    });
   }
 
   @override
@@ -57,6 +79,16 @@ class _ClientHomePageState extends State<ClientHomePage>
   // ─────────────────────────────────────────────
   // DATA
   // ─────────────────────────────────────────────
+
+  Future<void> _checkIsAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final token = await user.getIdTokenResult();
+    final userType = token.claims?['userType'] as String?;
+    if (mounted && userType == 'admin') {
+      setState(() => _isAdmin = true);
+    }
+  }
 
   Future<void> _loadHandymen() async {
     setState(() => _isLoading = true);
@@ -203,6 +235,25 @@ class _ClientHomePageState extends State<ClientHomePage>
                       ),
                     ),
                   ),
+                  if (_isAdmin) ...[
+                    SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => AppRoutes.toAdmin(),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceColor(context).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.admin_panel_settings_outlined,
+                          color: AppColors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ],
                   SizedBox(width: 8),
                   // ✅ SSE live notification badge
                   _buildNotificationBadge(),
@@ -404,7 +455,7 @@ class _ClientHomePageState extends State<ClientHomePage>
               size: 12,
               color: AppColors.grey600,
             ),
-            items: GlobalVariables.cities.map((c) {
+            items: _cities.map((c) {
               return DropdownMenuItem(value: c, child: Text(c));
             }).toList(),
             onChanged: (v) => setState(() => GlobalVariables.selectedCity = v!),
@@ -448,7 +499,7 @@ class _ClientHomePageState extends State<ClientHomePage>
               size: 12,
               color: AppColors.grey600,
             ),
-            items: GlobalVariables.availableSkills.map((cat) {
+            items: _availableSkills.map((cat) {
               return DropdownMenuItem<String>(
                 value: cat['name'],
                 child: Row(

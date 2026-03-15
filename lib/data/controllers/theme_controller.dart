@@ -1,6 +1,7 @@
 // lib/data/controllers/theme_controller.dart
 import 'package:fixilya_app/services/local_storage_service.dart';
 import 'package:fixilya_app/services/handyman_data_service.dart';
+import 'package:fixilya_app/services/client_data_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
@@ -11,6 +12,7 @@ enum ThemePreference { light, dark, system }
 class ThemeController extends GetxController {
   final _localStorage = LocalStorageService();
   final _handymanDataService = HandymanApiService();
+  final _clientDataService = ClientDataService();
   final _auth = FirebaseAuth.instance;
 
   final _themePreference = ThemePreference.system.obs;
@@ -154,11 +156,19 @@ class ThemeController extends GetxController {
     await _localStorage.setThemePreference(preference.name);
 
     try {
-      await _handymanDataService.updateHandymanProfile({
+      final idTokenResult = await user.getIdTokenResult();
+      final userType = idTokenResult.claims?['userType'] as String?;
+      final themeData = {
         'themePreference': preference.name,
         'themeUpdatedAt': DateTime.now().toIso8601String(),
-      });
-      debugPrint('✅ Theme saved to Firestore: ${preference.name}');
+      };
+
+      if (userType == 'handyman') {
+        await _handymanDataService.updateHandymanProfile(themeData);
+      } else {
+        await _clientDataService.updateClientProfile(themeData);
+      }
+      debugPrint('✅ Theme saved to DB ($userType): ${preference.name}');
     } catch (e) {
       debugPrint('❌ Error saving theme: $e');
     }

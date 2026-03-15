@@ -167,7 +167,10 @@ class _ClientProfilePageState extends State<ClientProfilePage>
         });
 
         // Load secondary data without blocking the main UI
-        await Future.wait([_loadFavoriteServices(), _loadLocationSharePreference()]);
+        await Future.wait([
+          _loadFavoriteServices(),
+          _loadLocationSharePreference(),
+        ]);
       } else {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -766,6 +769,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               label: 'Email',
                               icon: Icons.email_outlined,
                               initialValue: _email,
+                              readOnly: true,
                               keyboardType: TextInputType.emailAddress,
                               onSaved: (v) => _email = v!,
                             ),
@@ -833,7 +837,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                               child: Padding(
                                 padding: EdgeInsets.all(24),
                                 child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation(AppColors.primaryColor),
+                                  valueColor: AlwaysStoppedAnimation(
+                                    AppColors.primaryColor,
+                                  ),
                                   strokeWidth: 2,
                                 ),
                               ),
@@ -848,15 +854,21 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                           }
                           return Column(
                             children: docs.map((doc) {
-                              final b = {'id': doc.id, ...(doc.data() as Map<String, dynamic>)};
+                              final b = {
+                                'id': doc.id,
+                                ...(doc.data() as Map<String, dynamic>),
+                              };
                               return Padding(
                                 padding: EdgeInsets.only(bottom: 12),
                                 child: _buildBookingCard(
-                                  handymanName: b['handymanName'] ?? 'Unknown Handyman',
+                                  handymanName:
+                                      b['handymanName'] ?? 'Unknown Handyman',
                                   service: b['service'] ?? 'Service',
                                   date: _formatDate(b['createdAt']),
                                   status: b['status'] ?? 'pending',
-                                  statusColor: _getStatusColor(b['status'] ?? 'pending'),
+                                  statusColor: _getStatusColor(
+                                    b['status'] ?? 'pending',
+                                  ),
                                   rating: (b['rating'] as num?)?.toDouble(),
                                   onTap: () => _showBookingDetails(b),
                                 ),
@@ -1237,7 +1249,10 @@ class _ClientProfilePageState extends State<ClientProfilePage>
           ],
         ),
         child: SwitchListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 8,
+          ),
           title: Text(
             'Share my location when a booking is accepted',
             style: TextStyle(
@@ -1279,7 +1294,10 @@ class _ClientProfilePageState extends State<ClientProfilePage>
             final uid = FirebaseAuth.instance.currentUser?.uid;
             if (uid != null) {
               try {
-                await _locationPrivacyService.setClientSharePreference(uid, value);
+                await _locationPrivacyService.setClientSharePreference(
+                  uid,
+                  value,
+                );
               } catch (_) {
                 setState(() => _shareLocationOnBooking = !value);
                 Get.snackbar(
@@ -1371,6 +1389,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
     required IconData icon,
     required String initialValue,
     TextInputType? keyboardType,
+    bool readOnly = false,
     required Function(String?) onSaved,
   }) {
     return Row(
@@ -1390,7 +1409,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
         ),
         SizedBox(width: 14),
         Expanded(
-          child: _isEditing
+          child: _isEditing && !readOnly
               ? TextFormField(
                   initialValue: initialValue,
                   keyboardType: keyboardType,
@@ -1526,128 +1545,128 @@ class _ClientProfilePageState extends State<ClientProfilePage>
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderColor(context)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primaryColor.withValues(alpha: 0.15),
-                      AppColors.secondaryColor.withValues(alpha: 0.1),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.handyman,
-                  color: AppColors.primaryColor,
-                  size: 24,
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      handymanName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: AppColors.textPrimaryColor(context),
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      service,
-                      style: TextStyle(
-                        color: AppColors.textSecondaryColor(context),
-                        fontSize: 13,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today,
-                          size: 12,
-                          color: AppColors.textSecondaryColor(context),
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          date,
-                          style: TextStyle(
-                            color: AppColors.textSecondaryColor(context),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.cardColor(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.borderColor(context)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
             ],
           ),
-          if (rating != null) ...[
-            SizedBox(height: 12),
-            Divider(height: 1, color: AppColors.dividerColor(context)),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                ...List.generate(
-                  5,
-                  (i) => Icon(
-                    i < rating.floor() ? Icons.star : Icons.star_border,
-                    color: Color(0xFFFFB800),
-                    size: 18,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primaryColor.withValues(alpha: 0.15),
+                          AppColors.secondaryColor.withValues(alpha: 0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.handyman,
+                      color: AppColors.primaryColor,
+                      size: 24,
+                    ),
                   ),
-                ),
-                SizedBox(width: 8),
-                Text(
-                  rating.toStringAsFixed(1),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: AppColors.textSecondaryColor(context),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          handymanName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: AppColors.textPrimaryColor(context),
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          service,
+                          style: TextStyle(
+                            color: AppColors.textSecondaryColor(context),
+                            fontSize: 13,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              size: 12,
+                              color: AppColors.textSecondaryColor(context),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              date,
+                              style: TextStyle(
+                                color: AppColors.textSecondaryColor(context),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (rating != null) ...[
+                SizedBox(height: 12),
+                Divider(height: 1, color: AppColors.dividerColor(context)),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    ...List.generate(
+                      5,
+                      (i) => Icon(
+                        i < rating.floor() ? Icons.star : Icons.star_border,
+                        color: Color(0xFFFFB800),
+                        size: 18,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      rating.toStringAsFixed(1),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: AppColors.textSecondaryColor(context),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-        ],
-      ),
-    ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1732,7 +1751,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: _getStatusColor(booking['status'] ?? 'pending'),
+                            color: _getStatusColor(
+                              booking['status'] ?? 'pending',
+                            ),
                           ),
                         ),
                       ),
@@ -1748,7 +1769,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                     _buildDetailRow('City', booking['city'] ?? 'N/A'),
                     _buildDetailRow(
                       'Scheduled Date',
-                      _formatDate(booking['scheduledAt'] ?? booking['scheduledDate']),
+                      _formatDate(
+                        booking['scheduledAt'] ?? booking['scheduledDate'],
+                      ),
                     ),
                     _buildDetailRow(
                       'Booked At',
@@ -1764,9 +1787,12 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                         'Declined At',
                         _formatDate(booking['declinedAt']),
                       ),
-                    if ((booking['declineReason'] ?? booking['cancellationReason']) != null)
+                    if ((booking['declineReason'] ??
+                            booking['cancellationReason']) !=
+                        null)
                       _buildDeclineReasonCard(
-                        booking['declineReason'] ?? booking['cancellationReason'],
+                        booking['declineReason'] ??
+                            booking['cancellationReason'],
                       ),
                     if (booking['description'] != null &&
                         (booking['description'] as String).isNotEmpty) ...[
@@ -1826,10 +1852,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
                 SizedBox(height: 4),
                 Text(
                   reason,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.red.shade800,
-                  ),
+                  style: TextStyle(fontSize: 13, color: Colors.red.shade800),
                 ),
               ],
             ),
@@ -1981,38 +2004,404 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   );
 
   void _showLogoutDialog() {
-    showDialog(
+    showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to logout from your account?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+      barrierLabel: 'Logout',
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      transitionDuration: Duration(milliseconds: 500),
+      pageBuilder: (context, animation1, animation2) => Container(),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: Offset(0, 0.3), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.85, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+            ),
+            child: FadeTransition(
+              opacity: animation,
+              child: Center(
+                child: Container(
+                  margin: EdgeInsets.symmetric(horizontal: 24),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(32),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(32),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 60,
+                              spreadRadius: 10,
+                              offset: Offset(0, 30),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Animated Gradient Circle
+                                TweenAnimationBuilder(
+                                  tween: Tween<double>(begin: 0, end: 1),
+                                  duration: Duration(milliseconds: 800),
+                                  curve: Curves.elasticOut,
+                                  builder: (context, double value, child) =>
+                                      Transform.scale(
+                                        scale: value,
+                                        child: Container(
+                                          width: 100,
+                                          height: 100,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                              colors: [
+                                                Color(0xFFFF6B6B),
+                                                Color(0xFFEE5A6F),
+                                                Color(0xFFC06C84),
+                                              ],
+                                            ),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.red.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                                blurRadius: 30,
+                                                offset: Offset(0, 15),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Icon(
+                                            Icons.power_settings_new_rounded,
+                                            color: Colors.white,
+                                            size: 48,
+                                          ),
+                                        ),
+                                      ),
+                                ),
+
+                                SizedBox(height: 28),
+
+                                // Title with gradient
+                                ShaderMask(
+                                  shaderCallback: (bounds) => LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF6B6B),
+                                      Color(0xFFC06C84),
+                                    ],
+                                  ).createShader(bounds),
+                                  child: Text(
+                                    'Logout Account',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: 14),
+
+                                Text(
+                                  'You\'re about to end this session',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+
+                                SizedBox(height: 8),
+
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    'Are you sure you want to logout from your account?',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[700],
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: 32),
+
+                                Row(
+                                  children: [
+                                    // Stay Button
+                                    Expanded(
+                                      child: Container(
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              AppColors.primaryColor.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                              AppColors.secondaryColor
+                                                  .withValues(alpha: 0.05),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                          border: Border.all(
+                                            color: AppColors.primaryColor
+                                                .withValues(alpha: 0.3),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                            onTap: () => Get.back(),
+                                            child: Center(
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.close_rounded,
+                                                    color:
+                                                        AppColors.primaryColor,
+                                                    size: 22,
+                                                  ),
+                                                  SizedBox(width: 8),
+                                                  Text(
+                                                    'Stay',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: AppColors
+                                                          .primaryColor,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    SizedBox(width: 14),
+
+                                    // Logout Button
+                                    Expanded(
+                                      flex: 2,
+                                      child: Container(
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors:
+                                                AppColors.logoutButtonGradient,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Color(
+                                                0xFFFF6B6B,
+                                              ).withValues(alpha: 0.5),
+                                              blurRadius: 20,
+                                              offset: Offset(0, 10),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                            onTap: () async {
+                                              try {
+                                                Get.back();
+                                                Get.dialog(
+                                                  WillPopScope(
+                                                    onWillPop: () async =>
+                                                        false,
+                                                    child: Center(
+                                                      child: Container(
+                                                        padding: EdgeInsets.all(
+                                                          24,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                20,
+                                                              ),
+                                                        ),
+                                                        child: Column(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            CircularProgressIndicator(
+                                                              valueColor:
+                                                                  AlwaysStoppedAnimation<
+                                                                    Color
+                                                                  >(
+                                                                    AppColors
+                                                                        .primaryColor,
+                                                                  ),
+                                                            ),
+                                                            SizedBox(
+                                                              height: 20,
+                                                            ),
+                                                            Text(
+                                                              'Logging out...',
+                                                              style: TextStyle(
+                                                                fontSize: 16,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: Colors
+                                                                    .black87,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  barrierDismissible: false,
+                                                );
+
+                                                await AuthService().signOut();
+
+                                                if (kDebugMode)
+                                                  debugPrint(
+                                                    '✅ Logout successful',
+                                                  );
+
+                                                if (Get.isDialogOpen ?? false)
+                                                  Get.back();
+
+                                                AppRoutes.toWelcome();
+
+                                                // Get.snackbar(
+                                                //   'Success',
+                                                //   'You have been logged out successfully',
+                                                //   snackPosition:
+                                                //       SnackPosition.BOTTOM,
+                                                //   backgroundColor: Colors.green,
+                                                //   colorText: Colors.white,
+                                                //   duration:
+                                                //       Duration(seconds: 2),
+                                                //   margin: EdgeInsets.all(16),
+                                                //   borderRadius: 12,
+                                                //   icon: Icon(
+                                                //     Icons.check_circle,
+                                                //     color: Colors.white,
+                                                //   ),
+                                                // );
+                                              } catch (e) {
+                                                if (kDebugMode)
+                                                  debugPrint(
+                                                    '❌ Logout error: $e',
+                                                  );
+
+                                                if (Get.isDialogOpen ?? false)
+                                                  Get.back();
+
+                                                Get.snackbar(
+                                                  'Error',
+                                                  'Logout failed: ${e.toString()}',
+                                                  snackPosition:
+                                                      SnackPosition.BOTTOM,
+                                                  backgroundColor: Colors.red,
+                                                  colorText: Colors.white,
+                                                  duration: Duration(
+                                                    seconds: 3,
+                                                  ),
+                                                  margin: EdgeInsets.all(16),
+                                                  borderRadius: 12,
+                                                  icon: Icon(
+                                                    Icons.error_outline,
+                                                    color: Colors.white,
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: Center(
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.logout_rounded,
+                                                    color: AppColors.white,
+                                                    size: 22,
+                                                  ),
+                                                  SizedBox(width: 10),
+                                                  Text(
+                                                    'Logout Now',
+                                                    style: TextStyle(
+                                                      fontSize: 17,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      color: AppColors.white,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                await AuthService().signOut();
-                AppRoutes.toWelcome();
-              } catch (e) {
-                Get.snackbar(
-                  'Error',
-                  'Logout failed: ${e.toString()}',
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Logout', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

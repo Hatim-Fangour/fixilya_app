@@ -12,10 +12,41 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 // Handyman Card Widget
-class HandymanCard extends StatelessWidget {
+class HandymanCard extends StatefulWidget {
   final Map<String, dynamic> job;
 
   const HandymanCard({super.key, required this.job});
+
+  @override
+  State<HandymanCard> createState() => _HandymanCardState();
+}
+
+class _HandymanCardState extends State<HandymanCard> {
+  late final Future<bool> _hasConfirmedBooking;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasConfirmedBooking = _checkConfirmedBooking();
+  }
+
+  Future<bool> _checkConfirmedBooking() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return false;
+
+    final handymanId = widget.job['uid'] as String?;
+    if (handymanId == null || handymanId.isEmpty) return false;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('bookings')
+        .where('clientId', isEqualTo: currentUser.uid)
+        .where('handymanId', isEqualTo: handymanId)
+        .where('status', whereIn: ['confirmed', 'in_progress'])
+        .limit(1)
+        .get();
+
+    return snapshot.docs.isNotEmpty;
+  }
 
   // ─── In-app voice call ───────────────────────────────────────────────────
 
@@ -28,8 +59,8 @@ class HandymanCard extends StatelessWidget {
       return;
     }
 
-    if (kDebugMode) debugPrint("job : ${job}");
-    final handymanId = job['uid'] as String?;
+    if (kDebugMode) debugPrint("job : ${widget.job}");
+    final handymanId = widget.job['uid'] as String?;
 
     if (handymanId == null || handymanId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -55,8 +86,8 @@ class HandymanCard extends StatelessWidget {
       }
     } catch (_) {}
 
-    final handymanName = job['fullName'] as String? ?? 'Handyman';
-    final handymanPicture = job['profilePicture'] as String?;
+    final handymanName = widget.job['fullName'] as String? ?? 'Handyman';
+    final handymanPicture = widget.job['profilePicture'] as String?;
 
     // Show loading while Firestore doc is created
     if (!context.mounted) return;
@@ -110,6 +141,7 @@ class HandymanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final job = widget.job;
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(2),
@@ -320,26 +352,36 @@ class HandymanCard extends StatelessWidget {
 
                   Spacer(),
 
-                  // In-app Call button
-                  Container(
-                    height: 34,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: AppColors.infoColor(context),
-                        width: 1,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: IconButton(
-                      onPressed: () => _startCall(context),
-                      icon: FaIcon(FontAwesomeIcons.phone, size: 14),
-                      color: AppColors.infoColor(context),
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      constraints: BoxConstraints(),
-                    ),
+                  // Call button — only shown when a confirmed/in-progress booking exists
+                  FutureBuilder<bool>(
+                    future: _hasConfirmedBooking,
+                    builder: (context, snapshot) {
+                      if (snapshot.data != true) return const SizedBox.shrink();
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            height: 34,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: AppColors.infoColor(context),
+                                width: 1,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: IconButton(
+                              onPressed: () => _startCall(context),
+                              icon: FaIcon(FontAwesomeIcons.phone, size: 14),
+                              color: AppColors.infoColor(context),
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              constraints: BoxConstraints(),
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                        ],
+                      );
+                    },
                   ),
-
-                  SizedBox(width: 6),
 
                   Container(
                     height: 34,
@@ -393,8 +435,8 @@ class HandymanCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatarFallback(String name) {
-    String initial = name.isNotEmpty ? name[0].toUpperCase() : 'H';
+  Widget _buildAvatarFallback(String? name) {
+    final String initial = (name != null && name.isNotEmpty) ? name[0].toUpperCase() : 'H';
 
     return Center(
       child: Text(

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
@@ -53,6 +54,13 @@ class AuthService {
       _log('Full Name: $fullName');
       _log('Phone: $phone');
       _log('User Type: $userType');
+      final fbOptions = Firebase.app().options;
+      _log('🔥 Firebase Config:');
+      _log('   projectId:         ${fbOptions.projectId}');
+      _log('   apiKey:            ${fbOptions.apiKey}');
+      _log('   appId:             ${fbOptions.appId}');
+      _log('   messagingSenderId: ${fbOptions.messagingSenderId}');
+      _log('   storageBucket:     ${fbOptions.storageBucket}');
 
       // ✅ Check network connectivity first
       try {

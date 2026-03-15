@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:fixilya_app/core/config/global_variables.dart';
+import 'package:fixilya_app/services/app_config_service.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/l10n/app_localizations.dart';
@@ -96,6 +97,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
 
   // Skills
   List<Map<String, dynamic>> skills = [];
+  // Available skills loaded from backend config (falls back to GlobalVariables)
+  List<Map<String, dynamic>> _availableSkills =
+      GlobalVariables.availableSkills.skip(1).toList();
 
   // Previous work
   List<Map<String, dynamic>> previousWork = [];
@@ -165,6 +169,11 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     Future.delayed(Duration(milliseconds: 500), () {
       _loadProfileData();
     });
+
+    // Load available skills from backend config (non-blocking)
+    AppConfigService().getSkills().then((list) {
+      if (mounted && list.isNotEmpty) setState(() => _availableSkills = list);
+    });
     // _checkAdminStatus();
   }
 
@@ -211,7 +220,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     if (_phone.isNotEmpty) completedFields++;
     if (_city.isNotEmpty) completedFields++;
     if (_experience.isNotEmpty) completedFields++;
-    if (_hourlyRate > 0) completedFields++;
+    // if (_hourlyRate > 0) completedFields++;
     if (_bio.isNotEmpty && _bio.length >= 20) completedFields++;
     if (skills.isNotEmpty) completedFields++;
     if (_profileData?['profilePicture']?.toString().isNotEmpty ?? false) {
@@ -935,39 +944,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     );
   }
 
-  // void _showEditPriceDialog(Map<String, dynamic> skill) {
-  //   final priceController = TextEditingController(
-  //     text: skill['price'].toString(),
-  //   );
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: Text('Edit Price - ${skill['name']}'),
-  //       content: TextField(
-  //         controller: priceController,
-  //         keyboardType: TextInputType.number,
-  //         decoration: InputDecoration(
-  //           labelText: 'Hourly Rate (DH)',
-  //           suffixText: 'DH/hour',
-  //         ),
-  //       ),
-  //       actions: [
-  //         TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
-  //         ElevatedButton(
-  //           onPressed: () {
-  //             final newPrice = int.tryParse(priceController.text);
-  //             if (newPrice != null && newPrice > 0) {
-  //               setState(() => skill['price'] = newPrice);
-  //               Get.back();
-  //             }
-  //           },
-  //           child: Text('Save'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
+  
 
   void _showAddProjectDialog() {
     // Explicit types prevent the Map<String, dynamic> → Map<String, String> cast crash.
@@ -1504,489 +1481,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
     );
   }
 
-  // ✨ LUXURY TEXT FIELD WIDGET
-
-  // Widget _buildLuxuryTextField({
-  //   required TextEditingController controller,
-  //   required String label,
-  //   required String hint,
-  //   required IconData icon,
-  //   bool isRequired = false,
-  //   int maxLines = 1,
-  //   bool readOnly = false,
-  //   VoidCallback? onTap,
-  // }) {
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       Row(
-  //         children: [
-  //           Text(
-  //             label,
-  //             style: TextStyle(
-  //               fontSize: 14,
-  //               fontWeight: FontWeight.w600,
-  //               color: Colors.black87,
-  //               letterSpacing: 0.3,
-  //             ),
-  //           ),
-  //           if (isRequired) ...[
-  //             SizedBox(width: 4),
-  //             Text(
-  //               '*',
-  //               style: TextStyle(
-  //                 color: Colors.red,
-  //                 fontSize: 14,
-  //                 fontWeight: FontWeight.bold,
-  //               ),
-  //             ),
-  //           ],
-  //         ],
-  //       ),
-  //       SizedBox(height: 8),
-  //       Container(
-  //         decoration: BoxDecoration(
-  //           borderRadius: BorderRadius.circular(14),
-  //           boxShadow: [
-  //             BoxShadow(
-  //               color: Colors.black.withValues(alpha: 0.04),
-  //               blurRadius: 10,
-  //               offset: Offset(0, 4),
-  //             ),
-  //           ],
-  //         ),
-  //         child: TextField(
-  //           controller: controller,
-  //           maxLines: maxLines,
-  //           readOnly: readOnly,
-  //           onTap: onTap,
-  //           style: TextStyle(
-  //             fontSize: 15,
-  //             fontWeight: FontWeight.w500,
-  //             color: Colors.black87,
-  //           ),
-  //           decoration: InputDecoration(
-  //             hintText: hint,
-  //             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-  //             prefixIcon: Container(
-  //               margin: EdgeInsets.all(12),
-  //               padding: EdgeInsets.all(8),
-  //               decoration: BoxDecoration(
-  //                 gradient: LinearGradient(
-  //                   colors: [
-  //                     AppColors.primaryColor.withValues(alpha: 0.1),
-  //                     AppColors.secondaryColor.withValues(alpha: 0.1),
-  //                   ],
-  //                 ),
-  //                 borderRadius: BorderRadius.circular(10),
-  //               ),
-  //               child: Icon(icon, color: AppColors.primaryColor, size: 20),
-  //             ),
-  //             filled: true,
-  //             fillColor: Colors.white,
-  //             border: OutlineInputBorder(
-  //               borderRadius: BorderRadius.circular(14),
-  //               borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
-  //             ),
-  //             enabledBorder: OutlineInputBorder(
-  //               borderRadius: BorderRadius.circular(14),
-  //               borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5),
-  //             ),
-  //             focusedBorder: OutlineInputBorder(
-  //               borderRadius: BorderRadius.circular(14),
-  //               borderSide: BorderSide(color: AppColors.primaryColor, width: 2),
-  //             ),
-  //             contentPadding: EdgeInsets.symmetric(
-  //               horizontal: 16,
-  //               vertical: maxLines > 1 ? 16 : 14,
-  //             ),
-  //           ),
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
-
-  // String _getMonthName(int month) {
-  //   const months = [
-  //     'Jan',
-  //     'Feb',
-  //     'Mar',
-  //     'Apr',
-  //     'May',
-  //     'Jun',
-  //     'Jul',
-  //     'Aug',
-  //     'Sep',
-  //     'Oct',
-  //     'Nov',
-  //     'Dec',
-  //   ];
-  //   return months[month - 1];
-  // }
-
-  // void _showEditProjectDialog(Map<String, dynamic> work) {
-  //   final titleController = TextEditingController(text: work['title']);
-  //   final clientController = TextEditingController(text: work['client']);
-  //   final dateController = TextEditingController(text: work['date']);
-  //   final descriptionController = TextEditingController(
-  //     text: work['description'],
-  //   );
-  //   String currentImageUrl = work['image'] ?? '';
-  //   String? newImageUrl;
-  //   bool isUploading = false;
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => StatefulBuilder(
-  //       builder: (context, setDialogState) {
-  //         return AlertDialog(
-  //           shape: RoundedRectangleBorder(
-  //             borderRadius: BorderRadius.circular(20),
-  //           ),
-  //           title: Row(
-  //             children: [
-  //               Container(
-  //                 padding: EdgeInsets.all(8),
-  //                 decoration: BoxDecoration(
-  //                   gradient: LinearGradient(
-  //                     colors: [
-  //                       AppColors.primaryColor,
-  //                       AppColors.secondaryColor,
-  //                     ],
-  //                   ),
-  //                   borderRadius: BorderRadius.circular(10),
-  //                 ),
-  //                 child: Icon(Icons.edit, color: Colors.white, size: 20),
-  //               ),
-  //               SizedBox(width: 12),
-  //               Text('Edit Project', style: TextStyle(fontSize: 18)),
-  //             ],
-  //           ),
-  //           content: SingleChildScrollView(
-  //             child: Column(
-  //               mainAxisSize: MainAxisSize.min,
-  //               children: [
-  //                 // Image Display/Change
-  //                 Stack(
-  //                   children: [
-  //                     Container(
-  //                       height: 150,
-  //                       decoration: BoxDecoration(
-  //                         borderRadius: BorderRadius.circular(12),
-  //                       ),
-  //                       child: ClipRRect(
-  //                         borderRadius: BorderRadius.circular(12),
-  //                         child: currentImageUrl.isNotEmpty
-  //                             ? Image.network(
-  //                                 currentImageUrl,
-  //                                 fit: BoxFit.cover,
-  //                                 width: double.infinity,
-  //                               )
-  //                             : Container(
-  //                                 color: Colors.grey[200],
-  //                                 child: Icon(Icons.image, size: 48),
-  //                               ),
-  //                       ),
-  //                     ),
-  //                     Positioned(
-  //                       bottom: 8,
-  //                       right: 8,
-  //                       child: Container(
-  //                         decoration: BoxDecoration(
-  //                           color: Colors.white,
-  //                           shape: BoxShape.circle,
-  //                           boxShadow: [
-  //                             BoxShadow(
-  //                               color: Colors.black.withValues(alpha: 0.2),
-  //                               blurRadius: 8,
-  //                             ),
-  //                           ],
-  //                         ),
-  //                         child: IconButton(
-  //                           icon: Icon(
-  //                             Icons.camera_alt,
-  //                             color: AppColors.primaryColor,
-  //                           ),
-  //                           onPressed: isUploading
-  //                               ? null
-  //                               : () async {
-  //                                   final ImagePicker picker = ImagePicker();
-  //                                   final XFile? image = await picker.pickImage(
-  //                                     source: ImageSource.gallery,
-  //                                     imageQuality: 80,
-  //                                   );
-
-  //                                   if (image != null) {
-  //                                     setDialogState(() => isUploading = true);
-
-  //                                     try {
-  //                                       final cloudinaryService =
-  //                                           Get.find<CloudinaryService>();
-  //                                       final imageUrl = await cloudinaryService
-  //                                           .uploadImage(
-  //                                             imageFile: File(image.path),
-  //                                             folder: 'portfolio',
-  //                                           );
-
-  //                                       setDialogState(() {
-  //                                         newImageUrl = imageUrl ?? '';
-  //                                         currentImageUrl = imageUrl ?? '';
-  //                                         isUploading = false;
-  //                                       });
-
-  //                                       ScaffoldMessenger.of(
-  //                                         context,
-  //                                       ).showSnackBar(
-  //                                         SnackBar(
-  //                                           content: Text('Image updated!'),
-  //                                           backgroundColor: Colors.green,
-  //                                         ),
-  //                                       );
-  //                                     } catch (e) {
-  //                                       setDialogState(
-  //                                         () => isUploading = false,
-  //                                       );
-  //                                       ScaffoldMessenger.of(
-  //                                         context,
-  //                                       ).showSnackBar(
-  //                                         SnackBar(
-  //                                           content: Text(
-  //                                             'Failed to upload image',
-  //                                           ),
-  //                                           backgroundColor: Colors.red,
-  //                                         ),
-  //                                       );
-  //                                     }
-  //                                   }
-  //                                 },
-  //                         ),
-  //                       ),
-  //                     ),
-  //                     if (isUploading)
-  //                       Positioned.fill(
-  //                         child: Container(
-  //                           decoration: BoxDecoration(
-  //                             color: Colors.black.withValues(alpha: 0.5),
-  //                             borderRadius: BorderRadius.circular(12),
-  //                           ),
-  //                           child: Center(
-  //                             child: CircularProgressIndicator(
-  //                               valueColor: AlwaysStoppedAnimation<Color>(
-  //                                 Colors.white,
-  //                               ),
-  //                             ),
-  //                           ),
-  //                         ),
-  //                       ),
-  //                   ],
-  //                 ),
-  //                 SizedBox(height: 16),
-
-  //                 // Same fields as Add dialog
-  //                 TextField(
-  //                   controller: titleController,
-  //                   decoration: InputDecoration(
-  //                     labelText: 'Project Title',
-  //                     prefixIcon: Icon(
-  //                       Icons.title,
-  //                       color: AppColors.primaryColor,
-  //                     ),
-  //                     border: OutlineInputBorder(
-  //                       borderRadius: BorderRadius.circular(12),
-  //                     ),
-  //                   ),
-  //                 ),
-  //                 SizedBox(height: 12),
-
-  //                 TextField(
-  //                   controller: clientController,
-  //                   decoration: InputDecoration(
-  //                     labelText: 'Client Name',
-  //                     prefixIcon: Icon(
-  //                       Icons.person,
-  //                       color: AppColors.primaryColor,
-  //                     ),
-  //                     border: OutlineInputBorder(
-  //                       borderRadius: BorderRadius.circular(12),
-  //                     ),
-  //                   ),
-  //                 ),
-  //                 SizedBox(height: 12),
-
-  //                 TextField(
-  //                   controller: dateController,
-  //                   decoration: InputDecoration(
-  //                     labelText: 'Date',
-  //                     prefixIcon: Icon(
-  //                       Icons.calendar_today,
-  //                       color: AppColors.primaryColor,
-  //                     ),
-  //                     border: OutlineInputBorder(
-  //                       borderRadius: BorderRadius.circular(12),
-  //                     ),
-  //                   ),
-  //                   onTap: () async {
-  //                     final DateTime? picked = await showDatePicker(
-  //                       context: context,
-  //                       initialDate: DateTime.now(),
-  //                       firstDate: DateTime(2020),
-  //                       lastDate: DateTime.now(),
-  //                     );
-  //                     if (picked != null) {
-  //                       dateController.text =
-  //                           '${_getMonthName(picked.month)} ${picked.day}, ${picked.year}';
-  //                     }
-  //                   },
-  //                 ),
-  //                 SizedBox(height: 12),
-
-  //                 TextField(
-  //                   controller: descriptionController,
-  //                   maxLines: 3,
-  //                   decoration: InputDecoration(
-  //                     labelText: 'Description (Optional)',
-  //                     prefixIcon: Icon(
-  //                       Icons.description,
-  //                       color: AppColors.primaryColor,
-  //                     ),
-  //                     border: OutlineInputBorder(
-  //                       borderRadius: BorderRadius.circular(12),
-  //                     ),
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //           actions: [
-  //             TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
-  //             ElevatedButton(
-  //               onPressed: isUploading
-  //                   ? null
-  //                   : () {
-  //                       if (titleController.text.trim().isEmpty ||
-  //                           clientController.text.trim().isEmpty ||
-  //                           dateController.text.trim().isEmpty) {
-  //                         ScaffoldMessenger.of(context).showSnackBar(
-  //                           SnackBar(
-  //                             content: Text('Please fill all required fields'),
-  //                             backgroundColor: Colors.orange,
-  //                           ),
-  //                         );
-  //                         return;
-  //                       }
-
-  //                       // Update the project
-  //                       setState(() {
-  //                         work['title'] = titleController.text.trim();
-  //                         work['client'] = clientController.text.trim();
-  //                         work['date'] = dateController.text.trim();
-  //                         work['description'] = descriptionController.text
-  //                             .trim();
-  //                         if (newImageUrl != null) {
-  //                           work['image'] = newImageUrl!;
-  //                         }
-  //                       });
-
-  //                       Get.back();
-
-  //                       ScaffoldMessenger.of(context).showSnackBar(
-  //                         SnackBar(
-  //                           content: Text('Project updated successfully!'),
-  //                           backgroundColor: Colors.green,
-  //                         ),
-  //                       );
-  //                     },
-  //               style: ElevatedButton.styleFrom(
-  //                 backgroundColor: AppColors.primaryColor,
-  //                 shape: RoundedRectangleBorder(
-  //                   borderRadius: BorderRadius.circular(12),
-  //                 ),
-  //               ),
-  //               child: Text('Save Changes'),
-  //             ),
-  //           ],
-  //         );
-  //       },
-  //     ),
-  //   );
-  // }
-
-  // void _showDeleteProjectDialog(Map<String, dynamic> work) {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-  //       title: Row(
-  //         children: [
-  //           Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-  //           SizedBox(width: 12),
-  //           Text('Delete Project?'),
-  //         ],
-  //       ),
-  //       content: Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         children: [
-  //           Text('Are you sure you want to delete this project?'),
-  //           SizedBox(height: 12),
-  //           Container(
-  //             padding: EdgeInsets.all(12),
-  //             decoration: BoxDecoration(
-  //               color: Colors.grey[100],
-  //               borderRadius: BorderRadius.circular(10),
-  //             ),
-  //             child: Column(
-  //               crossAxisAlignment: CrossAxisAlignment.start,
-  //               children: [
-  //                 Text(
-  //                   work['title'] ?? 'Untitled',
-  //                   style: TextStyle(fontWeight: FontWeight.bold),
-  //                 ),
-  //                 SizedBox(height: 4),
-  //                 Text(
-  //                   'Client: ${work['client']}',
-  //                   style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //           SizedBox(height: 12),
-  //           Text(
-  //             'This action cannot be undone.',
-  //             style: TextStyle(fontSize: 12, color: Colors.red),
-  //           ),
-  //         ],
-  //       ),
-  //       actions: [
-  //         TextButton(onPressed: () => Get.back(), child: Text('Cancel')),
-  //         ElevatedButton(
-  //           onPressed: () {
-  //             setState(() {
-  //               previousWork.remove(work);
-  //             });
-
-  //             Get.back();
-
-  //             ScaffoldMessenger.of(context).showSnackBar(
-  //               SnackBar(
-  //                 content: Text('Project deleted'),
-  //                 backgroundColor: Colors.red,
-  //               ),
-  //             );
-  //           },
-  //           style: ElevatedButton.styleFrom(
-  //             backgroundColor: Colors.red,
-  //             shape: RoundedRectangleBorder(
-  //               borderRadius: BorderRadius.circular(12),
-  //             ),
-  //           ),
-  //           child: Text('Delete'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
+  
 
   void _showImageFullScreen(String imageUrl) {
     showDialog(
@@ -3982,10 +3477,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
                         spacing: 10,
                         runSpacing: 10,
                         alignment: WrapAlignment.center,
-                        children: GlobalVariables.availableSkills
-                            .skip(1)
-                            .toList()
-                            .map((skill) {
+                        children: _availableSkills.map((skill) {
                               final isSelected = tempSelectedSkills.any(
                                 (s) => s['name'] == skill['name'],
                               );

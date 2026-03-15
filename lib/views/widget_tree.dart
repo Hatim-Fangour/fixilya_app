@@ -89,7 +89,7 @@ class _WidgetTreeState extends State<WidgetTree> {
       // 3. Cache the resolved user type for next app start
       await _cache.cacheString(DataPersistenceService.keyUserType, resolvedType);
 
-      // 4. Update UI if type changed or if we were still loading
+      // 4. Update UI if type changed or still loading
       if (_userType != resolvedType || _isLoading) {
         setState(() {
           _userType = resolvedType;
@@ -143,10 +143,12 @@ class _WidgetTreeState extends State<WidgetTree> {
 
   // Pages based on resolved user type
   List<Widget> get _pages {
-    if (_userType == 'client') {
-      return [const ClientHomePage(), ClientProfilePage()];
+    if (_userType == 'handyman') {
+      return [const HandymanHomePage(), HandymanProfilePage()];
     }
-    return [const HandymanHomePage(), HandymanProfilePage()];
+    // client and admin both use the client layout as a fallback
+    // (admins should be routed to /admin directly and not reach WidgetTree)
+    return [const ClientHomePage(), ClientProfilePage()];
   }
 
   @override

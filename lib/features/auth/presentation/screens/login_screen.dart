@@ -109,17 +109,17 @@ class _LoginScreenState extends State<LoginScreen>
 
         if (mounted) {
           // Show success message
-          Get.snackbar(
-            'Success',
-            'Welcome back!',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-            margin: EdgeInsets.all(16),
-            borderRadius: 12,
-            icon: Icon(Icons.check_circle, color: Colors.white),
-          );
+          // Get.snackbar(
+          //   'Success',
+          //   'Welcome back!',
+          //   snackPosition: SnackPosition.BOTTOM,
+          //   backgroundColor: Colors.green,
+          //   colorText: Colors.white,
+          //   duration: Duration(seconds: 2),
+          //   margin: EdgeInsets.all(16),
+          //   borderRadius: 12,
+          //   icon: Icon(Icons.check_circle, color: Colors.white),
+          // );
 
           // Navigate to home using GetX
           // This will clear the navigation stack and go to WidgetTree
