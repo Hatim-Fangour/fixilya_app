@@ -119,7 +119,7 @@ class _NavBarWidgetState extends State<NavBarWidget>
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: primaryColor.withOpacity(0.3),
+                      color: primaryColor.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: Offset(0, 4),
                     ),

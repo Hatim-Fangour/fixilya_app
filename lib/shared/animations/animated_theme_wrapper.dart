@@ -15,7 +15,7 @@ class AnimatedThemeWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final lightTheme = ThemeData(
       brightness: Brightness.light,
-      scaffoldBackgroundColor: AppColors.primaryColor,
+      scaffoldBackgroundColor: const Color(0xFFFAFAFA),
       colorScheme: const ColorScheme.light(primary: AppColors.secondaryColor),
       appBarTheme: const AppBarTheme(
         iconTheme: IconThemeData(color: Colors.black),

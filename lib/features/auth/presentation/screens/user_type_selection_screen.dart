@@ -96,7 +96,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
@@ -122,7 +122,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
               'Choose your account type',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha:0.9),
                 letterSpacing: 0.3,
               ),
             ),
@@ -201,7 +201,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primaryColor.withOpacity(0.3),
+                                color: AppColors.primaryColor.withValues(alpha:0.3),
                                 blurRadius: 20,
                                 offset: Offset(0, 10),
                               ),
@@ -299,7 +299,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryColor.withOpacity(0.05)
+              ? AppColors.primaryColor.withValues(alpha:0.05)
               : AppColors.backgroundColor(context),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -311,8 +311,8 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? AppColors.primaryColor.withOpacity(0.2)
-                  : Colors.black.withOpacity(0.03),
+                  ? AppColors.primaryColor.withValues(alpha:0.2)
+                  : Colors.black.withValues(alpha:0.03),
               blurRadius: isSelected ? 15 : 5,
               offset: Offset(0, isSelected ? 6 : 2),
             ),
@@ -327,7 +327,7 @@ class _UserTypeSelectionScreenState extends State<UserTypeSelectionScreen>
               decoration: BoxDecoration(
                 color: isSelected
                     ? AppColors.primaryColor
-                    : AppColors.primaryColor.withOpacity(0.1),
+                    : AppColors.primaryColor.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: FaIcon(

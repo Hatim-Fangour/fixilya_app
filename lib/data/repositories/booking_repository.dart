@@ -49,19 +49,44 @@ class BookingRepository {
     return snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)).toList();
   }
 
-  // Get upcoming bookings
+  /// Get upcoming bookings for a user (as client or handyman).
+  ///
+  /// Firestore does not support OR queries across different fields in a single
+  /// query, so we issue two separate queries (clientId and handymanId) and
+  /// merge the results, deduplicating by booking id.
   Future<List<BookingModel>> getUpcomingBookings(String userId) async {
     final now = DateTime.now();
-    final snapshot = await _firestore
+
+    // Query bookings where the user is the client
+    final clientSnapshot = await _firestore
         .collection(_collection)
+        .where('clientId', isEqualTo: userId)
         .where('scheduledDate', isGreaterThan: now.toIso8601String())
         .where('status', whereIn: ['pending', 'confirmed'])
         .get();
 
-    return snapshot.docs
-        .map((doc) => BookingModel.fromFirestore(doc))
-        .where((b) => b.clientId == userId || b.handymanId == userId)
-        .toList();
+    // Query bookings where the user is the handyman
+    final handymanSnapshot = await _firestore
+        .collection(_collection)
+        .where('handymanId', isEqualTo: userId)
+        .where('scheduledDate', isGreaterThan: now.toIso8601String())
+        .where('status', whereIn: ['pending', 'confirmed'])
+        .get();
+
+    // Merge and deduplicate by document id
+    final seen = <String>{};
+    final results = <BookingModel>[];
+
+    for (final doc in [...clientSnapshot.docs, ...handymanSnapshot.docs]) {
+      if (seen.add(doc.id)) {
+        results.add(BookingModel.fromFirestore(doc));
+      }
+    }
+
+    // Sort by scheduled date ascending (nearest first)
+    results.sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
+
+    return results;
   }
 
   // Cancel booking

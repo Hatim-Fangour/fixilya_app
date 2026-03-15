@@ -159,7 +159,7 @@ class BookingModel {
   // ==================== Conversion Methods ====================
 
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'clientId': clientId,
       'handymanId': handymanId,
@@ -194,6 +194,9 @@ class BookingModel {
       'updatedAt': updatedAt.toIso8601String(),
       'metadata': metadata,
     };
+    // Remove null fields to keep Firestore documents clean
+    map.removeWhere((key, value) => value == null);
+    return map;
   }
 
   Map<String, dynamic> toFirestore() {

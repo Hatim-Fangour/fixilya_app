@@ -28,17 +28,13 @@ class _SignUpScreenState extends State<SignUpScreen>
   late Animation<Offset> _slideAnimation;
 
   // Controllers
-  final _nameController = TextEditingController(text: 'handy Hatim');
-  final _emailController = TextEditingController(
-    text: 'ing.hatim.fangour@gmail.com',
-  );
-  final _phoneController = TextEditingController(text: '+212666666666');
-  final _passwordController = TextEditingController(text: '123ewq');
-  final _confirmPasswordController = TextEditingController(
-    text: '123ewq',
-  ); // ✅ NEW
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
-  bool _agreePersonalData = true;
+  bool _agreePersonalData = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true; // ✅ NEW

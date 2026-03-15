@@ -14,8 +14,11 @@ library;
 
 import 'package:flutter/material.dart';
 
-class AppColors {
-  AppColors._(); // Private constructor to prevent instantiation
+/// Theme-level color definitions and helper methods.
+/// NOTE: The primary theme-aware AppColors class is in app_colors.dart.
+/// This class provides additional color constants used by ThemeData builders.
+class AppThemeColors {
+  AppThemeColors._(); // Private constructor to prevent instantiation
 
   // ==================== Primary Colors ====================
 
@@ -273,3 +276,11 @@ class AppColors {
     return null;
   }
 }
+
+/// MIGRATION NOTE: The duplicate `AppColors` class that was in this file has
+/// been renamed to [AppThemeColors] to resolve the conflict with the primary
+/// theme-aware `AppColors` class in app_colors.dart.
+///
+/// If your code imported app_theme.dart to use `AppColors`, update it to
+/// import app_colors.dart instead, or use `AppThemeColors` for the constants
+/// defined here.

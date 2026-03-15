@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReviewModel {
   final String id;
@@ -42,16 +43,23 @@ class ReviewModel {
       isVerified: json['isVerified'] ?? false,
       handymanResponse: json['handymanResponse'],
       respondedAt: json['respondedAt'] != null
-          ? DateTime.parse(json['respondedAt'])
+          ? _parseDateTime(json['respondedAt'])
           : null,
       helpfulCount: json['helpfulCount'] ?? 0,
-      createdAt: DateTime.parse(
-        json['createdAt'] ?? DateTime.now().toIso8601String(),
-      ),
-      updatedAt: DateTime.parse(
-        json['updatedAt'] ?? DateTime.now().toIso8601String(),
-      ),
+      createdAt: _parseDateTime(json['createdAt']),
+      updatedAt: _parseDateTime(json['updatedAt']),
     );
+  }
+
+  /// Safely parse DateTime from Firestore Timestamp, ISO string, or null.
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   Map<String, dynamic> toJson() => {

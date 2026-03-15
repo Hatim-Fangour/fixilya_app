@@ -2,6 +2,7 @@
 /// Utility functions for formatting, converting, and common operations
 ///
 library;
+import 'dart:math';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -68,18 +69,21 @@ class Helpers {
   // ==================== Date/Time Formatting ====================
 
   /// Format date to readable string (e.g., "Jan 15, 2026")
-  static String formatDate(DateTime date) {
-    return DateFormat('MMM d, y').format(date);
+  /// Accepts an optional [locale] for locale-aware formatting (e.g., 'fr', 'ar').
+  static String formatDate(DateTime date, [String? locale]) {
+    return DateFormat('MMM d, y', locale).format(date);
   }
 
   /// Format time (e.g., "10:30 AM")
-  static String formatTime(DateTime time) {
-    return DateFormat('h:mm a').format(time);
+  /// Accepts an optional [locale] for locale-aware formatting.
+  static String formatTime(DateTime time, [String? locale]) {
+    return DateFormat('h:mm a', locale).format(time);
   }
 
   /// Format date and time
-  static String formatDateTime(DateTime dateTime) {
-    return DateFormat('MMM d, y \'at\' h:mm a').format(dateTime);
+  /// Accepts an optional [locale] for locale-aware formatting.
+  static String formatDateTime(DateTime dateTime, [String? locale]) {
+    return DateFormat('MMM d, y \'at\' h:mm a', locale).format(dateTime);
   }
 
   /// Format relative time (e.g., "2 hours ago")
@@ -123,12 +127,17 @@ class Helpers {
   // ==================== Phone Formatting ====================
 
   /// Format phone number (Moroccan style)
+  /// Returns the original string if it does not match expected Moroccan lengths.
   static String formatPhoneNumber(String phone) {
     final cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
 
-    if (cleaned.startsWith('+212')) {
+    // Moroccan international format: +212 X XX XX XX XX (13 chars with +)
+    if (cleaned.startsWith('+212') && cleaned.length >= 13) {
       return '+212 ${cleaned.substring(4, 5)} ${cleaned.substring(5, 7)} ${cleaned.substring(7, 9)} ${cleaned.substring(9, 11)} ${cleaned.substring(11)}';
-    } else if (cleaned.startsWith('0')) {
+    }
+
+    // Moroccan local format: 0X XX XX XX XX (10 digits)
+    if (cleaned.startsWith('0') && cleaned.length >= 10) {
       return '0${cleaned.substring(1, 2)} ${cleaned.substring(2, 4)} ${cleaned.substring(4, 6)} ${cleaned.substring(6, 8)} ${cleaned.substring(8)}';
     }
 
@@ -276,14 +285,14 @@ class Helpers {
 
   // ==================== Random Helpers ====================
 
-  /// Generate random string
+  /// Generate random string using a proper PRNG
   static String randomString(int length) {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = DateTime.now().millisecondsSinceEpoch;
+    final random = Random();
     return List.generate(
       length,
-      (index) => chars[(random + index) % chars.length],
+      (index) => chars[random.nextInt(chars.length)],
     ).join();
   }
 

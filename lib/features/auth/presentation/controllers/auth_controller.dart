@@ -13,12 +13,13 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthController extends GetxController {
-  // Services (inject via dependency injection)
-  // final AuthService _authService = Get.find();
-  // final FirestoreService _firestoreService = Get.find();
-  // final AnalyticsService _analyticsService = Get.find();
+  // Firebase instances
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
 
   // ==================== Observable State ====================
 
@@ -28,7 +29,7 @@ class AuthController extends GetxController {
   final _isAppleLoading = false.obs;
 
   // User state
-  final _currentUser = Rxn<dynamic>();
+  final _currentUser = Rxn<User>();
   final _selectedUserType = Rxn<String>();
 
   // Error state
@@ -44,7 +45,8 @@ class AuthController extends GetxController {
   bool get isLoading => _isLoading.value;
   bool get isGoogleLoading => _isGoogleLoading.value;
   bool get isAppleLoading => _isAppleLoading.value;
-  dynamic get currentUser => _currentUser.value;
+  User? get currentUser => _currentUser.value;
+  bool get isLoggedIn => _currentUser.value != null;
   String? get selectedUserType => _selectedUserType.value;
   String? get errorMessage => _errorMessage.value;
   bool get obscurePassword => _obscurePassword.value;
@@ -90,17 +92,16 @@ class AuthController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // await _authService.signInWithEmailAndPassword(
-      //   email: emailController.text.trim(),
-      //   password: passwordController.text,
-      // );
+      final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+      );
 
-      // await _analyticsService.logLogin('email');
-
-      // Simulate API call
-      await Future.delayed(Duration(seconds: 2));
+      _currentUser.value = userCredential.user;
 
       Get.offAllNamed('/home');
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -121,18 +122,23 @@ class AuthController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // await _authService.signUpWithEmailAndPassword(
-      //   email: emailController.text.trim(),
-      //   password: passwordController.text,
-      // );
+      final userCredential =
+          await _firebaseAuth.createUserWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+      );
 
-      // await _createUserDocument();
-      // await _analyticsService.logSignUp('email');
+      _currentUser.value = userCredential.user;
 
-      // Simulate API call
-      await Future.delayed(Duration(seconds: 2));
+      // Update display name if provided
+      if (fullNameController.text.trim().isNotEmpty) {
+        await userCredential.user
+            ?.updateDisplayName(fullNameController.text.trim());
+      }
 
       Get.offAllNamed('/email-verification');
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -146,20 +152,34 @@ class AuthController extends GetxController {
     _isGoogleLoading.value = true;
 
     try {
-      // await _authService.signInWithGoogle();
-      // await _analyticsService.logLogin('google');
+      // Trigger Google Sign-In flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
-      await Future.delayed(Duration(seconds: 2));
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        _isGoogleLoading.value = false;
+        return;
+      }
 
-      // Check if user document exists, if not create it
-      // final hasUserType = await _checkUserDocument();
-      // if (hasUserType) {
-      //   Get.offAllNamed('/home');
-      // } else {
-      //   Get.toNamed('/user-type-selection');
-      // }
+      // Obtain auth details from the request
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Create a new credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      final userCredential =
+          await _firebaseAuth.signInWithCredential(credential);
+
+      _currentUser.value = userCredential.user;
 
       Get.offAllNamed('/home');
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -173,12 +193,18 @@ class AuthController extends GetxController {
     _isAppleLoading.value = true;
 
     try {
-      // await _authService.signInWithApple();
-      // await _analyticsService.logLogin('apple');
+      final appleProvider = AppleAuthProvider();
+      appleProvider.addScope('email');
+      appleProvider.addScope('name');
 
-      await Future.delayed(Duration(seconds: 2));
+      final userCredential =
+          await _firebaseAuth.signInWithProvider(appleProvider);
+
+      _currentUser.value = userCredential.user;
 
       Get.offAllNamed('/home');
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -194,11 +220,9 @@ class AuthController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // await _authService.sendPasswordResetEmail(
-      //   emailController.text.trim(),
-      // );
-
-      await Future.delayed(Duration(seconds: 1));
+      await _firebaseAuth.sendPasswordResetEmail(
+        email: emailController.text.trim(),
+      );
 
       Get.snackbar(
         'Email Sent',
@@ -210,6 +234,8 @@ class AuthController extends GetxController {
       );
 
       Get.back();
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -222,9 +248,7 @@ class AuthController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // await _authService.sendEmailVerification();
-
-      await Future.delayed(Duration(seconds: 1));
+      await _firebaseAuth.currentUser?.sendEmailVerification();
 
       Get.snackbar(
         'Verification Sent',
@@ -233,6 +257,8 @@ class AuthController extends GetxController {
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     } finally {
@@ -243,12 +269,10 @@ class AuthController extends GetxController {
   /// Check email verification status
   Future<void> checkEmailVerification() async {
     try {
-      // await _authService.reloadUser();
-      // final isVerified = _authService.isEmailVerified;
+      await _firebaseAuth.currentUser?.reload();
+      _currentUser.value = _firebaseAuth.currentUser;
 
-      // Simulate check
-      await Future.delayed(Duration(seconds: 1));
-      final isVerified = true;
+      final isVerified = _firebaseAuth.currentUser?.emailVerified ?? false;
 
       if (isVerified) {
         Get.snackbar(
@@ -269,6 +293,8 @@ class AuthController extends GetxController {
           colorText: Colors.white,
         );
       }
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     }
@@ -277,11 +303,20 @@ class AuthController extends GetxController {
   /// Sign out
   Future<void> signOut() async {
     try {
-      // await _authService.signOut();
-      // await _analyticsService.logLogout();
+      await _firebaseAuth.signOut();
 
+      // Also sign out from Google if applicable
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // Google sign-out may fail if not signed in via Google
+      }
+
+      _currentUser.value = null;
       _clearFormFields();
       Get.offAllNamed('/login');
+    } on FirebaseAuthException catch (e) {
+      _setError(_getFirebaseErrorMessage(e.code));
     } catch (e) {
       _setError(_getErrorMessage(e));
     }
@@ -304,16 +339,8 @@ class AuthController extends GetxController {
     _isLoading.value = true;
 
     try {
-      // await _firestoreService.update(
-      //   collection: 'users',
-      //   documentId: _authService.currentUserId!,
-      //   data: {'userType': _selectedUserType.value},
-      // );
-
-      // await _analyticsService.setUserType(_selectedUserType.value!);
-
-      await Future.delayed(Duration(seconds: 1));
-
+      // User type will be persisted via the backend/Firestore
+      // when the profile setup is complete
       Get.offAllNamed('/home');
     } catch (e) {
       _setError(_getErrorMessage(e));
@@ -324,47 +351,11 @@ class AuthController extends GetxController {
 
   // ==================== Helper Methods ====================
 
-  /// Check authentication state
+  /// Check authentication state and listen for changes
   void _checkAuthState() {
-    // Listen to auth state changes
-    // _authService.authStateChanges.listen((user) {
-    //   _currentUser.value = user;
-    //   if (user != null) {
-    //     Get.offAllNamed('/home');
-    //   }
-    // });
-  }
-
-  /// Create user document in Firestore
-  Future<void> _createUserDocument() async {
-    // final userId = _authService.currentUserId;
-    // if (userId == null) return;
-
-    // await _firestoreService.set(
-    //   collection: 'users',
-    //   documentId: userId,
-    //   data: {
-    //     'email': emailController.text.trim(),
-    //     'fullName': fullNameController.text.trim(),
-    //     'phone': phoneController.text.trim(),
-    //     'emailVerified': false,
-    //     'phoneVerified': false,
-    //   },
-    // );
-  }
-
-  /// Check if user document exists
-  Future<bool> _checkUserDocument() async {
-    // final userId = _authService.currentUserId;
-    // if (userId == null) return false;
-
-    // final doc = await _firestoreService.get(
-    //   collection: 'users',
-    //   documentId: userId,
-    // );
-
-    // return doc != null && doc['userType'] != null;
-    return false;
+    _firebaseAuth.authStateChanges().listen((User? user) {
+      _currentUser.value = user;
+    });
   }
 
   /// Toggle password visibility
@@ -412,7 +403,30 @@ class AuthController extends GetxController {
     _errorMessage.value = null;
   }
 
-  /// Get user-friendly error message
+  /// Get user-friendly error message from FirebaseAuthException code
+  String _getFirebaseErrorMessage(String code) {
+    return switch (code) {
+      'network-request-failed' =>
+        'Network error. Please check your connection.',
+      'invalid-email' => 'Invalid email address.',
+      'wrong-password' => 'Incorrect password.',
+      'user-not-found' => 'No account found with this email.',
+      'email-already-in-use' => 'An account already exists with this email.',
+      'weak-password' => 'Password is too weak. Use at least 6 characters.',
+      'too-many-requests' => 'Too many attempts. Please try again later.',
+      'user-disabled' =>
+        'This account has been disabled. Please contact support.',
+      'operation-not-allowed' =>
+        'This sign-in method is not enabled. Please contact support.',
+      'invalid-credential' =>
+        'Invalid credentials. Please check your email and password.',
+      'account-exists-with-different-credential' =>
+        'An account already exists with the same email but different sign-in method.',
+      _ => 'An authentication error occurred. Please try again.',
+    };
+  }
+
+  /// Get user-friendly error message from generic errors
   String _getErrorMessage(dynamic error) {
     final errorString = error.toString();
 

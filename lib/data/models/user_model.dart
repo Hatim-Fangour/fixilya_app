@@ -31,11 +31,20 @@ class UserModel {
       phone: json['phone'] ?? '',
       userType: json['userType'] ?? '',
       profileImage: json['profileImage'],
-      createdAt: DateTime.parse(
-        json['createdAt'] ?? DateTime.now().toIso8601String(),
-      ),
+      createdAt: _parseDateTime(json['createdAt']),
       emailVerified: json['emailVerified'] ?? false,
     );
+  }
+
+  /// Safely parse DateTime from Firestore Timestamp, ISO string, or null.
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   Map<String, dynamic> toJson() {

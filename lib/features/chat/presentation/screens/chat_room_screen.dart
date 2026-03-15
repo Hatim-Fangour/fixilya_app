@@ -8,7 +8,7 @@
 //     participants: [uid1, uid2]
 //     lastMessage: String
 //     lastMessageAt: Timestamp
-//     unread_{uid}: int          ← per-user unread counter
+//     unread_{uid}: int          -- per-user unread counter
 //   /chats/{chatId}/messages/{msgId}
 //     senderId: String
 //     text: String
@@ -45,7 +45,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
-  String get _myUid => _auth.currentUser!.uid;
+  /// Track whether we have already marked messages as read on initial load,
+  /// so we do not call _markRead() on every StreamBuilder rebuild.
+  bool _hasMarkedRead = false;
+
+  /// Track the previous message count so we only auto-scroll when new
+  /// messages arrive, not on every snapshot update.
+  int _previousMessageCount = 0;
+
+  /// Safely get the current user's UID. Returns null if not authenticated.
+  String? get _myUid => _auth.currentUser?.uid;
 
   CollectionReference<Map<String, dynamic>> get _messagesRef =>
       _firestore.collection('chats').doc(widget.chatId).collection('messages');
@@ -63,13 +72,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.dispose();
   }
 
-  // ─── Firestore helpers ───────────────────────────────────────────────────
+  // --- Firestore helpers ---
 
   /// Reset unread counter for this user.
   Future<void> _markRead() async {
+    final uid = _myUid;
+    if (uid == null) return;
+
     try {
       await _firestore.collection('chats').doc(widget.chatId).set(
-        {'unread_$_myUid': 0},
+        {'unread_$uid': 0},
         SetOptions(merge: true),
       );
     } catch (e) {
@@ -78,6 +90,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Future<void> _sendMessage() async {
+    final uid = _myUid;
+    if (uid == null) return;
+
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
@@ -88,7 +103,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     // 1. Add message document
     final msgRef = _messagesRef.doc();
     batch.set(msgRef, {
-      'senderId': _myUid,
+      'senderId': uid,
       'text': text,
       'createdAt': FieldValue.serverTimestamp(),
       'read': false,
@@ -101,9 +116,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       {
         'lastMessage': text,
         'lastMessageAt': FieldValue.serverTimestamp(),
-        'participants': [_myUid, widget.otherUserId],
+        'participants': [uid, widget.otherUserId],
         'unread_${widget.otherUserId}': FieldValue.increment(1),
-        'unread_$_myUid': 0,
+        'unread_$uid': 0,
       },
       SetOptions(merge: true),
     );
@@ -128,10 +143,28 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────
+  // --- Build ---
 
   @override
   Widget build(BuildContext context) {
+    final uid = _myUid;
+
+    // Guard: if user is not authenticated, show a message instead of crashing
+    if (uid == null) {
+      return Scaffold(
+        backgroundColor: AppColors.backgroundColor(context),
+        appBar: AppBar(
+          backgroundColor: AppColors.backgroundColor(context),
+          elevation: 0,
+          title: Text(
+            'Chat',
+            style: TextStyle(color: AppColors.textPrimaryColor(context)),
+          ),
+        ),
+        body: const Center(child: Text('Not logged in')),
+      );
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -139,7 +172,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       appBar: _buildAppBar(isDark),
       body: Column(
         children: [
-          Expanded(child: _buildMessageList(isDark)),
+          Expanded(child: _buildMessageList(isDark, uid)),
           _buildInputBar(isDark),
         ],
       ),
@@ -198,7 +231,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  Widget _buildMessageList(bool isDark) {
+  Widget _buildMessageList(bool isDark, String myUid) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _messagesRef.orderBy('createdAt', descending: false).snapshots(),
       builder: (context, snapshot) {
@@ -207,7 +240,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         }
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error loading messages', style: TextStyle(color: AppColors.error)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                const SizedBox(height: 12),
+                Text(
+                  'Error loading messages',
+                  style: TextStyle(color: AppColors.error),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() {}),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
@@ -234,10 +290,18 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           );
         }
 
-        // Mark messages as read on new snapshot
-        _markRead();
+        // Mark messages as read only once on initial data load
+        if (!_hasMarkedRead) {
+          _hasMarkedRead = true;
+          _markRead();
+        }
 
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        // Auto-scroll only when new messages arrive (count increased)
+        final currentCount = docs.length;
+        if (currentCount > _previousMessageCount) {
+          _previousMessageCount = currentCount;
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        }
 
         return ListView.builder(
           controller: _scrollController,
@@ -245,7 +309,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           itemCount: docs.length,
           itemBuilder: (context, i) {
             final data = docs[i].data();
-            final isMe = data['senderId'] == _myUid;
+            final isMe = data['senderId'] == myUid;
             final text = data['text'] as String? ?? '';
             final ts = data['createdAt'] as Timestamp?;
             final time = ts != null
@@ -298,7 +362,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     fontSize: 15,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Type a message…',
+                    hintText: 'Type a message...',
                     hintStyle: TextStyle(color: AppColors.grey400, fontSize: 14),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     border: InputBorder.none,
@@ -337,7 +401,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 }
 
-// ─── Message bubble widget ────────────────────────────────────────────────────
+// --- Message bubble widget ---
 
 class _MessageBubble extends StatelessWidget {
   final String text;

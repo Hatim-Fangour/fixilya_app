@@ -16,39 +16,17 @@ import 'package:flutter/foundation.dart'
 /// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
-    // if (kIsWeb) {
-    //   return web;
-    // }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
-      // case TargetPlatform.iOS:
-      //   return ios;
-      // case TargetPlatform.macOS:
-      //   return macos;
-      // case TargetPlatform.windows:
-      //   return windows;
-      case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+      case TargetPlatform.iOS:
+        return ios;
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
         );
     }
   }
-
-  // static const FirebaseOptions web = FirebaseOptions(
-  //   apiKey: 'AIzaSyDpwcz89r9drxYUbCNLF9IQK1ack_418-k',
-  //   appId: '1:888831484326:web:03ab92b2f0159080562f67',
-  //   messagingSenderId: '888831484326',
-  //   projectId: 'fixilyaapp-10ca8',
-  //   authDomain: 'fixilyaapp-10ca8.firebaseapp.com',
-  //   storageBucket: 'fixilyaapp-10ca8.firebasestorage.app',
-  //   measurementId: 'G-251JPHC8KH',
-  // );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyA9EI7TjtbXrH9xZsl0V5tuW69iz1cr_7g',
@@ -58,33 +36,14 @@ class DefaultFirebaseOptions {
     storageBucket: 'fixilyaappbackend.firebasestorage.app',
   );
 
-  // static const FirebaseOptions ios = FirebaseOptions(
-  //   apiKey: 'AIzaSyDCmQhX-MtGoVGom2pwiTA98uMFfIjOluU',
-  //   appId: '1:776827563220:ios:773f7f63346a853a279f41',
-  //   messagingSenderId: '776827563220',
-  //   projectId: 'fixilyaapp',
-  //   storageBucket: 'fixilyaapp.firebasestorage.app',
-  //   iosClientId: '776827563220-aafacver3ve8hk5p802evm8bh0a54rp7.apps.googleusercontent.com',
-  //   iosBundleId: 'com.example.untitled',
-  // );
-
-  // static const FirebaseOptions macos = FirebaseOptions(
-  //   apiKey: 'AIzaSyDCmQhX-MtGoVGom2pwiTA98uMFfIjOluU',
-  //   appId: '1:776827563220:ios:773f7f63346a853a279f41',
-  //   messagingSenderId: '776827563220',
-  //   projectId: 'fixilyaapp',
-  //   storageBucket: 'fixilyaapp.firebasestorage.app',
-  //   iosClientId: '776827563220-aafacver3ve8hk5p802evm8bh0a54rp7.apps.googleusercontent.com',
-  //   iosBundleId: 'com.example.untitled',
-  // );
-
-  // static const FirebaseOptions windows = FirebaseOptions(
-  //   apiKey: 'AIzaSyC7EdjQuKWu6KT3Gg0F_UzVF5ZgN25AvXo',
-  //   appId: '1:776827563220:web:23f07ea978b92667279f41',
-  //   messagingSenderId: '776827563220',
-  //   projectId: 'fixilyaapp',
-  //   authDomain: 'fixilyaapp.firebaseapp.com',
-  //   storageBucket: 'fixilyaapp.firebasestorage.app',
-  //   measurementId: 'G-QH6JY2JP9K',
-  // );
+  // TODO: Replace placeholder values with real iOS config from FlutterFire CLI
+  // Run: flutterfire configure --platforms=ios
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyA9EI7TjtbXrH9xZsl0V5tuW69iz1cr_7g',
+    appId: '1:353604172058:ios:PLACEHOLDER',
+    messagingSenderId: '353604172058',
+    projectId: 'fixilyaappbackend',
+    storageBucket: 'fixilyaappbackend.firebasestorage.app',
+    iosBundleId: 'com.fixilya.app',
+  );
 }

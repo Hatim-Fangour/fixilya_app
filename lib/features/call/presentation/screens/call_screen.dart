@@ -8,6 +8,21 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+/// UI string constants for the call screen.
+/// Avoids hardcoded strings throughout the widget tree.
+abstract class _CallStrings {
+  static const voiceCall = 'Voice Call';
+  static const connecting = 'Connecting...';
+  static const ringing = 'Ringing...';
+  static const waiting = 'Waiting...';
+  static const connected = 'Connected';
+  static const mute = 'Mute';
+  static const unmute = 'Unmute';
+  static const speaker = 'Speaker';
+  static const earpiece = 'Earpiece';
+  static const micDenied = 'Microphone permission denied';
+}
+
 /// Full-screen active call screen.
 ///
 /// [callId]       – Firestore document ID (= Agora channel name)
@@ -68,7 +83,7 @@ class _CallScreenState extends State<CallScreen> {
     // 1. Request microphone permission
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
-      _showError('Microphone permission denied');
+      _showError(_CallStrings.micDenied);
       return;
     }
 
@@ -254,7 +269,7 @@ class _CallScreenState extends State<CallScreen> {
       child: Row(
         children: [
           const Text(
-            'Voice Call',
+            _CallStrings.voiceCall,
             style: TextStyle(
               color: Colors.white70,
               fontSize: 16,
@@ -365,13 +380,13 @@ class _CallScreenState extends State<CallScreen> {
     Color color;
 
     if (!_joined) {
-      label = 'Connecting…';
+      label = _CallStrings.connecting;
       color = Colors.white54;
     } else if (!_remoteJoined) {
-      label = widget.isCaller ? 'Ringing…' : 'Waiting…';
+      label = widget.isCaller ? _CallStrings.ringing : _CallStrings.waiting;
       color = Colors.white54;
     } else {
-      label = 'Connected';
+      label = _CallStrings.connected;
       color = Colors.greenAccent;
     }
 
@@ -391,7 +406,7 @@ class _CallScreenState extends State<CallScreen> {
       children: [
         _controlButton(
           icon: _muted ? FontAwesomeIcons.microphoneSlash : FontAwesomeIcons.microphone,
-          label: _muted ? 'Unmute' : 'Mute',
+          label: _muted ? _CallStrings.unmute : _CallStrings.mute,
           backgroundColor: Colors.white.withValues(alpha: 0.1),
           iconColor: _muted ? AppColors.accentOrange : Colors.white,
           onTap: _toggleMute,
@@ -426,7 +441,7 @@ class _CallScreenState extends State<CallScreen> {
         const SizedBox(width: 24),
         _controlButton(
           icon: _speakerOn ? FontAwesomeIcons.volumeHigh : FontAwesomeIcons.volumeXmark,
-          label: _speakerOn ? 'Speaker' : 'Earpiece',
+          label: _speakerOn ? _CallStrings.speaker : _CallStrings.earpiece,
           backgroundColor: Colors.white.withValues(alpha: 0.1),
           iconColor: _speakerOn ? AppColors.primaryColor : Colors.white,
           onTap: _toggleSpeaker,

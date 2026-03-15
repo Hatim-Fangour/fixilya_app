@@ -1,4 +1,5 @@
 import 'package:fixilya_app/core/constants/app_colors.dart';
+import 'package:fixilya_app/core/constants/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/services/auth_service.dart';
@@ -27,10 +28,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late Animation<Offset> _slideAnimation;
 
   bool _isLoading = false;
-
-  // Colors
-  static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
-  static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
+  bool _isSubmitDebounced = false;
 
   @override
   void initState() {
@@ -80,6 +78,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   Future<void> _handleResetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Debounce: prevent rapid-fire submissions
+    if (_isSubmitDebounced) return;
+    _isSubmitDebounced = true;
+    Future.delayed(Duration(seconds: 3), () {
+      if (mounted) _isSubmitDebounced = false;
+    });
+
     setState(() => _isLoading = true);
 
     try {
@@ -125,7 +130,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               ),
             ),
             SizedBox(width: 12),
-            Text('Email Sent!', style: TextStyle(fontSize: 20)),
+            Text(AppStrings.emailSent, style: TextStyle(fontSize: 20)),
           ],
         ),
         content: Column(
@@ -134,19 +139,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           children: [
             Text(
               'We\'ve sent a password reset link to:',
-              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryColor(context),
+              ),
             ),
             SizedBox(height: 8),
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha:0.1),
+                color: AppColors.primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: primaryColor.withValues(alpha:0.3)),
+                border: Border.all(
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.email_outlined, color: primaryColor, size: 20),
+                  Icon(
+                    Icons.email_outlined,
+                    color: AppColors.primaryColor,
+                    size: 20,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -154,7 +168,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: primaryColor,
+                        color: AppColors.primaryColor,
                       ),
                     ),
                   ),
@@ -164,7 +178,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             SizedBox(height: 12),
             Text(
               'Please check your inbox and follow the instructions to reset your password.',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondaryColor(context),
+              ),
             ),
           ],
         ),
@@ -236,7 +253,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha:0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
@@ -262,7 +279,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha:0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 20,
                           offset: Offset(0, 10),
                         ),
@@ -270,7 +287,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                     ),
                     child: FaIcon(
                       FontAwesomeIcons.key,
-                      color: primaryColor,
+                      color: AppColors.primaryColor,
                       size: 32,
                     ),
                   ),
@@ -281,7 +298,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             SizedBox(height: 12),
 
             Text(
-              'Forgot Password?',
+              AppStrings.forgotPassword,
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
@@ -296,7 +313,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               'No worries, we\'ll send you reset instructions',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.white.withValues(alpha:0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 letterSpacing: 0.3,
               ),
               textAlign: TextAlign.center,
@@ -330,7 +347,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Reset Password',
+                      AppStrings.resetPassword,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -353,7 +370,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
                     // Email Field
                     _buildAnimatedTextField(
-                      label: 'Email Address',
+                      label: AppStrings.emailAddress,
                       controller: _emailController,
                       icon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
@@ -374,12 +391,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             height: 52,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [primaryColor, secondaryColor],
+                                colors: [
+                                  AppColors.primaryColor,
+                                  AppColors.secondaryColor,
+                                ],
                               ),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: primaryColor.withValues(alpha:0.3),
+                                  color: AppColors.primaryColor.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   blurRadius: 20,
                                   offset: Offset(0, 10),
                                 ),
@@ -444,10 +466,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                           child: Container(
                             padding: EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha:0.05),
+                              color: Colors.blue.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.blue.withValues(alpha:0.2),
+                                color: Colors.blue.withValues(alpha: 0.2),
                               ),
                             ),
                             child: Row(

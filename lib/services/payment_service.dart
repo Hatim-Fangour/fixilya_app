@@ -19,25 +19,29 @@ class PaymentService {
 
   // Configuration
   String? _publishableKey;
-  String? _secretKey;
+  // NOTE: Secret keys must NEVER be stored on the client. All payment
+  // processing that requires a secret key must go through the backend.
   String _defaultCurrency = 'MAD'; // Moroccan Dirham
 
   // ==================== Initialization ====================
 
-  /// Initialize payment service
+  /// Initialize payment service with the publishable (public) key only.
+  /// The secret key is handled exclusively on the server side.
   void initialize({
     required String publishableKey,
-    String? secretKey,
     String defaultCurrency = 'MAD',
   }) {
     _publishableKey = publishableKey;
-    _secretKey = secretKey;
     _defaultCurrency = defaultCurrency;
   }
 
   // ==================== Payment Intent ====================
 
-  /// Create payment intent
+  /// Create payment intent.
+  /// TODO: Replace this mock with a real call to your backend's payment
+  /// endpoint (e.g., POST /api/payments/create-intent). The backend creates
+  /// the Stripe PaymentIntent using the secret key and returns the
+  /// client_secret to the app. Never generate client secrets on the client.
   Future<PaymentIntent> createPaymentIntent({
     required double amount,
     String? currency,
@@ -46,17 +50,17 @@ class PaymentService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      // In production, this would call your payment gateway API
-      // Example: Stripe, PayPal, or local payment provider
-
+      // TODO: Call backend API to create a real PaymentIntent.
+      // The backend should return the PaymentIntent id and client_secret.
       await Future.delayed(Duration(milliseconds: 500)); // Simulate API call
 
       return PaymentIntent(
-        id: 'pi_${DateTime.now().millisecondsSinceEpoch}',
+        id: 'pi_mock_${DateTime.now().millisecondsSinceEpoch}',
         amount: amount,
         currency: currency ?? _defaultCurrency,
         status: PaymentStatus.requiresPaymentMethod,
-        clientSecret: 'secret_${DateTime.now().millisecondsSinceEpoch}',
+        // Placeholder: in production, this comes from the backend response
+        clientSecret: '',
         description: description,
         customerId: customerId,
         metadata: metadata,

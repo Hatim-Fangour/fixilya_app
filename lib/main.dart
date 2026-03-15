@@ -2,10 +2,11 @@
 import "package:firebase_core/firebase_core.dart";
 import "package:cloud_firestore/cloud_firestore.dart";
 import "package:fixilya_app/core/constants/app_routes.dart";
-import "package:fixilya_app/core/constants/app_theme.dart";
+import "package:fixilya_app/core/constants/app_colors.dart";
 import "package:fixilya_app/data/controllers/auth_controller.dart";
 import "package:fixilya_app/data/controllers/theme_controller.dart";
 import "package:fixilya_app/data/controllers/user_controller.dart";
+import "package:fixilya_app/core/config/environment.dart";
 import "package:fixilya_app/firebase_options.dart";
 import "package:fixilya_app/l10n/app_localizations.dart";
 import "package:fixilya_app/services/api_client.dart";
@@ -54,6 +55,10 @@ void main() async {
 }
 
 Future<void> _bootstrap() async {
+  // Set environment based on build mode
+  EnvironmentConfig.setEnvironment(
+    kReleaseMode ? Environment.production : Environment.development,
+  );
 
   await LocalStorageService().init();
   await LocalStorageService().migrateDarkModeToThemePreference();

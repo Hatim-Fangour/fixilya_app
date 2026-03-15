@@ -1,3 +1,4 @@
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class ProfileCompletionIndicator extends StatelessWidget {
@@ -21,11 +22,11 @@ class ProfileCompletionIndicator extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardColor(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: AppColors.shadowColor(context),
             blurRadius: 10,
             offset: Offset(0, 5),
           ),
@@ -42,7 +43,7 @@ class ProfileCompletionIndicator extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppColors.textPrimaryColor(context),
                 ),
               ),
               if (showPercentage)
@@ -62,7 +63,7 @@ class ProfileCompletionIndicator extends StatelessWidget {
             child: LinearProgressIndicator(
               value: completionPercentage / 100,
               minHeight: 8,
-              backgroundColor: Colors.grey[200],
+              backgroundColor: AppColors.grey200Color(context),
               valueColor: AlwaysStoppedAnimation<Color>(getColor()),
             ),
           ),
@@ -70,7 +71,10 @@ class ProfileCompletionIndicator extends StatelessWidget {
             SizedBox(height: 12),
             Text(
               _getCompletionMessage(completionPercentage),
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondaryColor(context),
+              ),
             ),
           ],
         ],

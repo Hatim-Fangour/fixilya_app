@@ -12,6 +12,8 @@ class AppColors {
   static const Color primaryLight = Color.fromRGBO(110, 133, 255, 1);
   static const Color primaryDark = Color.fromRGBO(60, 85, 220, 1);
   static const Color secondaryColor = Color.fromRGBO(123, 144, 250, 1);
+  /// Alias for backward compatibility with code referencing AppColors.secondary
+  static const Color secondary = secondaryColor;
   static const Color accentColor = Color.fromRGBO(147, 167, 255, 1);
   static const Color accentOrange = Color.fromRGBO(255, 149, 0, 1);
   static const Color hardOrange = Color(0xFFFF6F00);
