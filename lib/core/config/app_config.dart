@@ -14,22 +14,33 @@ class AppConfig {
   static const Duration apiTimeout = Duration(seconds: 30);
 
   // ─── Local Dev Base IP ─────────────────────────────────────────────────
-  // 10.0.2.2  = Android emulator loopback to PC
-  // YOUR_IP   = Physical device on same WiFi (change this to your PC's IP)
+  // 10.0.2.2    = Android emulator loopback to PC
+  // localhost    = Physical device with USB port forwarding (adb reverse)
+  // 192.168.x.x = Physical device on WiFi (slow, use USB instead)
   static const String _emulatorHost = '10.0.2.2';
-  static const String _physicalDeviceHost = '192.168.1.10'; // ← YOUR PC IP HERE
+  static const String _physicalDeviceHost = 'localhost'; // USB: adb reverse tcp:PORT tcp:PORT
+  static const String _wifiHost = '192.168.1.4'; // Fallback: WiFi (slower)
 
-  /// Returns the correct host depending on whether we're on emulator or real device.
-  /// Can always be overridden via --dart-define.
+  /// Returns the correct host depending on device type.
+  /// Physical device with USB uses localhost (via adb reverse).
+  /// Override with: --dart-define=USE_WIFI=true for wireless testing.
   static String get _localHost {
-    return _isEmulator ? _emulatorHost : _physicalDeviceHost;
+    if (_isEmulator) return _emulatorHost;
+    if (_useWifi) return _wifiHost;
+    return _physicalDeviceHost; // localhost via USB
   }
 
-  /// Detects Android emulator. Pass --dart-define=IS_EMULATOR=true when running
-  /// on an emulator that needs to reach a local backend via 10.0.2.2.
   static bool get _isEmulator {
     try {
       return const bool.fromEnvironment('IS_EMULATOR', defaultValue: false);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool get _useWifi {
+    try {
+      return const bool.fromEnvironment('USE_WIFI', defaultValue: false);
     } catch (_) {
       return false;
     }
