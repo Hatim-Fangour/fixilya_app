@@ -974,9 +974,10 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
           content: Container(
             width: MediaQuery.of(context).size.width * 0.9,
             padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Icon
                 Container(
                   padding: EdgeInsets.all(16),
@@ -1158,6 +1159,7 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
                   ],
                 ),
               ],
+            ),
             ),
           ),
         ),
