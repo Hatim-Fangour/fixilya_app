@@ -83,10 +83,10 @@ class _BookingDialogState extends State<BookingDialog> {
     _bookingSubscription = FirebaseFirestore.instance
         .collection('bookings')
         .where('handymanId', isEqualTo: handymanId)
-        .where('status', whereIn: ['pending', 'confirmed', 'in_progress'])
+        .where('status', whereIn: ['confirmed', 'in_progress'])
         .snapshots()
         .listen((snapshot) {
-          // Update unavailable dates when bookings change
+          // Update unavailable dates when accepted bookings change
           _loadUnavailableDates();
         });
   }
@@ -361,11 +361,12 @@ class _BookingDialogState extends State<BookingDialog> {
         return;
       }
 
-      // Fetch all confirmed/active bookings for this handyman
+      // Fetch only accepted bookings (confirmed/in_progress) for this handyman.
+      // Pending bookings do NOT block dates — only accepted ones do.
       final bookingsSnapshot = await FirebaseFirestore.instance
           .collection('bookings')
           .where('handymanId', isEqualTo: handymanId)
-          .where('status', whereIn: ['pending', 'confirmed', 'in_progress'])
+          .where('status', whereIn: ['confirmed', 'in_progress'])
           .get();
 
       Set<DateTime> bookedDates = {};

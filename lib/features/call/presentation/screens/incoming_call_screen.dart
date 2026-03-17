@@ -30,6 +30,7 @@ class IncomingCallScreen extends StatefulWidget {
 class _IncomingCallScreenState extends State<IncomingCallScreen>
     with SingleTickerProviderStateMixin {
   final _callService = CallService();
+  final _ringtone = FlutterRingtonePlayer();
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   Timer? _missedTimer;
@@ -51,10 +52,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     );
 
     // Play ringtone (loops until stopped)
-    FlutterRingtonePlayer().playRingtone(
+    _ringtone.playRingtone(
       volume: 1.0,
       looping: true,
-      asAlarm: false,
+      asAlarm: true,
     );
 
     // Auto-miss after 45 s
@@ -73,7 +74,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   }
 
   void _stopRingtone() {
-    FlutterRingtonePlayer().stop();
+    _ringtone.stop();
   }
 
   @override
