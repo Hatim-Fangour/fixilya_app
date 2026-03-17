@@ -4,6 +4,7 @@ import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/features/call/presentation/screens/call_screen.dart';
 import 'package:fixilya_app/services/call_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 /// Shown on the handyman's device when a client calls.
@@ -49,6 +50,13 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    // Play ringtone (loops until stopped)
+    FlutterRingtonePlayer().playRingtone(
+      volume: 1.0,
+      looping: true,
+      asAlarm: false,
+    );
+
     // Auto-miss after 45 s
     _missedTimer = Timer(const Duration(seconds: 45), _handleMissed);
 
@@ -58,13 +66,19 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
       final status = snap.data()?['status'] as String?;
       if (status == 'ended' || status == 'missed') {
         _responded = true;
+        _stopRingtone();
         if (mounted) Navigator.of(context).pop();
       }
     });
   }
 
+  void _stopRingtone() {
+    FlutterRingtonePlayer().stop();
+  }
+
   @override
   void dispose() {
+    _stopRingtone();
     _pulseController.dispose();
     _missedTimer?.cancel();
     _statusSub?.cancel();
@@ -77,6 +91,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     if (_responded) return;
     _responded = true;
     _missedTimer?.cancel();
+    _stopRingtone();
 
     // Fetch callee Agora token from server; also transitions call status → active.
     final calleeToken = await _callService.acceptCall(widget.callId);
@@ -113,6 +128,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
     if (_responded) return;
     _responded = true;
     _missedTimer?.cancel();
+    _stopRingtone();
     await _callService.rejectCall(widget.callId);
     if (mounted) Navigator.of(context).pop();
   }
@@ -120,6 +136,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
   void _handleMissed() {
     if (_responded || !mounted) return;
     _responded = true;
+    _stopRingtone();
     _callService.markMissed(widget.callId);
     Navigator.of(context).pop();
   }

@@ -83,6 +83,7 @@ dependencies:
   # Splash & Icons
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.3.10
+  flutter_ringtone_player: ^4.0.0+4
 
 dev_dependencies:
   flutter_test:
