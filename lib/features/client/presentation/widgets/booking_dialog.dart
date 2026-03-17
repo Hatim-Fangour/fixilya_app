@@ -35,6 +35,7 @@ class _BookingDialogState extends State<BookingDialog> {
   DateTime? _selectedDate;
   String? _selectedTimeSlot;
   String? _selectedService;
+  String _clientCity = '';
 
   // Available time slots
   List<String> _availableTimeSlots = [];
@@ -146,7 +147,19 @@ class _BookingDialogState extends State<BookingDialog> {
           _nameController.text = data?['fullName'] ?? '';
           _phoneController.text = data?['phone'] ?? '';
           _addressController.text = data?['address'] ?? '';
+          _clientCity = data?['city'] as String? ?? '';
         });
+      }
+
+      // Also try users collection if clients didn't have city
+      if (_clientCity.isEmpty) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (userDoc.exists && mounted) {
+          _clientCity = userDoc.data()?['city'] as String? ?? '';
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading user data: $e');
@@ -298,7 +311,7 @@ class _BookingDialogState extends State<BookingDialog> {
         clientPhone: _phoneController.text,
         service: _selectedService!,
         address: _addressController.text,
-        city: widget.handyman['city'] ?? 'Unknown',
+        city: _clientCity.isNotEmpty ? _clientCity : (widget.handyman['city'] ?? 'Unknown'),
         scheduledDate: _selectedDate!,
         // timeSlot: _selectedTimeSlot!,
         description: _descriptionController.text,
