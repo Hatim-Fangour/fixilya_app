@@ -759,24 +759,20 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                     Icons.contact_phone,
                     child: Column(
                       children: [
-                        if (widget.handyman['showPhoneNumber'] == true)
-                          _buildPremiumContactCard(
-                            icon: FontAwesomeIcons.phone,
-                            iconColor: AppColors.green,
-                            title: 'Phone',
-                            subtitle: widget.handyman['phone'] ?? '',
-                            gradient: AppColors.handymanPhoneCardThemed(context),
-                            onTap: () => _makePhoneCall(widget.handyman['phone'] ?? ''),
-                          )
-                        else
-                          _buildPremiumContactCard(
-                            icon: FontAwesomeIcons.lock,
-                            iconColor: AppColors.textSecondaryColor(context),
-                            title: 'Phone',
-                            subtitle: 'Hidden by handyman',
-                            gradient: AppColors.handymanPhoneCardThemed(context),
-                            onTap: () {},
-                          ),
+                        _buildPremiumContactCard(
+                          icon: FontAwesomeIcons.phone,
+                          iconColor: _canCall ? AppColors.green : AppColors.textSecondaryColor(context),
+                          title: 'Call',
+                          subtitle: _canCall ? 'In-app call available' : 'Book first to unlock calling',
+                          gradient: AppColors.handymanPhoneCardThemed(context),
+                          onTap: _canCall ? _startInAppCall : () {
+                            Get.snackbar(
+                              'Booking Required',
+                              'You need a confirmed booking to call this handyman',
+                              snackPosition: SnackPosition.BOTTOM,
+                            );
+                          },
+                        ),
                         SizedBox(height: 12),
                         _buildPremiumContactCard(
                           icon: FontAwesomeIcons.locationDot,
@@ -1078,53 +1074,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                       ),
                       SizedBox(width: 12),
                     ],
-                    // Phone Call Button
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.primaryColor.withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primaryColor.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: widget.handyman['showPhoneNumber'] == true
-                              ? () => _makePhoneCall(widget.handyman['phone'] ?? '')
-                              : () => Get.snackbar(
-                                    'Phone Hidden',
-                                    'This handyman has not shared their phone number yet',
-                                    snackPosition: SnackPosition.BOTTOM,
-                                    margin: EdgeInsets.all(16),
-                                    borderRadius: 12,
-                                    duration: Duration(seconds: 2),
-                                  ),
-                          borderRadius: BorderRadius.circular(16),
-                          child: Center(
-                            child: FaIcon(
-                              widget.handyman['showPhoneNumber'] == true
-                                  ? FontAwesomeIcons.phoneVolume
-                                  : FontAwesomeIcons.lock,
-                              color: widget.handyman['showPhoneNumber'] == true
-                                  ? AppColors.primaryColor
-                                  : AppColors.textSecondaryColor(context),
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    // No phone call button — use in-app calling only
                     SizedBox(width: 12),
                     // Book Now Button
                     Expanded(

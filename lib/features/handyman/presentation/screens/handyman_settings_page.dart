@@ -341,25 +341,6 @@ class _HandymanSettingsPageState extends State<HandymanSettingsPage>
                     ],
                   ),
                   const SizedBox(height: 24),
-                  _buildLuxurySection(
-                    'Privacy',
-                    Icons.lock_outline_rounded,
-                    [
-                      _buildLuxurySwitchTile(
-                        'Show Phone Number',
-                        _showPhoneNumber
-                            ? 'Clients with confirmed bookings can see your phone'
-                            : 'Your phone number is hidden from clients',
-                        Icons.phone_outlined,
-                        _showPhoneNumber,
-                        (value) {
-                          setState(() => _showPhoneNumber = value);
-                          _updateSettings({'showPhoneNumber': value});
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
                   _buildLocationPrivacySection(),
                   const SizedBox(height: 24),
                   _buildLuxurySection('Account', Icons.person_outline_rounded, [

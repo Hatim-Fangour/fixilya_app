@@ -490,29 +490,6 @@ class _HandymenMapPageState extends State<HandymenMapPage> {
               ],
             ),
 
-            // Phone row (if available)
-            if (phone != null && phone.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.phone_outlined,
-                    size: 15,
-                    color: AppColors.textSecondaryColor(context),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    phone,
-                    style: TextStyle(
-                      color: AppColors.textSecondaryColor(context),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
             const SizedBox(height: 24),
 
             // City-level note
