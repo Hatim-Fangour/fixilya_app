@@ -64,18 +64,19 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   }
 
   Future<void> _checkIfFavorite() async {
-    final handymanId = widget.handyman['id'] ?? widget.handyman['uid'] ?? '';
-
-    final isFav = await _favoritesService.isFavorite(handymanId);
+    final isFav = await _favoritesService.isFavorite(_handymanId);
     if (mounted) {
       setState(() => _isFavorite = isFav);
     }
   }
 
+  String get _handymanId =>
+      (widget.handyman['uid'] ?? widget.handyman['id'] ?? '') as String;
+
   Future<void> _loadReviews() async {
     try {
       final reviews = await _reviewsService.getHandymanReviews(
-        widget.handyman['id'],
+        _handymanId,
         limit: 2, // Show only 2 reviews initially
       );
 
@@ -104,8 +105,8 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
       return;
     }
 
-    final handymanId = widget.handyman['id'] ?? widget.handyman['uid'] ?? '';
-    if (handymanId.isEmpty) return;
+    if (_handymanId.isEmpty) return;
+    final handymanId = _handymanId;
 
     try {
       final doc = await FirebaseFirestore.instance
@@ -136,7 +137,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   Future<void> _showAllReviewsDialog() async {
     // Fetch all reviews
     final allReviews = await _reviewsService.getHandymanReviews(
-      widget.handyman['id'],
+      _handymanId,
     );
 
     if (!mounted) return;
@@ -290,7 +291,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                 icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                 onPressed: () async {
                   final success = await _favoritesService.toggleFavorite(
-                    widget.handyman['id'] ?? widget.handyman['uid'] ?? '',
+                    _handymanId,
                   );
 
                   if (success) {
