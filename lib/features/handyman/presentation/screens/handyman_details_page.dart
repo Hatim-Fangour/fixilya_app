@@ -5,6 +5,9 @@ import 'package:fixilya_app/core/config/app_config.dart';
 import 'package:fixilya_app/core/config/global_variables.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/features/client/presentation/widgets/booking_dialog.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fixilya_app/features/call/presentation/screens/call_screen.dart';
+import 'package:fixilya_app/services/call_service.dart';
 import 'package:fixilya_app/services/favorites_service.dart';
 import 'package:fixilya_app/services/reviews_service.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +29,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _isFavorite = false;
+  bool _canCall = false;
   final ReviewsService _reviewsService = ReviewsService();
   List<Map<String, dynamic>> _reviews = [];
   bool _isLoadingReviews = true;
@@ -42,6 +46,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
     super.initState();
     if (kDebugMode) debugPrint('🚀 Handyman Details Page Initialized for: ${widget.handyman}');
     _checkIfFavorite();
+    _checkCanCall();
     _loadReviews();
     _loadWorkImages();
     _animationController = AnimationController(
@@ -72,6 +77,82 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
 
   String get _handymanId =>
       (widget.handyman['uid'] ?? widget.handyman['id'] ?? '') as String;
+
+  Future<void> _checkCanCall() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null || _handymanId.isEmpty) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('bookings')
+        .where('clientId', isEqualTo: currentUser.uid)
+        .where('handymanId', isEqualTo: _handymanId)
+        .where('status', whereIn: ['confirmed', 'in_progress'])
+        .limit(1)
+        .get();
+
+    if (mounted) setState(() => _canCall = snapshot.docs.isNotEmpty);
+  }
+
+  Future<void> _startInAppCall() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final handymanName = widget.handyman['fullName'] ??
+        widget.handyman['name'] ?? 'Handyman';
+
+    // Get caller name
+    String callerName = currentUser.displayName ?? 'Client';
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users').doc(currentUser.uid).get();
+      if (doc.exists) {
+        callerName = doc.data()?['fullName'] as String? ?? callerName;
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await CallService().initiateCall(
+        calleeId: _handymanId,
+        calleeName: handymanName,
+        callerName: callerName,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CallScreen(
+            callId: result['callId']!,
+            remoteUid: _handymanId,
+            remoteName: handymanName,
+            remotePicture: widget.handyman['profilePicture'] as String?,
+            isCaller: true,
+            agoraToken: result['token'],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      Get.snackbar(
+        'Call Failed',
+        'Could not start call. Make sure you have a confirmed booking.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
 
   Future<void> _loadReviews() async {
     try {
@@ -964,7 +1045,40 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                 top: false,
                 child: Row(
                   children: [
-                    // Call Button
+                    // In-App Call Button (only if confirmed booking exists)
+                    if (_canCall) ...[
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.green.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _startInAppCall,
+                            borderRadius: BorderRadius.circular(16),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.phone,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                    ],
+                    // Phone Call Button
                     Container(
                       width: 56,
                       height: 56,
@@ -972,12 +1086,12 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                         color: AppColors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: AppColors.primaryColor.withOpacity(0.3),
+                          color: AppColors.primaryColor.withValues(alpha: 0.3),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryColor.withOpacity(0.1),
+                            color: AppColors.primaryColor.withValues(alpha: 0.1),
                             blurRadius: 10,
                             offset: Offset(0, 4),
                           ),
@@ -1000,7 +1114,7 @@ class _HandymanDetailsPageState extends State<HandymanDetailsPage>
                           child: Center(
                             child: FaIcon(
                               widget.handyman['showPhoneNumber'] == true
-                                  ? FontAwesomeIcons.phone
+                                  ? FontAwesomeIcons.phoneVolume
                                   : FontAwesomeIcons.lock,
                               color: widget.handyman['showPhoneNumber'] == true
                                   ? AppColors.primaryColor
