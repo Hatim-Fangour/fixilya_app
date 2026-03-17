@@ -1531,6 +1531,13 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   }
 
   void _acceptRequest(Map<String, dynamic> request) async {
+    // Check for scheduling conflict before accepting
+    final hasConflict = await _checkScheduleConflict(request);
+    if (hasConflict && mounted) {
+      final proceed = await _showConflictDialog(request);
+      if (proceed != true) return;
+    }
+
     final success = await _api.acceptBooking(request['id']);
 
     if (success && mounted) {
@@ -1541,6 +1548,96 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         ),
       );
     }
+  }
+
+  /// Checks if the handyman already has a confirmed booking on the same day
+  Future<bool> _checkScheduleConflict(Map<String, dynamic> request) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return false;
+
+      // Parse the scheduled date from the request
+      final rawDate = request['scheduledDate'];
+      DateTime? requestDate;
+      if (rawDate is Timestamp) {
+        requestDate = rawDate.toDate();
+      } else if (rawDate is String) {
+        requestDate = DateTime.tryParse(rawDate);
+      } else if (rawDate is DateTime) {
+        requestDate = rawDate;
+      }
+      if (requestDate == null) return false;
+
+      // Normalize to day only
+      final dayStart = DateTime(requestDate.year, requestDate.month, requestDate.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+
+      // Query confirmed bookings for this handyman on the same day
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('handymanId', isEqualTo: uid)
+          .where('status', whereIn: ['confirmed', 'in_progress'])
+          .get();
+
+      // Filter by date (Firestore can't do range + whereIn together easily)
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final raw = data['scheduledDate'];
+        DateTime? existingDate;
+        if (raw is Timestamp) existingDate = raw.toDate();
+        else if (raw is String) existingDate = DateTime.tryParse(raw);
+
+        if (existingDate != null &&
+            existingDate.isAfter(dayStart.subtract(const Duration(seconds: 1))) &&
+            existingDate.isBefore(dayEnd)) {
+          return true; // conflict found
+        }
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error checking schedule conflict: $e');
+      return false;
+    }
+  }
+
+  /// Shows a warning dialog when there's a scheduling conflict
+  Future<bool?> _showConflictDialog(Map<String, dynamic> request) {
+    final rawDate = request['scheduledDate'];
+    String dateStr = 'this day';
+    DateTime? d;
+    if (rawDate is Timestamp) d = rawDate.toDate();
+    else if (rawDate is String) d = DateTime.tryParse(rawDate);
+    else if (rawDate is DateTime) d = rawDate;
+    if (d != null) {
+      dateStr = '${d.day}/${d.month}/${d.year}';
+    }
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+        title: const Text('Schedule Conflict'),
+        content: Text(
+          'You already have a confirmed appointment on $dateStr.\n\n'
+          'Are you sure you want to accept this booking too?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Accept Anyway'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _declineRequest(Map<String, dynamic> request) async {

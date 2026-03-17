@@ -209,6 +209,14 @@ class _HandymanNotificationsPageState
 
   Future<void> _accept(String bookingId, String notifId) async {
     if (_loadingIds.contains(bookingId)) return;
+
+    // Check for scheduling conflict before accepting
+    final hasConflict = await _checkScheduleConflict(bookingId);
+    if (hasConflict && mounted) {
+      final proceed = await _showConflictDialog(bookingId);
+      if (proceed != true) return;
+    }
+
     setState(() => _loadingIds.add(bookingId));
 
     final ok = await _api.acceptBooking(bookingId);
@@ -258,6 +266,93 @@ class _HandymanNotificationsPageState
         duration: const Duration(seconds: 2),
       );
     }
+  }
+
+  /// Checks if the handyman already has a confirmed booking on the same day
+  Future<bool> _checkScheduleConflict(String bookingId) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return false;
+
+      // Fetch the booking being accepted to get its date
+      final bookingDoc = await FirebaseFirestore.instance
+          .collection('bookings')
+          .doc(bookingId)
+          .get();
+      if (!bookingDoc.exists) return false;
+
+      final rawDate = bookingDoc.data()?['scheduledDate'];
+      DateTime? requestDate;
+      if (rawDate is Timestamp) requestDate = rawDate.toDate();
+      else if (rawDate is String) requestDate = DateTime.tryParse(rawDate);
+      if (requestDate == null) return false;
+
+      final dayStart = DateTime(requestDate.year, requestDate.month, requestDate.day);
+      final dayEnd = dayStart.add(const Duration(days: 1));
+
+      // Query confirmed bookings for this handyman
+      final snapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('handymanId', isEqualTo: uid)
+          .where('status', whereIn: ['confirmed', 'in_progress'])
+          .get();
+
+      for (final doc in snapshot.docs) {
+        if (doc.id == bookingId) continue; // skip the booking being accepted
+        final raw = doc.data()['scheduledDate'];
+        DateTime? d;
+        if (raw is Timestamp) d = raw.toDate();
+        else if (raw is String) d = DateTime.tryParse(raw);
+        if (d != null && !d.isBefore(dayStart) && d.isBefore(dayEnd)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error checking schedule conflict: $e');
+      return false;
+    }
+  }
+
+  Future<bool?> _showConflictDialog(String bookingId) async {
+    // Fetch date for display
+    String dateStr = 'this day';
+    try {
+      final doc = await FirebaseFirestore.instance.collection('bookings').doc(bookingId).get();
+      final raw = doc.data()?['scheduledDate'];
+      DateTime? d;
+      if (raw is Timestamp) d = raw.toDate();
+      else if (raw is String) d = DateTime.tryParse(raw);
+      if (d != null) dateStr = '${d.day}/${d.month}/${d.year}';
+    } catch (_) {}
+
+    if (!mounted) return false;
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+        title: const Text('Schedule Conflict'),
+        content: Text(
+          'You already have a confirmed appointment on $dateStr.\n\n'
+          'Are you sure you want to accept this booking too?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Accept Anyway'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _showDeclineReasonSheet() async {
