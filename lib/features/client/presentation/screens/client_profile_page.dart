@@ -103,7 +103,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
         .snapshots();
 
     _loadProfileData();
-    _checkAdminStatus();
+    _checkAdminStatus(); // non-blocking, runs in background
   }
 
   @override
@@ -166,11 +166,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
           _isLoading = false;
         });
 
-        // Load secondary data without blocking the main UI
-        await Future.wait([
-          _loadFavoriteServices(),
-          _loadLocationSharePreference(),
-        ]);
+        // Fire-and-forget: load secondary data without blocking UI
+        _loadFavoriteServices();
+        _loadLocationSharePreference();
       } else {
         if (mounted) setState(() => _isLoading = false);
       }

@@ -83,7 +83,8 @@ class _ClientHomePageState extends State<ClientHomePage>
   Future<void> _checkIsAdmin() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final token = await user.getIdTokenResult();
+    // Use cached token (false = don't force refresh). Only refreshes if expired.
+    final token = await user.getIdTokenResult(false);
     final userType = token.claims?['userType'] as String?;
     if (mounted && userType == 'admin') {
       setState(() => _isAdmin = true);
