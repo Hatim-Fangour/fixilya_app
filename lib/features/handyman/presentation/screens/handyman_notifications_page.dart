@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/services/bookings_api_service.dart';
 import 'package:fixilya_app/services/bookings_realtime_service.dart';
