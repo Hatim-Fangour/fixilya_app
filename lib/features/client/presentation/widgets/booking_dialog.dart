@@ -423,12 +423,15 @@ class _BookingDialogState extends State<BookingDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor(context),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       child: Column(
         children: [
           // Handle bar
@@ -1002,6 +1005,7 @@ class _BookingDialogState extends State<BookingDialog> {
           ),
         ],
       ),
+    ),
     );
   }
 
