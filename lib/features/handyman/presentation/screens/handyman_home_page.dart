@@ -144,13 +144,14 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     // Close the detail sheet
     Navigator.of(context).pop();
 
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: AppColors.primaryColor),
+    // Use rootNavigator for everything after pop (sheet context is dead)
+    rootNavigator.push(
+      DialogRoute(
+        context: rootNavigator.context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryColor),
+        ),
       ),
     );
 
@@ -161,7 +162,6 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         callerName: _handymanName,
       );
 
-      if (!context.mounted) return;
       rootNavigator.pop(); // dismiss loading
 
       await rootNavigator.push(
@@ -176,15 +176,13 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         ),
       );
     } catch (e) {
-      if (context.mounted) {
-        rootNavigator.pop(); // dismiss loading
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Could not start call. No active booking found.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      rootNavigator.pop(); // dismiss loading
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not start call. No active booking found.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

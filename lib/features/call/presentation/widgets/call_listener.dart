@@ -36,27 +36,38 @@ class _CallListenerState extends State<CallListener> {
   }
 
   void _listen() {
-    _sub = _callService.watchIncomingCalls().listen((snapshot) {
-      if (snapshot.docs.isEmpty) return;
-      final doc = snapshot.docs.first;
-      final callId = doc.id;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    debugPrint('[CallListener] Listening for incoming calls for uid=$uid');
 
-      // Avoid re-triggering for the same call
-      if (_isShowingCall || callId == _activeCallId) return;
+    _sub = _callService.watchIncomingCalls().listen(
+      (snapshot) {
+        debugPrint('[CallListener] Snapshot received: ${snapshot.docs.length} docs');
+        if (snapshot.docs.isEmpty) return;
+        final doc = snapshot.docs.first;
+        final callId = doc.id;
 
-      final data = doc.data();
-      final callerName = data['callerName'] as String? ?? 'Someone';
-      final callerPicture = data['callerPicture'] as String?;
+        // Avoid re-triggering for the same call
+        if (_isShowingCall || callId == _activeCallId) return;
 
-      _activeCallId = callId;
-      _isShowingCall = true;
+        final data = doc.data();
+        final callerName = data['callerName'] as String? ?? 'Someone';
+        final callerPicture = data['callerPicture'] as String?;
 
-      _showIncomingCall(
-        callId: callId,
-        callerName: callerName,
-        callerPicture: callerPicture,
-      );
-    });
+        debugPrint('[CallListener] Incoming call! callId=$callId from=$callerName');
+
+        _activeCallId = callId;
+        _isShowingCall = true;
+
+        _showIncomingCall(
+          callId: callId,
+          callerName: callerName,
+          callerPicture: callerPicture,
+        );
+      },
+      onError: (e) {
+        debugPrint('[CallListener] Stream error: $e');
+      },
+    );
   }
 
   Future<void> _showIncomingCall({
@@ -64,13 +75,15 @@ class _CallListenerState extends State<CallListener> {
     required String callerName,
     String? callerPicture,
   }) async {
-    await Navigator.of(context, rootNavigator: true).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => IncomingCallScreen(
-          callId: callId,
-          callerName: callerName,
-          callerPicture: callerPicture,
-        ),
+    debugPrint('[CallListener] Showing IncomingCallScreen for callId=$callId');
+    try {
+      await Navigator.of(context, rootNavigator: true).push(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => IncomingCallScreen(
+            callId: callId,
+            callerName: callerName,
+            callerPicture: callerPicture,
+          ),
         transitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(
           opacity: animation,
@@ -78,6 +91,9 @@ class _CallListenerState extends State<CallListener> {
         ),
       ),
     );
+    } catch (e) {
+      debugPrint('[CallListener] Navigation error: $e');
+    }
     _isShowingCall = false;
     // Keep _activeCallId so we don't re-trigger the same call
   }
