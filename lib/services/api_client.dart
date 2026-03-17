@@ -20,6 +20,15 @@ class ApiClient {
   late final Dio callDio;
   late final CacheOptions _cacheOptions;
 
+  // ── Token cache ──────────────────────────────────────────────
+  // getIdToken() checks expiry internally, but calling it on every
+  // request adds ~200-500ms each time due to async overhead + potential
+  // Firebase network calls. Cache the token and refresh only when
+  // it's about to expire (within 5 minutes of the 1-hour lifetime).
+  String? _cachedToken;
+  DateTime? _tokenFetchedAt;
+  static const _tokenCacheDuration = Duration(minutes: 50); // refresh at 50min (tokens last 60min)
+
   // Service URLs — loaded from --dart-define or AppConfig defaults
   static String get _authServiceUrl => AppConfig.authServiceUrl;
   static String get _userServiceUrl => AppConfig.userServiceUrl;
@@ -70,12 +79,45 @@ class ApiClient {
     callDio = _createDio(_callServiceUrl);
   }
 
+  Future<String?> _getToken() async {
+    // Return cached token if still fresh
+    if (_cachedToken != null &&
+        _tokenFetchedAt != null &&
+        DateTime.now().difference(_tokenFetchedAt!) < _tokenCacheDuration) {
+      return _cachedToken;
+    }
+
+    // Fetch fresh token
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    final token = await user.getIdToken();
+    if (token != null && token.isNotEmpty) {
+      _cachedToken = token;
+      _tokenFetchedAt = DateTime.now();
+    }
+    return _cachedToken;
+  }
+
+  /// Force-refresh the token (called on 401 retry)
+  Future<String?> _forceRefreshToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    await user.reload();
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+    if (token != null && token.isNotEmpty) {
+      _cachedToken = token;
+      _tokenFetchedAt = DateTime.now();
+    }
+    return _cachedToken;
+  }
+
   Dio _createDio(String baseUrl) {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -92,13 +134,9 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           try {
-            final user = FirebaseAuth.instance.currentUser;
-            if (user != null) {
-              final token = await user.getIdToken();
-              if (token != null && token.isNotEmpty) {
-                options.headers['Authorization'] = 'Bearer $token';
-                // Never log tokens — even partial ones
-              }
+            final token = await _getToken();
+            if (token != null) {
+              options.headers['Authorization'] = 'Bearer $token';
             }
           } catch (e) {
             if (kDebugMode) debugPrint('ApiClient: token injection error: $e');
@@ -123,20 +161,15 @@ class ApiClient {
             );
           }
 
-          // Auto-retry on 401 with a fresh Firebase ID token
+          // Auto-retry on 401 with a force-refreshed Firebase ID token
           if (error.response?.statusCode == 401) {
             try {
-              final user = FirebaseAuth.instance.currentUser;
-              if (user != null) {
-                await user.reload();
-                final freshToken = await FirebaseAuth.instance.currentUser
-                    ?.getIdToken(true);
-                if (freshToken != null && freshToken.isNotEmpty) {
-                  final opts = error.requestOptions;
-                  opts.headers['Authorization'] = 'Bearer $freshToken';
-                  final retryResponse = await dio.fetch(opts);
-                  return handler.resolve(retryResponse);
-                }
+              final freshToken = await _forceRefreshToken();
+              if (freshToken != null) {
+                final opts = error.requestOptions;
+                opts.headers['Authorization'] = 'Bearer $freshToken';
+                final retryResponse = await dio.fetch(opts);
+                return handler.resolve(retryResponse);
               }
             } catch (e) {
               if (kDebugMode) debugPrint('ApiClient: 401 retry failed: $e');
