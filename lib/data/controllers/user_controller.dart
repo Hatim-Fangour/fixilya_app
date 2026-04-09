@@ -1,18 +1,7 @@
-/// User Controller
-/// Complete user profile and data management
-///
-/// Features:
-/// - User profile management
-/// - Profile updates (name, phone, image, bio)
-/// - User preferences
-/// - Account settings
-/// - Activity tracking
-/// - Favorites management
-/// - Notifications preferences
-/// - Privacy settings
-/// - Data caching
-/// - Offline support
+// User Controller - Complete user profile and data management
+// ignore_for_file: depend_on_referenced_packages, avoid_print
 
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -20,11 +9,13 @@ import 'package:image_picker/image_picker.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../services/storage_service.dart';
+import '../../../services/data_persistence_service.dart';
 import '../../../core/constants/app_routes.dart';
 
 class UserController extends GetxController {
   final UserRepository _userRepo = UserRepository();
   final StorageService _storageService = StorageService();
+  final DataPersistenceService _cache = DataPersistenceService();
 
   // ==================== Observable State ====================
 
@@ -419,15 +410,14 @@ class UserController extends GetxController {
       _reviewsCount.value = 0;
       _averageRating.value = 0.0;
     } catch (e) {
-      print('Error loading user activity: $e');
+      if (kDebugMode) debugPrint('Error loading user activity: $e');
     }
   }
 
-  /// Save user preferences to local storage
+  /// Save user preferences to local storage via DataPersistenceService.
   Future<void> _saveUserPreferences() async {
     try {
-      // TODO: Save to local storage (SharedPreferences or GetStorage)
-      final prefs = {
+      final prefs = <String, dynamic>{
         'notificationsEnabled': _notificationsEnabled.value,
         'emailNotifications': _emailNotifications.value,
         'pushNotifications': _pushNotifications.value,
@@ -436,24 +426,33 @@ class UserController extends GetxController {
         'showEmail': _showEmail.value,
         'showPhone': _showPhone.value,
       };
-
-      // await GetStorage().write('userPreferences', prefs);
+      await _cache.cacheData(DataPersistenceService.keyUserPreferences, prefs);
+      if (kDebugMode) debugPrint('[UserController] Preferences saved to cache');
     } catch (e) {
-      print('Error saving preferences: $e');
+      if (kDebugMode) debugPrint('Error saving preferences: $e');
     }
   }
 
-  /// Load user preferences from local storage
+  /// Load user preferences from local storage via DataPersistenceService.
   Future<void> _loadUserPreferences() async {
     try {
-      // TODO: Load from local storage
-      // final prefs = GetStorage().read('userPreferences');
-      // if (prefs != null) {
-      //   _notificationsEnabled.value = prefs['notificationsEnabled'] ?? true;
-      //   ...
-      // }
+      // Use a very long TTL -- preferences should survive until logout.
+      final prefs = _cache.getCachedData<Map<String, dynamic>>(
+        DataPersistenceService.keyUserPreferences,
+        ttl: const Duration(days: 365),
+      );
+      if (prefs != null) {
+        _notificationsEnabled.value = prefs['notificationsEnabled'] ?? true;
+        _emailNotifications.value = prefs['emailNotifications'] ?? true;
+        _pushNotifications.value = prefs['pushNotifications'] ?? true;
+        _smsNotifications.value = prefs['smsNotifications'] ?? false;
+        _profilePublic.value = prefs['profilePublic'] ?? true;
+        _showEmail.value = prefs['showEmail'] ?? false;
+        _showPhone.value = prefs['showPhone'] ?? false;
+        if (kDebugMode) debugPrint('[UserController] Preferences loaded from cache');
+      }
     } catch (e) {
-      print('Error loading preferences: $e');
+      if (kDebugMode) debugPrint('Error loading preferences: $e');
     }
   }
 
@@ -466,7 +465,7 @@ class UserController extends GetxController {
         'favorites': _favoriteHandymen.toList(),
       });
     } catch (e) {
-      print('Error saving favorites: $e');
+      if (kDebugMode) debugPrint('Error saving favorites: $e');
     }
   }
 
@@ -494,7 +493,7 @@ class UserController extends GetxController {
     );
   }
 
-  /// Clear user data
+  /// Clear user data (called on logout).
   void clearUser() {
     _currentUser.value = null;
     _profileCompletionPercentage.value = 0;
@@ -502,5 +501,8 @@ class UserController extends GetxController {
     _reviewsCount.value = 0;
     _averageRating.value = 0.0;
     _favoriteHandymen.clear();
+
+    // Clear all persisted data caches
+    _cache.clearAll();
   }
 }

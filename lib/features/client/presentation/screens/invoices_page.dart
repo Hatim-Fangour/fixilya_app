@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class InvoicesPage extends StatefulWidget {
-  const InvoicesPage({Key? key}) : super(key: key);
+  const InvoicesPage({super.key});
 
   @override
   State<InvoicesPage> createState() => _InvoicesPageState();
@@ -20,48 +24,51 @@ class _InvoicesPageState extends State<InvoicesPage>
   String _selectedFilter = 'All';
   final List<String> _filters = ['All', 'Paid', 'Pending', 'Overdue'];
 
-  final List<Map<String, dynamic>> _invoices = [
-    {
-      'id': 'INV-001',
-      'handyman': 'Ahmed El Fassi',
-      'service': 'Electrical Work',
-      'date': 'Jan 15, 2026',
-      'amount': 450.0,
-      'status': 'Paid',
-      'paymentMethod': 'Credit Card',
-      'dueDate': 'Jan 15, 2026',
-    },
-    {
-      'id': 'INV-002',
-      'handyman': 'Youssef Bennani',
-      'service': 'Carpentry',
-      'date': 'Jan 10, 2026',
-      'amount': 720.0,
-      'status': 'Paid',
-      'paymentMethod': 'Cash',
-      'dueDate': 'Jan 10, 2026',
-    },
-    {
-      'id': 'INV-003',
-      'handyman': 'Hamza Idrissi',
-      'service': 'Plumbing',
-      'date': 'Jan 20, 2026',
-      'amount': 280.0,
-      'status': 'Pending',
-      'paymentMethod': 'Pending',
-      'dueDate': 'Jan 25, 2026',
-    },
-    {
-      'id': 'INV-004',
-      'handyman': 'Mohammed Berrada',
-      'service': 'Painting',
-      'date': 'Dec 28, 2025',
-      'amount': 1200.0,
-      'status': 'Paid',
-      'paymentMethod': 'Bank Transfer',
-      'dueDate': 'Dec 28, 2025',
-    },
-  ];
+  List<Map<String, dynamic>> _invoices = [];
+  bool _isLoading = true;
+
+  // final List<Map<String, dynamic>> _invoices = [
+  //   {
+  //     'id': 'INV-001',
+  //     'handyman': 'Ahmed El Fassi',
+  //     'service': 'Electrical Work',
+  //     'date': 'Jan 15, 2026',
+  //     'amount': 450.0,
+  //     'status': 'Paid',
+  //     'paymentMethod': 'Credit Card',
+  //     'dueDate': 'Jan 15, 2026',
+  //   },
+  //   {
+  //     'id': 'INV-002',
+  //     'handyman': 'Youssef Bennani',
+  //     'service': 'Carpentry',
+  //     'date': 'Jan 10, 2026',
+  //     'amount': 720.0,
+  //     'status': 'Paid',
+  //     'paymentMethod': 'Cash',
+  //     'dueDate': 'Jan 10, 2026',
+  //   },
+  //   {
+  //     'id': 'INV-003',
+  //     'handyman': 'Hamza Idrissi',
+  //     'service': 'Plumbing',
+  //     'date': 'Jan 20, 2026',
+  //     'amount': 280.0,
+  //     'status': 'Pending',
+  //     'paymentMethod': 'Pending',
+  //     'dueDate': 'Jan 25, 2026',
+  //   },
+  //   {
+  //     'id': 'INV-004',
+  //     'handyman': 'Mohammed Berrada',
+  //     'service': 'Painting',
+  //     'date': 'Dec 28, 2025',
+  //     'amount': 1200.0,
+  //     'status': 'Paid',
+  //     'paymentMethod': 'Bank Transfer',
+  //     'dueDate': 'Dec 28, 2025',
+  //   },
+  // ];
 
   @override
   void initState() {
@@ -71,6 +78,7 @@ class _InvoicesPageState extends State<InvoicesPage>
       vsync: this,
     );
     _animationController.forward();
+    _loadInvoices();
   }
 
   @override
@@ -113,6 +121,105 @@ class _InvoicesPageState extends State<InvoicesPage>
         .fold(0.0, (sum, inv) => sum + inv['amount']);
   }
 
+  Future<void> _loadInvoices() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) debugPrint('❌ No user logged in');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Fetch completed bookings for this client
+      final bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('clientId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'completed')
+          .orderBy('completedAt', descending: true)
+          .get();
+
+      List<Map<String, dynamic>> invoices = [];
+
+      for (var doc in bookingsSnapshot.docs) {
+        final data = doc.data();
+
+        // Calculate status based on payment status or due date
+        String status = 'Paid'; // Default for completed bookings
+
+        // If you have payment tracking, use it:
+        if (data['paymentStatus'] != null) {
+          status = data['paymentStatus'];
+        } else if (data['isPaid'] == false) {
+          status = 'Pending';
+        }
+
+        invoices.add({
+          'id': doc.id,
+          'handyman': data['handymanName'] ?? 'Unknown',
+          'service': data['service'] ?? 'Service',
+          'date': _formatDate(data['completedAt']),
+          'amount': (data['amount'] ?? 0).toDouble(),
+          'status': status,
+          'paymentMethod': data['paymentMethod'] ?? 'Cash',
+          'dueDate': _formatDate(data['scheduledDate']),
+          'bookingId': doc.id,
+          'rawData': data,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _invoices = invoices;
+          _isLoading = false;
+        });
+      }
+
+      if (kDebugMode) debugPrint('✅ Loaded ${_invoices.length} invoices');
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error loading invoices: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // ✅ ADD THIS HELPER METHOD
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return 'Recent';
+
+    try {
+      DateTime date;
+      if (timestamp is Timestamp) {
+        date = timestamp.toDate();
+      } else if (timestamp is DateTime) {
+        date = timestamp;
+      } else {
+        return 'Recent';
+      }
+
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (e) {
+      return 'Recent';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,11 +235,7 @@ class _InvoicesPageState extends State<InvoicesPage>
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [primaryColor, secondaryColor, accentColor],
-                  ),
+                  gradient: AppColors.subtleHeaderGradientThemed(context),
                 ),
                 child: SafeArea(
                   child: Padding(
@@ -200,111 +303,185 @@ class _InvoicesPageState extends State<InvoicesPage>
 
           // Content
           SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _animationController,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Summary Cards
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildSummaryCard(
-                            'Total',
-                            '${_totalAmount.toStringAsFixed(0)} DH',
-                            Colors.blue,
-                            FontAwesomeIcons.chartLine,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: _buildSummaryCard(
-                            'Paid',
-                            '${_paidAmount.toStringAsFixed(0)} DH',
-                            Colors.green,
-                            FontAwesomeIcons.checkCircle,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildSummaryCard(
-                            'Pending',
-                            '${_pendingAmount.toStringAsFixed(0)} DH',
-                            Colors.orange,
-                            FontAwesomeIcons.clock,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: _buildSummaryCard(
-                            'Invoices',
-                            '${_invoices.length}',
-                            primaryColor,
-                            FontAwesomeIcons.receipt,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    SizedBox(height: 24),
-
-                    // Filter Chips
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: _filters.map((filter) {
-                          final isSelected = _selectedFilter == filter;
-                          return Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text(filter),
-                              selected: isSelected,
-                              onSelected: (selected) {
-                                setState(() => _selectedFilter = filter);
-                              },
-                              backgroundColor: Colors.white,
-                              selectedColor: primaryColor.withOpacity(0.2),
-                              labelStyle: TextStyle(
-                                color: isSelected
-                                    ? primaryColor
-                                    : Colors.grey[700],
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+            child: _isLoading
+                ? _buildLoadingState() // ✅ Show loading
+                : FadeTransition(
+                    opacity: _animationController,
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Summary Cards
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  'Total',
+                                  '${_totalAmount.toStringAsFixed(0)} DH',
+                                  Colors.blue,
+                                  FontAwesomeIcons.chartLine,
+                                ),
                               ),
-                              side: BorderSide(
-                                color: isSelected
-                                    ? primaryColor
-                                    : Colors.grey.shade300,
-                                width: isSelected ? 2 : 1,
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  'Paid',
+                                  '${_paidAmount.toStringAsFixed(0)} DH',
+                                  Colors.green,
+                                  FontAwesomeIcons.checkCircle,
+                                ),
                               ),
-                              showCheckmark: false,
+                            ],
+                          ),
+                          SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  'Pending',
+                                  '${_pendingAmount.toStringAsFixed(0)} DH',
+                                  Colors.orange,
+                                  FontAwesomeIcons.clock,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  'Invoices',
+                                  '${_invoices.length}',
+                                  primaryColor,
+                                  FontAwesomeIcons.receipt,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          SizedBox(height: 24),
+
+                          // Filter Chips
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _filters.map((filter) {
+                                final isSelected = _selectedFilter == filter;
+                                return Padding(
+                                  padding: EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(filter),
+                                    selected: isSelected,
+                                    onSelected: (selected) {
+                                      setState(() => _selectedFilter = filter);
+                                    },
+                                    backgroundColor: Colors.white,
+                                    selectedColor: primaryColor.withOpacity(
+                                      0.2,
+                                    ),
+                                    labelStyle: TextStyle(
+                                      color: isSelected
+                                          ? primaryColor
+                                          : Colors.grey[700],
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                    side: BorderSide(
+                                      color: isSelected
+                                          ? primaryColor
+                                          : Colors.grey.shade300,
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                    showCheckmark: false,
+                                  ),
+                                );
+                              }).toList(),
                             ),
-                          );
-                        }).toList(),
+                          ),
+
+                          SizedBox(height: 20),
+
+                          // Invoices List
+                          ..._filteredInvoices
+                              .map((invoice) => _buildInvoiceCard(invoice))
+                              ,
+
+                          SizedBox(height: 20),
+
+                          if (_filteredInvoices.isEmpty)
+                            _buildEmptyState()
+                          else
+                            // Invoices List
+                            ..._filteredInvoices
+                                .map((invoice) => _buildInvoiceCard(invoice))
+                                ,
+
+                          SizedBox(height: 20),
+                        ],
                       ),
                     ),
-
-                    SizedBox(height: 20),
-
-                    // Invoices List
-                    ..._filteredInvoices
-                        .map((invoice) => _buildInvoiceCard(invoice))
-                        .toList(),
-
-                    SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
+                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return SizedBox(
+      height: 400,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Loading invoices...',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return SizedBox(
+      height: 400,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: FaIcon(
+                FontAwesomeIcons.fileInvoice,
+                size: 48,
+                color: primaryColor,
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No invoices yet',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Complete bookings to see invoices',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+          ],
+        ),
       ),
     );
   }

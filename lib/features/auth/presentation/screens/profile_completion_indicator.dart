@@ -5,10 +5,10 @@ class ProfileCompletionIndicator extends StatelessWidget {
   final bool showPercentage;
 
   const ProfileCompletionIndicator({
-    Key? key,
+    super.key,
     required this.completionPercentage,
     this.showPercentage = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ProfileService {
@@ -15,7 +16,7 @@ class ProfileService {
         return await _calculateClientCompletion(userId);
       }
     } catch (e) {
-      print('Error calculating completion: $e');
+      if (kDebugMode) debugPrint('Error calculating completion: $e');
       return 0;
     }
   }
@@ -96,22 +97,28 @@ class ProfileService {
 
       if (userType == 'handyman') {
         if (data['city']?.toString().isEmpty ?? true) missingFields.add('City');
-        if (data['experience']?.toString().isEmpty ?? true)
+        if (data['experience']?.toString().isEmpty ?? true) {
           missingFields.add('Experience');
+        }
         if ((data['hourlyRate'] ?? 0) == 0) missingFields.add('Hourly Rate');
         if (data['bio']?.toString().isEmpty ?? true) missingFields.add('Bio');
-        if ((data['skills'] as List?)?.isEmpty ?? true)
+        if ((data['skills'] as List?)?.isEmpty ?? true) {
           missingFields.add('Skills');
-        if (data['profilePicture']?.toString().isEmpty ?? true)
+        }
+        if (data['profilePicture']?.toString().isEmpty ?? true) {
           missingFields.add('Profile Picture');
-        if ((data['workImages'] as List?)?.isEmpty ?? true)
+        }
+        if ((data['workImages'] as List?)?.isEmpty ?? true) {
           missingFields.add('Work Photos');
+        }
       } else {
         if (data['city']?.toString().isEmpty ?? true) missingFields.add('City');
-        if (data['address']?.toString().isEmpty ?? true)
+        if (data['address']?.toString().isEmpty ?? true) {
           missingFields.add('Address');
-        if (data['profilePicture']?.toString().isEmpty ?? true)
+        }
+        if (data['profilePicture']?.toString().isEmpty ?? true) {
           missingFields.add('Profile Picture');
+        }
       }
 
       final percentage = await calculateProfileCompletion(
@@ -121,7 +128,7 @@ class ProfileService {
 
       return {'percentage': percentage, 'missingFields': missingFields};
     } catch (e) {
-      print('Error getting completion details: $e');
+      if (kDebugMode) debugPrint('Error getting completion details: $e');
       return {'percentage': 0, 'missingFields': []};
     }
   }

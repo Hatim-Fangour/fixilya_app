@@ -29,7 +29,6 @@ class AnimatedThemeWrapper extends StatelessWidget {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.secondaryColor,
         surface: Color(0xFF151922),
-        background: Color(0xFF0F1115),
         onSurface: Color(0xFFE9ECF1),
         onSurfaceVariant: Color(0xFFB8BFCC),
         outlineVariant: Color(0xFF2A3140),

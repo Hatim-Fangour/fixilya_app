@@ -9,7 +9,7 @@ import 'package:get/get.dart';
 class SignUpScreen extends StatefulWidget {
   final String userType;
 
-  const SignUpScreen({Key? key, required this.userType}) : super(key: key);
+  const SignUpScreen({super.key, required this.userType});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -28,14 +28,20 @@ class _SignUpScreenState extends State<SignUpScreen>
   late Animation<Offset> _slideAnimation;
 
   // Controllers
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _nameController = TextEditingController(text: 'handy Hatim');
+  final _emailController = TextEditingController(
+    text: 'ing.hatim.fangour@gmail.com',
+  );
+  final _phoneController = TextEditingController(text: '+212666666666');
+  final _passwordController = TextEditingController(text: '123ewq');
+  final _confirmPasswordController = TextEditingController(
+    text: '123ewq',
+  ); // ✅ NEW
 
-  bool _agreePersonalData = false;
+  bool _agreePersonalData = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true; // ✅ NEW
 
   @override
   void initState() {
@@ -82,6 +88,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose(); // ✅ NEW
     super.dispose();
   }
 
@@ -95,7 +102,17 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     setState(() => _isLoading = true);
 
+    // Hide the keyboard
+    FocusScope.of(context).unfocus();
+    await Future.delayed(const Duration(milliseconds: 80));
+
     try {
+      // ✅ STEP 1: Register user (creates auth + minimal Firestore docs)
+      // The backend will handle creating the Firebase Auth user and Firestore docs
+      // ✅ STEP 2: Send email verification (handled by backend)
+      // ✅ STEP 3: USER_COLLECTION_NAME will be set in the backend based on userType, so we don't need to specify it here
+      // ✅ STEP 4: The backend will return success if registration and email sending were successful, or an error message if something went wrong
+
       final result = await _authService.signUpWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -104,13 +121,13 @@ class _SignUpScreenState extends State<SignUpScreen>
         userType: widget.userType,
       );
 
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
 
       if (result['success']) {
         if (mounted) {
-          // ✅ Navigate to EmailVerificationScreen using GetX routing
+          FocusScope.of(context).unfocus();
+          await Future.delayed(const Duration(milliseconds: 80));
+
           AppRoutes.toEmailVerification(
             userType: widget.userType,
             userName: _nameController.text.trim(),
@@ -118,12 +135,6 @@ class _SignUpScreenState extends State<SignUpScreen>
             phone: _phoneController.text.trim(),
             fullName: _nameController.text.trim(),
           );
-
-          // ✅ Navigate with GetX
-          // AppRoutes.toWelcomeAfterSignup(
-          //   userType: widget.userType,
-          //   userName: _nameController.text.trim(),
-          // );
         }
       } else {
         _showErrorDialog(result['message']);
@@ -193,17 +204,10 @@ class _SignUpScreenState extends State<SignUpScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryColor,
-              AppColors.secondaryColor,
-              AppColors.accentColor,
-            ],
-          ),
+          gradient: AppColors.subtleHeaderGradientThemed(context),
         ),
         child: SafeArea(
           child: Column(
@@ -233,14 +237,13 @@ class _SignUpScreenState extends State<SignUpScreen>
                   ),
                   child: IconButton(
                     icon: Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Get.back(), // ✅ Using GetX navigation
+                    onPressed: () => Get.back(),
                   ),
                 ),
               ],
             ),
             SizedBox(height: 12),
 
-            // Animated Icon
             TweenAnimationBuilder(
               tween: Tween<double>(begin: 0, end: 1),
               duration: Duration(milliseconds: 600),
@@ -311,7 +314,7 @@ class _SignUpScreenState extends State<SignUpScreen>
         opacity: _formAnimation,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.cardColor(context),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(30),
               topRight: Radius.circular(30),
@@ -331,7 +334,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: AppColors.textPrimaryColor(context),
                       ),
                     ),
 
@@ -378,64 +381,24 @@ class _SignUpScreenState extends State<SignUpScreen>
                       validator: Validators.validatePassword,
                     ),
 
-                    SizedBox(height: 14),
+                    SizedBox(height: 12),
 
-                    // Animated Checkbox
-                    TweenAnimationBuilder(
-                      tween: Tween<double>(begin: 0, end: 1),
-                      duration: Duration(milliseconds: 600),
-                      builder: (context, double value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, 20 * (1 - value)),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryColor.withValues(
-                                  alpha: 0.05,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primaryColor.withValues(
-                                    alpha: 0.2,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Transform.scale(
-                                    scale: 0.95,
-                                    child: Checkbox(
-                                      value: _agreePersonalData,
-                                      onChanged: (value) {
-                                        setState(
-                                          () => _agreePersonalData = value!,
-                                        );
-                                      },
-                                      activeColor: AppColors.primaryColor,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      'I agree to the Terms & Conditions',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
+                    // ✅ NEW: Confirm Password Field
+                    _buildAnimatedTextField(
+                      label: 'Confirm Password',
+                      controller: _confirmPasswordController,
+                      icon: Icons.lock_outline,
+                      obscureText: true,
+                      isConfirmPassword: true, // ✅ NEW parameter
+                      delay: 500,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please confirm your password';
+                        }
+                        if (value != _passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
                       },
                     ),
 
@@ -520,7 +483,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                     Center(
                       child: TextButton(
                         onPressed: () {
-                          AppRoutes.toLogin(); // ✅ Using GetX routing
+                          AppRoutes.toLogin();
                         },
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.symmetric(vertical: 8),
@@ -562,6 +525,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     required TextEditingController controller,
     required int delay,
     bool obscureText = false,
+    bool isConfirmPassword = false, // ✅ NEW parameter
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
@@ -575,13 +539,20 @@ class _SignUpScreenState extends State<SignUpScreen>
             offset: Offset(50 * (1 - value), 0),
             child: TextFormField(
               controller: controller,
-              obscureText: obscureText && _obscurePassword,
+              obscureText:
+                  obscureText &&
+                  (isConfirmPassword
+                      ? _obscureConfirmPassword
+                      : _obscurePassword), // ✅ UPDATED
               keyboardType: keyboardType,
               validator: validator,
               style: TextStyle(fontSize: 15),
               decoration: InputDecoration(
                 labelText: label,
-                labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+                labelStyle: TextStyle(
+                  color: AppColors.textSecondaryColor(context),
+                  fontSize: 14,
+                ),
                 prefixIcon: Container(
                   margin: EdgeInsets.all(10),
                   padding: EdgeInsets.all(6),
@@ -594,26 +565,38 @@ class _SignUpScreenState extends State<SignUpScreen>
                 suffixIcon: obscureText
                     ? IconButton(
                         icon: Icon(
-                          _obscurePassword
+                          (isConfirmPassword
+                                  ? _obscureConfirmPassword
+                                  : _obscurePassword)
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
-                          color: Colors.grey[600],
+                          color: AppColors.textSecondaryColor(context),
                           size: 20,
                         ),
                         onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
+                          setState(() {
+                            if (isConfirmPassword) {
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword; // ✅ NEW
+                            } else {
+                              _obscurePassword = !_obscurePassword;
+                            }
+                          });
                         },
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.grey[50],
+                fillColor: AppColors.borderColor(context),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.grey.shade200, width: 1),
+                  borderSide: BorderSide(
+                    color: AppColors.borderColor(context),
+                    width: 1,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -624,11 +607,11 @@ class _SignUpScreenState extends State<SignUpScreen>
                 ),
                 errorBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.red, width: 1),
+                  borderSide: BorderSide(color: AppColors.red, width: 1),
                 ),
                 focusedErrorBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.red, width: 2),
+                  borderSide: BorderSide(color: AppColors.red, width: 2),
                 ),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 14,

@@ -9,6 +9,7 @@
 /// - Custom events
 /// - User properties
 /// - Conversion tracking
+library;
 
 import 'package:firebase_analytics/firebase_analytics.dart';
 

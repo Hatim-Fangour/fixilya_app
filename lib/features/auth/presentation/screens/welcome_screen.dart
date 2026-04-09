@@ -2,10 +2,9 @@ import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:get/get.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({Key? key}) : super(key: key);
+  const WelcomeScreen({super.key});
 
   static const String routeName = '/welcome';
 
@@ -18,6 +17,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -40,10 +45,59 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _controller.forward();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String text,
+    required int delay,
+  }) {
+    return TweenAnimationBuilder(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 600),
+      builder: (context, double value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(30 * (1 - value), 0),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha:0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha:0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: FaIcon(
+                      icon,
+                      color: AppColors.primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -51,15 +105,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryColor,
-              AppColors.secondaryColor,
-              AppColors.accentColor,
-            ],
-          ),
+          gradient: AppColors.subtleHeaderGradientThemed(context),
         ),
         child: SafeArea(
           child: Padding(
@@ -70,7 +116,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 position: _slideAnimation,
                 child: Column(
                   children: [
-                    SizedBox(height: 80),
+                    SizedBox(height: 40),
 
                     // Logo with animation
                     TweenAnimationBuilder(
@@ -102,7 +148,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       },
                     ),
 
-                    SizedBox(height: 40),
+                    SizedBox(height: 20),
 
                     // App Name
                     Text(
@@ -115,14 +161,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       ),
                     ),
 
-                    SizedBox(height: 12),
+                    SizedBox(height: 10),
 
                     // Tagline
                     Text(
                       'Your Trusted Handyman Marketplace',
                       style: TextStyle(
                         fontSize: 18,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha:0.9),
                         letterSpacing: 0.5,
                       ),
                       textAlign: TextAlign.center,
@@ -187,6 +233,49 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                     SizedBox(height: 16),
 
+                    // Continue as Guest Button
+                    SizedBox(
+                      width: 250,
+                      height: 45,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // ✅ Use GetX navigation
+                          AppRoutes.toGuestHome();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha:0.3),
+                            width: 1,
+                          ),
+                          elevation: 5,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Continue as Guest',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(
+                              Icons.supervised_user_circle_rounded,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 16),
+
                     // Sign In Button
                     TextButton(
                       onPressed: () {
@@ -213,7 +302,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       ),
                     ),
 
-                    SizedBox(height: 40),
+                    SizedBox(height: 30),
                   ],
                 ),
               ),
@@ -221,61 +310,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildFeatureItem({
-    required IconData icon,
-    required String text,
-    required int delay,
-  }) {
-    return TweenAnimationBuilder(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 600),
-      builder: (context, double value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(30 * (1 - value), 0),
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: FaIcon(
-                      icon,
-                      color: AppColors.primaryColor,
-                      size: 20,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Text(
-                    text,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

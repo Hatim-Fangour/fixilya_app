@@ -9,13 +9,13 @@ class CustomButton extends StatelessWidget {
   final bool isOutlined;
 
   const CustomButton({
-    Key? key,
+    super.key,
     required this.text,
     this.onPressed,
     this.isLoading = false,
     this.icon,
     this.isOutlined = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

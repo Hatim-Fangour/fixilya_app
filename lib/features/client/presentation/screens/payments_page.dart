@@ -1,8 +1,9 @@
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class PaymentsPage extends StatefulWidget {
-  const PaymentsPage({Key? key}) : super(key: key);
+  const PaymentsPage({super.key});
 
   @override
   State<PaymentsPage> createState() => _PaymentsPageState();
@@ -16,7 +17,7 @@ class _PaymentsPageState extends State<PaymentsPage>
 
   late AnimationController _animationController;
 
-  List<Map<String, dynamic>> _paymentMethods = [
+  final List<Map<String, dynamic>> _paymentMethods = [
     {
       'id': '1',
       'type': 'Credit Card',
@@ -368,11 +369,7 @@ class _PaymentsPageState extends State<PaymentsPage>
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [primaryColor, secondaryColor, accentColor],
-                  ),
+                  gradient: AppColors.subtleHeaderGradientThemed(context),
                 ),
                 child: SafeArea(
                   child: Padding(
@@ -449,7 +446,7 @@ class _PaymentsPageState extends State<PaymentsPage>
                   children: [
                     ..._paymentMethods
                         .map((method) => _buildPaymentMethodCard(method))
-                        .toList(),
+                        ,
                     SizedBox(height: 16),
                     _buildAddPaymentButton(),
                     SizedBox(height: 20),
@@ -776,7 +773,7 @@ class _AddPaymentMethodSheetState extends State<_AddPaymentMethodSheet> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
 
                     SizedBox(height: 24),
 

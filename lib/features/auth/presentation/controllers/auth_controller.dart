@@ -9,6 +9,7 @@
 /// - Loading states
 /// - Error handling
 /// - Form validation
+library;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';

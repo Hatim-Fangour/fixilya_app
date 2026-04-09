@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find lib:*)",
+      "Bash(read f:*)",
+      "Bash(adb devices:*)",
+      "Bash(export:*)",
+      "Bash(adb:*)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(node:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:support.google.com)",
+      "WebSearch",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter run:*)",
+      "Bash(taskkill:*)",
+      "WebFetch(domain:orangeoma.zendesk.com)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "Bash(curl:*)",
+      "Read(//c/Users/Windows/OneDrive/Bureau/Fixilya project/app/fixilya-backend/fixilya-microservices/**)",
+      "Read(//c/Users/Windows/OneDrive/Bureau/Fixilya project/app/fixilya-backend/**)",
+      "Bash(netstat:*)",
+      "Bash(flutter:*)",
+      "Bash(ipconfig:*)"
+    ]
+  }
+}

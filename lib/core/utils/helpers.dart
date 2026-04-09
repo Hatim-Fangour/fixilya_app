@@ -1,6 +1,7 @@
 /// Core Utils - Helpers
 /// Utility functions for formatting, converting, and common operations
 ///
+library;
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';

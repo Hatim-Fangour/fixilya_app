@@ -1,317 +1,476 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
+import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
+import 'package:fixilya_app/services/api_client.dart';
+import 'package:fixilya_app/services/data_persistence_service.dart';
 
-class HandymanDataService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+/// Handles all **REST API calls** for handyman data.
+///
+/// Rule: every write (mutation) must go through here so it passes
+/// through backend authentication, validation, and business logic.
+/// One-time reads that don't need real-time updates also live here.
+///
+/// For real-time data use [HandymanRealtimeService] instead.
+///
+/// GET methods follow cache-then-network: cached data is returned
+/// instantly when available, and a background refresh updates the cache.
+class HandymanApiService {
+  final _api = ApiClient();
+  final _cache = DataPersistenceService();
 
-  /// Get all approved handymen
-  Future<List<Map<String, dynamic>>> getAllHandymen() async {
+  // ─────────────────────────────────────────────
+  // PROFILE
+  // ─────────────────────────────────────────────
+
+  /// Fetches the full handyman profile from the backend.
+  /// Prefer [HandymanRealtimeService.streamHandymanProfile] for screens
+  /// that need live updates.
+  Future<Map<String, dynamic>?> getHandymanProfile({
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = DataPersistenceService.keyHandymanProfile;
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        cacheKey,
+        ttl: DataPersistenceService.profileTTL,
+      );
+      if (cached != null) {
+        if (kDebugMode) debugPrint('[HandymanApi] Profile served from cache');
+        _refreshHandymanProfile();
+        return cached;
+      }
+    }
+
+    return _refreshHandymanProfile();
+  }
+
+  Future<Map<String, dynamic>?> _refreshHandymanProfile() async {
+    const cacheKey = DataPersistenceService.keyHandymanProfile;
     try {
-      print('📋 Fetching all handymen from Firebase...');
+      final response = await _api.userDio.get('/users/handyman/profile');
 
-      final snapshot = await _firestore
-          .collection('handymen')
-          // .where('approved', isEqualTo: true)
-          // .where('suspended', isEqualTo: false)
-          .get();
-
-      final handymen = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'name': data['fullName'] ?? 'Unknown',
-          'category': _getPrimarySkill(data['skills']),
-          'city': data['city'] ?? 'Unknown',
-          'rating': (data['rating'] ?? 0.0).toDouble(),
-          'reviews': data['totalReviews'] ?? 0,
-          'phone': data['phone'] ?? '',
-          'hourlyRate': _getAverageRate(data['skillPrices']),
-          'image': data['profilePicture'] ?? '',
-          'verified': data['approved'] ?? false,
-          'experience': data['experience'] ?? '',
-          'completedJobs': data['completedJobs'] ?? 0,
-          'skills': data['skills'] ?? [],
-          'skillPrices': data['skillPrices'] ?? {},
-          'bio': data['bio'] ?? '',
-          'availability': data['availability'] ?? true,
-        };
-      }).toList();
-
-      print('✅ Fetched ${handymen.length} handymen');
-      return handymen;
-    } catch (e) {
-      print('❌ Error fetching handymen: $e');
-      return [];
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        await _cache.cacheUserProfile(cacheKey, data);
+        return data;
+      }
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey);
+    } on DioException catch (e) {
+      _logDioError('getHandymanProfile', e);
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey);
     }
   }
 
-  /// Stream all approved handymen (real-time updates)
-  Stream<List<Map<String, dynamic>>> streamHandymen() {
-    return _firestore
-        .collection('handymen')
-        .where('approved', isEqualTo: true)
-        .where('suspended', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            return {
-              'id': doc.id,
-              'name': data['fullName'] ?? 'Unknown',
-              'category': _getPrimarySkill(data['skills']),
-              'city': data['city'] ?? 'Unknown',
-              'rating': (data['rating'] ?? 0.0).toDouble(),
-              'reviews': data['totalReviews'] ?? 0,
-              'phone': data['phone'] ?? '',
-              'hourlyRate': _getAverageRate(data['skillPrices']),
-              'image': data['profilePicture'] ?? '',
-              'verified': data['approved'] ?? false,
-              'experience': data['experience'] ?? '',
-              'completedJobs': data['completedJobs'] ?? 0,
-              'skills': data['skills'] ?? [],
-              'skillPrices': data['skillPrices'] ?? {},
-              'bio': data['bio'] ?? '',
-              'availability': data['availability'] ?? true,
-            };
-          }).toList();
-        });
-  }
-
-  String _getPrimarySkill(dynamic skills) {
-    if (skills == null) return 'General Maintenance';
-    if (skills is List && skills.isNotEmpty) return skills[0];
-    return 'General Maintenance';
-  }
-
-  int _getAverageRate(dynamic skillPrices) {
-    if (skillPrices == null) return 100;
-
-    if (skillPrices is Map) {
-      final prices = skillPrices.values
-          .map((price) => int.tryParse(price.toString()) ?? 0)
-          .where((price) => price > 0)
-          .toList();
-
-      if (prices.isEmpty) return 100;
-      return (prices.reduce((a, b) => a + b) / prices.length).round();
-    }
-
-    return 100;
-  }
-
-  /// Get current handyman's profile data
-  Future<Map<String, dynamic>?> getHandymanProfile() async {
+  /// Updates the handyman profile.
+  /// [updates] can contain any subset of: fullName, phone, city,
+  /// experience, bio, skills, workImages.
+  Future<Map<String, dynamic>> updateHandymanProfile(
+      Map<String, dynamic> updates) async {
     try {
-      final user = _auth.currentUser;
-      print(' User  :${user}');
-      if (user == null) {
-        print('❌ No user logged in');
-        return null;
+      final response = await _api.userDio.put(
+        '/users/handyman/profile',
+        data: updates,
+      );
+
+      if (response.statusCode == 200) {
+        // Invalidate profile cache so the next read fetches fresh data
+        await _cache.invalidateProfileCaches();
+        return {'success': true, 'message': response.data['message']};
       }
 
-      print('🔍 Fetching profile for user: ${user.uid}');
-
-      // Get handyman document
-      final handymanDoc = await _firestore
-          .collection('handymen')
-          .doc(user.uid)
-          .get();
-
-      if (!handymanDoc.exists) {
-        print('❌ Handyman profile not found');
-        return null;
-      }
-
-      final handymanData = handymanDoc.data()!;
-      print('✅ Handyman profile loaded');
-      print(handymanData);
-
-      // Also get user document for name and email
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-
-      // final userData = userDoc.data() ?? {};
-
-      print('handymanData: $handymanData');
-      // Merge data
       return {
-        ...handymanData,
-        'fullName': handymanData['fullName'] ?? 'Handyman',
-        'email': handymanData['email'] ?? user.email ?? '',
-        'phone': handymanData['phone'] ?? '',
-        'uid': user.uid,
+        'success': false,
+        'message': response.data['message'] ?? 'Profile update failed',
       };
-    } catch (e) {
-      print('❌ Error fetching handyman profile: $e');
+    } on DioException catch (e) {
+      return _dioErrorResult('updateHandymanProfile', e);
+    }
+  }
+
+  /// Updates the profile picture URL (Cloudinary URL expected).
+  Future<Map<String, dynamic>> updateProfilePicture(String url) async {
+    try {
+      final response = await _api.userDio.put(
+        '/users/handyman/profile-picture',
+        data: {'profilePicture': url},
+      );
+
+      if (response.statusCode == 200) {
+        await _cache.invalidate(DataPersistenceService.keyHandymanProfile);
+        return {'success': true, 'message': response.data['message']};
+      }
+
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Profile picture update failed',
+      };
+    } on DioException catch (e) {
+      return _dioErrorResult('updateProfilePicture', e);
+    }
+  }
+
+  /// Fetches all approved, non-suspended handymen.
+  /// Prefer [HandymanRealtimeService.streamHandymen] for screens that
+  /// need live updates (e.g. the client browse / search screen).
+  Future<List<Map<String, dynamic>>> getAllHandymen({
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = DataPersistenceService.keyHandymenList;
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<List<Map<String, dynamic>>>(
+        cacheKey,
+        ttl: DataPersistenceService.listTTL,
+      );
+      if (cached != null && cached.isNotEmpty) {
+        if (kDebugMode) debugPrint('[HandymanApi] Handymen list served from cache (${cached.length} items)');
+        _refreshAllHandymen();
+        return cached;
+      }
+    }
+
+    return _refreshAllHandymen();
+  }
+
+  Future<List<Map<String, dynamic>>> _refreshAllHandymen() async {
+    const cacheKey = DataPersistenceService.keyHandymenList;
+    try {
+      // Force a fresh network request -- bypass the Dio cache entirely.
+      // The cache interceptor stores ETag-bearing responses and can serve a
+      // cached 304 (empty body) on subsequent navigations, causing the list
+      // to appear empty. CachePolicy.noCache prevents both caching and
+      // conditional-GET requests for this endpoint.
+      final response = await _api.userDio.get(
+        '/users/handyman/all',
+        options: Options(
+          extra: CacheOptions(
+            store: MemCacheStore(),
+            policy: CachePolicy.noCache,
+          ).toExtra(),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final list = response.data['data'] as List<dynamic>;
+        final data = list.cast<Map<String, dynamic>>();
+        await _cache.cacheList(cacheKey, data);
+        return data;
+      }
+      return _cache.getCachedDataStale<List<Map<String, dynamic>>>(cacheKey) ?? [];
+    } on DioException catch (e) {
+      _logDioError('getAllHandymen', e);
+      // Return stale cached data on network failure
+      return _cache.getCachedDataStale<List<Map<String, dynamic>>>(cacheKey) ?? [];
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // NEARBY HANDYMEN (map view)
+  // ─────────────────────────────────────────────
+
+  /// Fetches approved handymen near the given coordinates from the backend.
+  /// The backend handles privacy rules (exact / city_only / on_booking_accept)
+  /// and distance filtering server-side.
+  ///
+  /// Returns a list of handyman maps with: id, uid, fullName, profilePicture,
+  /// category, skills, city, rating, reviews, completedJobs, isAvailable,
+  /// hourlyRate, bio, phoneNumber, latitude, longitude, distance, isCityLevel.
+  Future<List<Map<String, dynamic>>> getNearbyHandymen({
+    required double lat,
+    required double lon,
+    double radiusKm = 50.0,
+    bool forceRefresh = false,
+  }) async {
+    final cacheKey = 'cache_nearby_handymen_${radiusKm.toInt()}';
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<List<Map<String, dynamic>>>(
+        cacheKey,
+        ttl: const Duration(minutes: 5),
+      );
+      if (cached != null && cached.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('[HandymanApi] Nearby handymen served from cache (${cached.length} items)');
+        }
+        // Fire-and-forget background refresh
+        _refreshNearbyHandymen(lat, lon, radiusKm, cacheKey);
+        return cached;
+      }
+    }
+
+    return _refreshNearbyHandymen(lat, lon, radiusKm, cacheKey);
+  }
+
+  Future<List<Map<String, dynamic>>> _refreshNearbyHandymen(
+    double lat,
+    double lon,
+    double radiusKm,
+    String cacheKey,
+  ) async {
+    try {
+      final response = await _api.userDio.get(
+        '/users/handyman/nearby',
+        queryParameters: {
+          'lat': lat,
+          'lon': lon,
+          'radius': radiusKm,
+        },
+        options: Options(
+          extra: CacheOptions(
+            store: MemCacheStore(),
+            policy: CachePolicy.noCache,
+          ).toExtra(),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final list = response.data['data'] as List<dynamic>;
+        final data = list.cast<Map<String, dynamic>>();
+        await _cache.cacheList(cacheKey, data);
+        return data;
+      }
+
+      return _cache.getCachedDataStale<List<Map<String, dynamic>>>(cacheKey) ?? [];
+    } on DioException catch (e) {
+      _logDioError('getNearbyHandymen', e);
+      return _cache.getCachedDataStale<List<Map<String, dynamic>>>(cacheKey) ?? [];
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // AVAILABILITY
+  // ─────────────────────────────────────────────
+
+  /// Fetches current availability status.
+  Future<Map<String, dynamic>> getAvailabilityStatus({
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = DataPersistenceService.keyAvailability;
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        cacheKey,
+        ttl: DataPersistenceService.statsTTL,
+      );
+      if (cached != null) {
+        _refreshAvailabilityStatus();
+        return cached;
+      }
+    }
+
+    return _refreshAvailabilityStatus();
+  }
+
+  Future<Map<String, dynamic>> _refreshAvailabilityStatus() async {
+    const cacheKey = DataPersistenceService.keyAvailability;
+    try {
+      final response =
+          await _api.userDio.get('/users/handyman/availability');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        await _cache.cacheData(cacheKey, data);
+        return data;
+      }
+
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey) ??
+          {'isAvailable': false};
+    } on DioException catch (e) {
+      _logDioError('getAvailabilityStatus', e);
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey) ??
+          {'isAvailable': false};
+    }
+  }
+
+  /// Toggles availability on / off.
+  Future<Map<String, dynamic>> updateAvailabilityStatus(
+      bool isAvailable) async {
+    try {
+      final response = await _api.userDio.put(
+        '/users/handyman/availability',
+        data: {'isAvailable': isAvailable},
+      );
+
+      if (response.statusCode == 200) {
+        // Update the cached availability immediately
+        await _cache.cacheData(
+          DataPersistenceService.keyAvailability,
+          {'isAvailable': isAvailable},
+        );
+        return {
+          'success': true,
+          'isAvailable': isAvailable,
+          'message': response.data['message'],
+        };
+      }
+
+      return {
+        'success': false,
+        'message': response.data['message'] ?? 'Availability update failed',
+      };
+    } on DioException catch (e) {
+      return _dioErrorResult('updateAvailabilityStatus', e);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // STATS & RATINGS
+  // ─────────────────────────────────────────────
+
+  /// One-time fetch of full dashboard stats.
+  /// Prefer [HandymanRealtimeService.streamHandymanStats] for the dashboard.
+  Future<Map<String, dynamic>?> getHandymanStats({
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = DataPersistenceService.keyHandymanStats;
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        cacheKey,
+        ttl: DataPersistenceService.statsTTL,
+      );
+      if (cached != null) {
+        if (kDebugMode) debugPrint('[HandymanApi] Stats served from cache');
+        _refreshHandymanStats();
+        return cached;
+      }
+    }
+
+    return _refreshHandymanStats();
+  }
+
+  Future<Map<String, dynamic>?> _refreshHandymanStats() async {
+    const cacheKey = DataPersistenceService.keyHandymanStats;
+    try {
+      final response = await _api.userDio.get('/users/handyman/stats');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        await _cache.cacheData(cacheKey, data);
+        return data;
+      }
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey);
+    } on DioException catch (e) {
+      _logDioError('getHandymanStats', e);
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey);
+    }
+  }
+
+  /// One-time fetch of rating + review count.
+  Future<Map<String, dynamic>> getRatingStats({
+    bool forceRefresh = false,
+  }) async {
+    const cacheKey = DataPersistenceService.keyRatingStats;
+
+    if (!forceRefresh) {
+      final cached = _cache.getCachedData<Map<String, dynamic>>(
+        cacheKey,
+        ttl: DataPersistenceService.statsTTL,
+      );
+      if (cached != null) {
+        _refreshRatingStats();
+        return cached;
+      }
+    }
+
+    return _refreshRatingStats();
+  }
+
+  Future<Map<String, dynamic>> _refreshRatingStats() async {
+    const cacheKey = DataPersistenceService.keyRatingStats;
+    try {
+      final response =
+          await _api.userDio.get('/users/handyman/rating-stats');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        await _cache.cacheData(cacheKey, data);
+        return data;
+      }
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey) ??
+          {'rating': 0.0, 'reviewCount': 0};
+    } on DioException catch (e) {
+      _logDioError('getRatingStats', e);
+      return _cache.getCachedDataStale<Map<String, dynamic>>(cacheKey) ??
+          {'rating': 0.0, 'reviewCount': 0};
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // SETTINGS
+  // ─────────────────────────────────────────────
+
+  /// Fetches notification preferences and account info.
+  Future<Map<String, dynamic>?> getHandymanSettings() async {
+    try {
+      final response =
+          await _api.userDio.get('/users/handyman/settings');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data['data'] as Map<String, dynamic>;
+      }
+      return null;
+    } on DioException catch (e) {
+      _logDioError('getHandymanSettings', e);
       return null;
     }
   }
 
-  /// Get handyman statistics
-  Future<Map<String, dynamic>> getHandymanStats() async {
+  /// Updates notification preferences.
+  /// [updates] can contain: pushNotifications, emailNotifications, smsNotifications.
+  Future<Map<String, dynamic>> updateHandymanSettings(
+      Map<String, dynamic> updates) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) return _getDefaultStats();
+      final response = await _api.userDio.put(
+        '/users/handyman/settings',
+        data: updates,
+      );
 
-      print('📊 Fetching stats for user: ${user.uid}');
-
-      // In a real app, you'd fetch this from Firestore
-      // For now, return stats initialized to 0
-      // You can implement real statistics later when you have bookings
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': response.data['message']};
+      }
 
       return {
-        'todayEarnings': 0.0,
-        'weeklyEarnings': 0.0,
-        'monthlyEarnings': 0.0,
-        'activeBookings': 0,
-        'completedJobs': 0,
-        'pendingRequests': 0,
-        'rating': 0.0,
-        'totalReviews': 0,
+        'success': false,
+        'message': response.data['message'] ?? 'Settings update failed',
       };
-    } catch (e) {
-      print('❌ Error fetching stats: $e');
-      return _getDefaultStats();
+    } on DioException catch (e) {
+      return _dioErrorResult('updateHandymanSettings', e);
     }
   }
 
-  Map<String, dynamic> _getDefaultStats() {
+  // ─────────────────────────────────────────────
+  // PRIVATE HELPERS
+  // ─────────────────────────────────────────────
+
+  void _logDioError(String method, DioException e) {
+    if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if (kDebugMode) debugPrint('[HandymanApi] $method');
+    if (kDebugMode) debugPrint('   Status : ${e.response?.statusCode}');
+    if (kDebugMode) debugPrint('   Message: ${e.message}');
+    if (kDebugMode) debugPrint('   Body   : ${e.response?.data}');
+    if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  }
+
+  Map<String, dynamic> _dioErrorResult(String method, DioException e) {
+    _logDioError(method, e);
+
+    if (e.response != null) {
+      return {
+        'success': false,
+        'message': e.response!.data?['message'] ?? 'Request failed',
+      };
+    }
+
     return {
-      'todayEarnings': 0.0,
-      'weeklyEarnings': 0.0,
-      'monthlyEarnings': 0.0,
-      'activeBookings': 0,
-      'completedJobs': 0,
-      'pendingRequests': 0,
-      'rating': 0.0,
-      'totalReviews': 0,
-    };
-  }
-
-  /// Update handyman profile
-  Future<bool> updateHandymanProfile(Map<String, dynamic> updates) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return false;
-
-      print('💾 Updating profile for user: ${user.uid}');
-
-      // Separate handyman updates from user updates
-      final handymanUpdates = <String, dynamic>{};
-      final userUpdates = <String, dynamic>{};
-
-      // Fields that go to handymen collection
-      final handymanFields = [
-        'city',
-        'email',
-        'experience',
-        'hourlyRate',
-        'bio',
-        'skills',
-        'profileImage',
-        'workImages',
-        'phone',
-      ];
-
-      // Fields that go to users collection
-      final userFields = ['fullName', 'email'];
-
-      updates.forEach((key, value) {
-        if (handymanFields.contains(key)) {
-          handymanUpdates[key] = value;
-        } else if (userFields.contains(key)) {
-          userUpdates[key] = value;
-        }
-      });
-
-      // Update handymen collection
-      if (handymanUpdates.isNotEmpty) {
-        await _firestore.collection('handymen').doc(user.uid).set({
-          ...handymanUpdates,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-
-      // Update users collection
-      if (userUpdates.isNotEmpty) {
-        await _firestore.collection('users').doc(user.uid).set({
-          ...userUpdates,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-
-      print('✅ Profile updated successfully');
-      return true;
-    } catch (e) {
-      print('❌ Error updating profile: $e');
-      return false;
-    }
-  }
-
-  // Update availability status
-
-  Future<bool> updateAvailabilityStatus(bool isAvailable) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return false;
-
-      await _firestore.collection('handymen').doc(user.uid).update({
-        'isAvailable': isAvailable,
-        'lastAvailabilityUpdate': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      return true;
-    } catch (e) {
-      print('❌ Error updating availability: $e');
-      return false;
-    }
-  }
-
-  // Get availability status
-  Future<bool> getAvailabilityStatus() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return true;
-
-      final doc = await _firestore.collection('handymen').doc(user.uid).get();
-      return doc.data()?['isAvailable'] ?? true;
-    } catch (e) {
-      print('❌ Error getting availability: $e');
-      return true;
-    }
-  }
-
-  /// Stream for real-time profile updates
-  Stream<Map<String, dynamic>?> streamHandymanProfile() {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return Stream.value(null);
-    }
-
-    return _firestore.collection('handymen').doc(user.uid).snapshots().asyncMap(
-      (handymanDoc) async {
-        if (!handymanDoc.exists) return null;
-
-        final handymanData = handymanDoc.data()!;
-
-        // Get user data too
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        final userData = userDoc.data() ?? {};
-
-        return {
-          ...handymanData,
-          'fullName':
-              userData['fullName'] ?? handymanData['fullName'] ?? 'Handyman',
-          'email': userData['email'] ?? user.email ?? '',
-          'phone': userData['phone'] ?? '',
-          'uid': user.uid,
-        };
+      'success': false,
+      'message': switch (e.type) {
+        DioExceptionType.connectionTimeout =>
+          'Connection timeout. Please try again.',
+        DioExceptionType.receiveTimeout => 'Server timeout. Please try again.',
+        _ => 'Network error. Please check your connection.',
       },
-    );
+    };
   }
 }

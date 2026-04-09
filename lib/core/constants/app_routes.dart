@@ -7,9 +7,17 @@
 /// - Route parameters
 /// - Navigation helpers
 /// - Deep linking support
+library;
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fixilya_app/features/admin/presentation/screens/admin_home_page.dart';
 import 'package:fixilya_app/features/auth/presentation/screens/forgot_password_screen.dart';
-import 'package:fixilya_app/features/auth/presentation/screens/signin_screen.dart';
+import 'package:fixilya_app/features/chat/presentation/screens/chat_list_screen.dart';
+import 'package:fixilya_app/features/chat/presentation/screens/chat_room_screen.dart';
+import 'package:fixilya_app/features/client/presentation/screens/client_bookings_page.dart';
+import 'package:fixilya_app/features/client/presentation/screens/handymen_map_page.dart';
+import 'package:fixilya_app/features/client/presentation/screens/favorites_page.dart';
+import 'package:fixilya_app/features/guest/presentation/screens/guest_home_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_details_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_settings_page.dart';
 import 'package:fixilya_app/features/client/presentation/screens/invoices_page.dart';
@@ -32,6 +40,30 @@ import '../../features/client/presentation/screens/client_profile_setup.dart';
 import '../../features/client/presentation/screens/client_profile_page.dart';
 import '../../features/handyman/presentation/screens/handyman_profile_page.dart';
 import '../../views/widget_tree.dart';
+
+/// Routes that don't require authentication.
+const _publicRoutes = {
+  AppRoutes.splash,
+  AppRoutes.welcome,
+  AppRoutes.login,
+  AppRoutes.signup,
+  AppRoutes.userTypeSelection,
+  AppRoutes.forgotPassword,
+  AppRoutes.guestHome,
+};
+
+/// GetX middleware that redirects unauthenticated users to the welcome screen.
+class AuthGuard extends GetMiddleware {
+  @override
+  RouteSettings? redirect(String? route) {
+    if (_publicRoutes.contains(route)) return null;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const RouteSettings(name: AppRoutes.welcome);
+    }
+    return null;
+  }
+}
 
 class AppRoutes {
   AppRoutes._(); // Private constructor
@@ -65,11 +97,12 @@ class AppRoutes {
   static const String clientProfile = '/client-profile';
   static const String handymanProfile = '/handyman-profile';
   static const String editProfile = '/edit-profile';
-  static const String settings = '/settings';
+  static const String clientSettings = '/client-settings';
   static const String changePassword = '/change-password';
-  static const String notifications = '/notifications';
+  static const String clientNotifications = '/client-notifications';
   static const String notificationSettings = '/notification-settings';
-  static const String favorites = '/favorites';
+  static const String clientFavorites = '/client-favorites';
+  static const String clientBookings = '/client-bookings';
 
   // Handyman Routes
   static const String handymanDetails = '/handyman-details';
@@ -77,6 +110,12 @@ class AppRoutes {
   static const String handymanSearch = '/handyman-search';
   static const String handymanReviews = '/handyman-reviews';
   static const String handymanSettings = '/handyman-settings'; // ✅ NEW
+
+  // Admin
+  static const String admin = '/admin';
+
+  // Guest
+  static const String guestHome = '/guest-home';
 
   // Booking Routes
   static const String createBooking = '/create-booking';
@@ -100,15 +139,18 @@ class AppRoutes {
   static const String reviews = '/reviews';
   static const String writeReview = '/write-review';
 
+  // Map Routes
+  static const String handymenMap = '/handymen-map';
+
   // Quick Action Routes
   static const String invoices = '/invoices';
   static const String payments = '/payments';
 
   // Navigation helpers
   static Future<void> toInvoices() => to(invoices)!;
-  static Future<void> toNotifications() => to(notifications)!;
+  static Future<void> toClientNotifications() => to(clientNotifications)!;
   static Future<void> toPayments() => to(payments)!;
-  static Future<void> toSettings() => to(settings)!;
+  static Future<void> toClientSettings() => to(clientSettings)!;
 
   // Category Routes
   static const String categories = '/categories';
@@ -187,10 +229,6 @@ class AppRoutes {
       page: () {
         final args = Get.arguments as Map<String, dynamic>;
 
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('🔀 ROUTER: email-verification');
-        print('Arguments: $args');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         return EmailVerificationScreen(
           userType: args[paramUserType],
@@ -242,12 +280,14 @@ class AppRoutes {
       name: widgetTree,
       page: () => const WidgetTree(),
       transition: Transition.fadeIn,
+      middlewares: [AuthGuard()],
     ),
 
     GetPage(
       name: home,
       page: () => const WidgetTree(),
       transition: Transition.fadeIn,
+      middlewares: [AuthGuard()],
     ),
 
     // Profile Pages
@@ -270,11 +310,6 @@ class AppRoutes {
         final args = Get.arguments as Map<String, dynamic>;
         final handyman = args["handyman"] as Map<String, dynamic>;
 
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('🔀 ROUTER: handyman-details');
-        print('Handyman: ${handyman['name']}');
-        print('ID: ${handyman['id']}');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return HandymanDetailsPage(handyman: handyman);
       },
       transition: Transition.rightToLeft,
@@ -295,8 +330,8 @@ class AppRoutes {
       transition: Transition.rightToLeft,
     ),
     GetPage(
-      name: notifications,
-      page: () => NotificationsPage(),
+      name: clientNotifications,
+      page: () => ClientNotificationsPage(),
       transition: Transition.rightToLeft,
     ),
     GetPage(
@@ -305,18 +340,70 @@ class AppRoutes {
       transition: Transition.rightToLeft,
     ),
     GetPage(
-      name: settings,
-      page: () => SettingsPage(),
+      name: clientSettings,
+      page: () => ClientSettingsPage(),
+      transition: Transition.rightToLeft,
+    ),
+
+    GetPage(
+      name: admin,
+      page: () => AdminDashboardPage(),
+      transition: Transition.rightToLeft,
+      middlewares: [AuthGuard()],
+    ),
+
+    GetPage(
+      name: AppRoutes.guestHome,
+      page: () => const GuestHomePage(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(name: AppRoutes.clientFavorites, page: () => FavoritesPage()),
+    GetPage(name: clientBookings, page: () => ClientBookingsPage()),
+    GetPage(
+      name: handymenMap,
+      page: () => const HandymenMapPage(),
+      transition: Transition.rightToLeft,
+    ),
+
+    // Chat
+    GetPage(
+      name: chatList,
+      page: () => const ChatListScreen(),
+      transition: Transition.rightToLeft,
+      middlewares: [AuthGuard()],
+    ),
+    GetPage(
+      name: chatRoom,
+      page: () {
+        final args = Get.arguments as Map<String, dynamic>;
+        return ChatRoomScreen(
+          chatId: args[paramChatId] ?? '',
+          otherUserId: args[paramHandymanId] ?? args['otherUserId'] ?? '',
+          otherUserName: args['otherUserName'] ?? '',
+          otherUserPicture: args['otherUserPicture'] as String?,
+        );
+      },
       transition: Transition.rightToLeft,
     ),
   ];
 
+  static void toHandymenMap() => Get.toNamed(handymenMap);
+
+  static void toFavorites() {
+    Get.toNamed(clientFavorites);
+  }
+
+  static void toClientBookings() {
+    Get.toNamed(clientBookings);
+  }
+
   // ==================== Navigation Helpers ====================
 
-  /// Navigate to route
   static Future<T?>? to<T>(String route, {dynamic arguments}) {
     return Get.toNamed<T>(route, arguments: arguments);
   }
+
+  /// Navigate to route
 
   /// Navigate to route and remove previous route
   static Future<T?>? off<T>(String route, {dynamic arguments}) {
@@ -347,7 +434,6 @@ class AppRoutes {
   }
 
   // ==================== Specific Navigation Methods ====================
-
   /// Navigate to welcome screen
   static Future<void> toWelcome() => to(welcome)!;
 
@@ -360,6 +446,12 @@ class AppRoutes {
   /// Navigate to signup with user type
   static Future<void> toSignup(String userType) {
     return to(signup, arguments: {paramUserType: userType})!;
+  }
+
+  static void toAdmin() => Get.toNamed(admin);
+
+  static void toGuestHome() {
+    Get.offAllNamed(guestHome);
   }
 
   /// Navigate to email verification
@@ -419,7 +511,6 @@ class AppRoutes {
 
   /// Navigate to handyman details
   static Future<void> toHandymanDetails(Map<String, dynamic> handyman) {
-    print('📍 AppRoutes.toHandymanDetails called with: ${handyman['name']}');
     return to(handymanDetails, arguments: {'handyman': handyman})!;
   }
 
@@ -459,20 +550,13 @@ class AppRoutes {
 
   // ==================== Route Guards ====================
 
-  /// Check if user is authenticated
-  static bool get isAuthenticated {
-    // Implement authentication check
-    // return Get.find<AuthService>().isAuthenticated;
-    return false; // Placeholder
-  }
+  /// Returns true when a Firebase user is signed in.
+  static bool get isAuthenticated =>
+      FirebaseAuth.instance.currentUser != null;
 
   /// Get initial route based on auth state
-  static String get initialRoute {
-    if (isAuthenticated) {
-      return widgetTree;
-    }
-    return welcome;
-  }
+  static String get initialRoute =>
+      isAuthenticated ? widgetTree : welcome;
 
   // ==================== Deep Linking Support ====================
 
@@ -527,6 +611,5 @@ class AppRoutes {
   static void logRouteChange(String route) {
     // Implement analytics logging
     // Get.find<AnalyticsService>().logScreenView(route);
-    print('Route changed to: $route');
   }
 }

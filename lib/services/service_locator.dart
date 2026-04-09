@@ -1,29 +1,27 @@
 // lib/services/service_locator.dart
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:fixilya_app/core/config/app_config.dart';
 import 'package:fixilya_app/services/cloudinary_service.dart';
 import 'package:fixilya_app/services/firebase_image_service.dart';
 
 class ServiceLocator {
   static void init() {
-    print('🔧 Initializing services...');
+    if (kDebugMode) debugPrint('Initializing services...');
 
-    // ✅ Initialize Cloudinary Service as singleton
     Get.lazyPut<CloudinaryService>(
       () => CloudinaryService(
-        cloudName: 'dbz3wtlbj', // ✅ Your REAL cloud name
-        uploadPreset: 'fixilya_app', // ✅ Your REAL upload preset
+        cloudName: AppConfig.cloudinaryCloudName,
+        uploadPreset: AppConfig.cloudinaryUploadPreset,
       ),
-      fenix: true, // Keeps instance alive
+      fenix: true,
     );
 
-    // ✅ Initialize Firebase Image Service as singleton
     Get.lazyPut<FirebaseImageService>(
       () => FirebaseImageService(),
       fenix: true,
     );
 
-    print('✅ Services initialized successfully');
-    print('   📦 CloudinaryService ready');
-    print('   📦 FirebaseImageService ready');
+    if (kDebugMode) debugPrint('Services initialized');
   }
 }

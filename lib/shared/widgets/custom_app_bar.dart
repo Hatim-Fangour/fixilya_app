@@ -8,6 +8,7 @@
 /// - Elevation control
 /// - Search functionality
 /// - Flexible styling
+library;
 
 import 'package:flutter/material.dart';
 
@@ -27,7 +28,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double toolbarHeight;
 
   const CustomAppBar({
-    Key? key,
+    super.key,
     this.title,
     this.titleWidget,
     this.actions,
@@ -41,7 +42,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.useGradient = true,
     this.bottom,
     this.toolbarHeight = kToolbarHeight,
-  }) : super(key: key);
+  });
 
   @override
   Size get preferredSize =>
@@ -118,14 +119,14 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool autofocus;
 
   const SearchAppBar({
-    Key? key,
+    super.key,
     this.controller,
     this.hintText = 'Search...',
     this.onChanged,
     this.onSearch,
     this.onClear,
     this.autofocus = false,
-  }) : super(key: key);
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);

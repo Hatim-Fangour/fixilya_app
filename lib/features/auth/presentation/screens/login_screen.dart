@@ -1,15 +1,19 @@
+import 'package:flutter/foundation.dart';
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/core/constants/app_strings.dart';
 import 'package:fixilya_app/core/constants/app_icons.dart';
+import 'package:fixilya_app/features/auth/presentation/screens/email_verification_screen.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:fixilya_app/core/utils/validators.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   static const String routeName = '/login';
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -35,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
 
   // Colors
-  static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
+  static const primaryColor = Color(0xFF536EFE);
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
   static const accentColor = Color.fromRGBO(147, 167, 255, 1);
 
@@ -101,40 +105,78 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
       if (result['success']) {
-        print('✅ Login successful');
-        print('User type: ${result['userType']}');
+        // final userType = result['userType'];
 
         if (mounted) {
           // Show success message
-          Get.snackbar(
-            'Success',
-            'Welcome back!',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-            duration: Duration(seconds: 2),
-            margin: EdgeInsets.all(16),
-            borderRadius: 12,
-            icon: Icon(Icons.check_circle, color: Colors.white),
-          );
+          // Get.snackbar(
+          //   'Success',
+          //   'Welcome back!',
+          //   snackPosition: SnackPosition.BOTTOM,
+          //   backgroundColor: Colors.green,
+          //   colorText: Colors.white,
+          //   duration: Duration(seconds: 2),
+          //   margin: EdgeInsets.all(16),
+          //   borderRadius: 12,
+          //   icon: Icon(Icons.check_circle, color: Colors.white),
+          // );
 
           // Navigate to home using GetX
           // This will clear the navigation stack and go to WidgetTree
           AppRoutes.toHome();
         }
-      } else {
-        // Handle specific error cases
-        if (result['needsVerification'] == true) {
-          _showError(
-            'Please verify your email before signing in. Check your inbox.',
-            duration: Duration(seconds: 5),
-          );
-        } else {
-          _showError(result['message'] ?? 'Login failed');
+      } else if (result['needsVerification'] == true) {
+        String fullName = '';
+        String phone = '';
+
+        try {
+          // final userDoc = await FirebaseFirestore.instance
+          //     .collection('users')
+          //     .doc(result['userId'])
+          //     .get();
+
+          final doc = await FirebaseFirestore.instance
+              .collection('handymen')
+              .doc(result['userId'])
+              .get();
+
+          if (kDebugMode) debugPrint('User document data: ${doc.data()}');
+          if (kDebugMode) debugPrint('doc[fullName]: ${doc['fullName']}');
+          if (kDebugMode) debugPrint('doc[phone]: ${doc['phone']}');
+          // final userData = userDoc.data();
+          fullName = doc['fullName'] ?? '';
+          phone = doc['phone'] ?? '';
+        } catch (e) {
+          if (kDebugMode) debugPrint('Could not fetch user data: $e');
         }
+
+        // Navigate to email verification screen
+        Get.off(
+          () => EmailVerificationScreen(
+            userType: result['userType'] ?? 'client',
+            userName: fullName, // First name
+            email: result['email'] ?? _emailController.text.trim(),
+            phone: phone,
+            fullName: fullName,
+          ),
+        );
+
+        // Show message
+        Get.snackbar(
+          'Email Not Verified',
+          'Please verify your email to continue',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AppColors.warning,
+          colorText: AppColors.white,
+          icon: Icon(Icons.mail_outline, color: AppColors.white),
+          margin: EdgeInsets.all(16),
+          borderRadius: 12,
+          duration: Duration(seconds: 4),
+        );
+      } else {
+        _showError(result['message'] ?? 'Login failed');
       }
     } catch (e) {
-      print('❌ Login error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -146,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      // For Google Sign In, we need to ask user type first
+      // ✅ Ask user type first
       final userType = await _showUserTypeDialog();
 
       if (userType == null) {
@@ -154,19 +196,41 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
+      // ✅ Call Google Sign-In
       final result = await _authService.signInWithGoogle(userType);
 
       if (mounted) {
         setState(() => _isLoading = false);
       }
 
-      if (result['success']) {
-        print('✅ Google sign in successful');
-        print('User type: ${result['userType']}');
-        print('Is new user: ${result['isNewUser']}');
+      // ✅ Handle cancelled sign-in
+      if (result['cancelled'] == true) {
+        return; // Don't show error for cancellation
+      }
 
+      // ✅ Handle success
+      if (result['success']) {
         if (mounted) {
-          // Show success message
+          // ✅ Handle pending approval for handymen
+          if (result['pendingApproval'] == true) {
+            Get.snackbar(
+              'Pending Approval',
+              'Your handyman account is pending admin approval. You\'ll be notified once approved.',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.orange,
+              colorText: Colors.white,
+              duration: Duration(seconds: 4),
+              margin: EdgeInsets.all(16),
+              borderRadius: 12,
+              icon: Icon(Icons.pending_outlined, color: Colors.white),
+            );
+
+            // Sign out and return to login
+            await _authService.signOut();
+            return;
+          }
+
+          // ✅ Show success message
           Get.snackbar(
             'Success',
             result['isNewUser'] == true
@@ -181,16 +245,26 @@ class _LoginScreenState extends State<LoginScreen>
             icon: Icon(Icons.check_circle, color: Colors.white),
           );
 
-          // Navigate to home
+          // ✅ Navigate to home
           AppRoutes.toHome();
         }
       } else {
-        if (result['message'] != 'Sign in cancelled') {
+        // ✅ Handle specific error cases
+        if (result['wrongUserType'] == true) {
+          _showError(
+            result['message'] ?? 'User type mismatch',
+            duration: Duration(seconds: 5),
+          );
+        } else if (result['suspended'] == true) {
+          _showError(
+            result['message'] ?? 'Account suspended',
+            duration: Duration(seconds: 5),
+          );
+        } else {
           _showError(result['message'] ?? 'Google sign in failed');
         }
       }
     } catch (e) {
-      print('❌ Google sign in error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -323,11 +397,7 @@ class _LoginScreenState extends State<LoginScreen>
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [primaryColor, secondaryColor, accentColor],
-          ),
+          gradient: AppColors.appHeaderGradientThemed(context),
         ),
         child: SafeArea(
           child: Column(
@@ -429,7 +499,7 @@ class _LoginScreenState extends State<LoginScreen>
         opacity: _formAnimation,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.cardColor(context),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(30),
               topRight: Radius.circular(30),
@@ -449,7 +519,7 @@ class _LoginScreenState extends State<LoginScreen>
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: AppColors.textPrimaryColor(context),
                       ),
                     ),
 
@@ -748,15 +818,18 @@ class _LoginScreenState extends State<LoginScreen>
               style: TextStyle(fontSize: 15),
               decoration: InputDecoration(
                 labelText: label,
-                labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+                labelStyle: TextStyle(
+                  color: AppColors.textSecondaryColor(context),
+                  fontSize: 14,
+                ),
                 prefixIcon: Container(
                   margin: EdgeInsets.all(10),
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: primaryColor.withValues(alpha: 0.1),
+                    color: AppColors.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: primaryColor, size: 18),
+                  child: Icon(icon, color: AppColors.primaryColor, size: 18),
                 ),
                 suffixIcon: obscureText
                     ? IconButton(
@@ -764,7 +837,7 @@ class _LoginScreenState extends State<LoginScreen>
                           _obscurePassword
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
-                          color: Colors.grey[600],
+                          color: AppColors.textSecondaryColor(context),
                           size: 20,
                         ),
                         onPressed: () {
@@ -773,26 +846,32 @@ class _LoginScreenState extends State<LoginScreen>
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.grey[50],
+                fillColor: AppColors.borderColor(context),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.grey.shade200, width: 1),
+                  borderSide: BorderSide(
+                    color: AppColors.borderColor(context),
+                    width: 1,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: primaryColor, width: 2),
+                  borderSide: BorderSide(
+                    color: AppColors.primaryColor,
+                    width: 2,
+                  ),
                 ),
                 errorBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.red, width: 1),
+                  borderSide: BorderSide(color: AppColors.red, width: 1),
                 ),
                 focusedErrorBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: Colors.red, width: 2),
+                  borderSide: BorderSide(color: AppColors.red, width: 2),
                 ),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 14,

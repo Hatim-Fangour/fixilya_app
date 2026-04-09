@@ -4,6 +4,7 @@
 /// Usage:
 /// validator: Validators.validateEmail
 ///
+library;
 import '../constants/app_strings.dart';
 
 class Validators {

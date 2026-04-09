@@ -6,11 +6,11 @@ class ProfileCompletionCard extends StatelessWidget {
   final Color secondaryColor;
 
   const ProfileCompletionCard({
-    Key? key,
+    super.key,
     required this.profileCompletion,
     required this.primaryColor,
     required this.secondaryColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

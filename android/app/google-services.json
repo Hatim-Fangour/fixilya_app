@@ -1,45 +1,36 @@
 {
   "project_info": {
-    "project_number": "888831484326",
-    "project_id": "fixilyaapp-10ca8",
-    "storage_bucket": "fixilyaapp-10ca8.firebasestorage.app"
+    "project_number": "353604172058",
+    "project_id": "fixilyaappbackend",
+    "storage_bucket": "fixilyaappbackend.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:888831484326:android:fea84da4692f6717562f67",
+        "mobilesdk_app_id": "1:353604172058:android:9de6908864555b0f2914a3",
         "android_client_info": {
-          "package_name": "com.example.android"
+          "package_name": "pro.fixilya.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "353604172058-mnfk5n8abeuti34dgvknthipsg46un5l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDvAkZWsSmove4nEi-UBJPFbatwHjf2vYM"
+          "current_key": "AIzaSyA9EI7TjtbXrH9xZsl0V5tuW69iz1cr_7g"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:888831484326:android:8123ad865032bd99562f67",
-        "android_client_info": {
-          "package_name": "com.fixilya.fixilya_app"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDvAkZWsSmove4nEi-UBJPFbatwHjf2vYM"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "353604172058-mnfk5n8abeuti34dgvknthipsg46un5l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

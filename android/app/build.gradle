@@ -7,12 +7,19 @@ plugins {
     id 'dev.flutter.flutter-gradle-plugin'
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace 'com.fixilya.fixilya_app'
+    namespace 'com.fixilya.app'
     compileSdk flutter.compileSdkVersion
-    ndkVersion flutter.ndkVersion
+    ndkVersion "28.2.13676358"
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -22,16 +29,27 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.fixilya.fixilya_app"
+        applicationId "pro.fixilya.app"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutter.versionCode
         versionName flutter.versionName
     }
 
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
         }
     }
 }
@@ -41,8 +59,9 @@ flutter {
 }
 
 dependencies {
-    implementation platform('com.google.firebase:firebase-bom:34.7.0')
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    implementation platform('com.google.firebase:firebase-bom:34.9.0')
     implementation 'com.google.firebase:firebase-analytics'
-     implementation 'com.google.firebase:firebase-auth' 
-      implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-auth' 
+    implementation 'com.google.firebase:firebase-firestore'
 }

@@ -1,15 +1,20 @@
 import 'package:fixilya_app/core/constants/app_assets.dart';
+import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'package:fixilya_app/data/notifiers.dart';
 import 'package:fixilya_app/features/client/presentation/screens/client_profile_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_profile_page.dart';
-import 'package:fixilya_app/features/home/presentation/screens/handyman_home_page.dart';
+import 'package:fixilya_app/features/handyman/presentation/screens/handyman_home_page.dart';
 
-import 'package:fixilya_app/features/home/presentation/screens/client_home_page.dart';
+import 'package:fixilya_app/features/client/presentation/screens/client_home_page.dart';
 import 'package:fixilya_app/shared/widgets/navbar_widget.dart';
 import 'package:fixilya_app/services/auth_service.dart';
+import 'package:fixilya_app/services/data_persistence_service.dart';
+import 'package:fixilya_app/services/location_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:fixilya_app/l10n/app_localizations.dart';
 
 class WidgetTree extends StatefulWidget {
   const WidgetTree({super.key});
@@ -24,7 +29,8 @@ class _WidgetTreeState extends State<WidgetTree> {
   static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
 
   final _authService = AuthService();
-  String _userType = 'handyman'; // Default
+  final _cache = DataPersistenceService();
+  String? _userType; // null until resolved -- prevents wrong-screen flash
   bool _isLoading = true;
 
   @override
@@ -40,41 +46,115 @@ class _WidgetTreeState extends State<WidgetTree> {
 
   Future<void> _loadUserType() async {
     try {
-      // Get user type from AuthService or Firebase
+      // 1. Try cached user type first for instant display (no loading spinner)
+      final cachedType = _cache.getCachedString(
+        DataPersistenceService.keyUserType,
+        ttl: const Duration(days: 30),
+      );
+
+      if (cachedType != null && cachedType.isNotEmpty) {
+        if (kDebugMode) debugPrint('WidgetTree: instant display from cached userType: $cachedType');
+        if (mounted) {
+          setState(() {
+            _userType = cachedType.toLowerCase();
+            _isLoading = false;
+          });
+          selectedPageNotifier.value = 0;
+        }
+      }
+
+      // 2. Always fetch from network to confirm / update
       final userType = await _authService.getUserType();
+      if (!mounted) return;
 
-      setState(() {
-        _userType = userType?.toLowerCase() ?? 'handyman';
-        _isLoading = false;
+      if (userType == null || userType.isEmpty) {
+        if (kDebugMode) debugPrint('WidgetTree: userType is null -- defaulting to client');
+        // Only show snackbar if we had no cached data
+        if (cachedType == null) {
+          Get.snackbar(
+            'Profile Issue',
+            'Could not determine your account type. Showing client view.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+            margin: const EdgeInsets.all(16),
+            borderRadius: 16,
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
+
+      final resolvedType = (userType ?? 'client').toLowerCase();
+
+      // 3. Cache the resolved user type for next app start
+      await _cache.cacheString(DataPersistenceService.keyUserType, resolvedType);
+
+      // 4. Update UI if type changed or still loading
+      if (_userType != resolvedType || _isLoading) {
+        setState(() {
+          _userType = resolvedType;
+          _isLoading = false;
+        });
+        selectedPageNotifier.value = 0;
+      }
+
+      // Capture GPS on every app open for both user types
+      final locService = LocationService();
+      locService.getCurrentLocation().then((pos) {
+        if (pos == null) return;
+        if (_userType == 'handyman') {
+          locService.saveHandymanLocation(pos);
+        } else {
+          locService.saveClientLocation(pos);
+        }
+      }).catchError((e) {
+        if (kDebugMode) debugPrint('WidgetTree: background GPS capture failed: $e');
       });
-
-      // ✅ Reset to home after loading user type
-      selectedPageNotifier.value = 0;
-
-      print('✅ User type loaded: $_userType');
     } catch (e) {
-      print('❌ Error loading user type: $e');
+      if (kDebugMode) debugPrint('WidgetTree: _loadUserType error: $e');
+      if (!mounted) return;
+
+      // Fall back to cached type if available, otherwise default to client
+      final fallbackType = _cache.getCachedDataStale<String>(
+            DataPersistenceService.keyUserType,
+          ) ??
+          'client';
+
       setState(() {
-        _userType = 'handyman'; // Fallback
+        _userType = fallbackType;
         _isLoading = false;
       });
-
-      // ✅ Reset to home on error
       selectedPageNotifier.value = 0;
+
+      // Only show error if we truly have no data
+      if (_cache.getCachedDataStale<String>(DataPersistenceService.keyUserType) == null) {
+        Get.snackbar(
+          'Error',
+          'Could not load your profile. Please try logging in again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(16),
+          borderRadius: 16,
+        );
+      }
     }
   }
 
-  // ✅ Dynamic pages based on user type
+  // Pages based on resolved user type
   List<Widget> get _pages {
-    if (_userType == 'client') {
-      return [ClientHomePage(), ClientProfilePage()];
-    } else {
-      return [HandymanHomePage(), HandymanProfilePage()];
+    if (_userType == 'handyman') {
+      return [const HandymanHomePage(), HandymanProfilePage()];
     }
+    // client and admin both use the client layout as a fallback
+    // (admins should be routed to /admin directly and not reach WidgetTree)
+    return [const ClientHomePage(), ClientProfilePage()];
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_isLoading) {
       return Scaffold(
         body: Container(
@@ -116,11 +196,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         preferredSize: Size.fromHeight(56),
         child: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.topRight,
-              colors: [primaryColor, secondaryColor],
-            ),
+            gradient: AppColors.appHeaderGradientThemed(context),
           ),
           child: AppBar(
             backgroundColor: Colors.transparent,
@@ -131,7 +207,9 @@ class _WidgetTreeState extends State<WidgetTree> {
                 Container(
                   padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: AppColors.surfaceColor(
+                      context,
+                    ).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Image.asset(
@@ -143,7 +221,8 @@ class _WidgetTreeState extends State<WidgetTree> {
                 ),
                 SizedBox(width: 10),
                 Text(
-                  'Fixilya',
+                  'Welcome to Fixilya',
+                  // l10n.welcome,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
@@ -153,31 +232,32 @@ class _WidgetTreeState extends State<WidgetTree> {
                 ),
               ],
             ),
-            actions: [
-              Container(
-                margin: EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: IconButton(
-                  onPressed: () {
-                    themeController.toggleTheme();
-                  },
-                  icon: Obx(
-                    () => Icon(
-                      themeController.isDarkMode
-                          ? Icons.light_mode_outlined
-                          : Icons.dark_mode_outlined,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  padding: EdgeInsets.all(8),
-                  constraints: BoxConstraints(),
-                ),
-              ),
-            ],
+
+            // actions: [
+            //   Container(
+            //     margin: EdgeInsets.only(right: 8),
+            //     decoration: BoxDecoration(
+            //       color: AppColors.surfaceColor(context).withValues(alpha: 0.2),
+            //       borderRadius: BorderRadius.circular(10),
+            //     ),
+            //     child: IconButton(
+            //       onPressed: () {
+            //         themeController.toggleTheme();
+            //       },
+            //       icon: Obx(
+            //         () => Icon(
+            //           themeController.isDarkMode
+            //               ? Icons.light_mode_outlined
+            //               : Icons.dark_mode_outlined,
+            //           color: Colors.white,
+            //           size: 20,
+            //         ),
+            //       ),
+            //       padding: EdgeInsets.all(8),
+            //       constraints: BoxConstraints(),
+            //     ),
+            //   ),
+            // ],
           ),
         ),
       ),
@@ -202,7 +282,7 @@ class _WidgetTreeState extends State<WidgetTree> {
           return _pages.elementAt(safeIndex);
         },
       ),
-      bottomNavigationBar: NavBarWidget(userType: _userType),
+      bottomNavigationBar: NavBarWidget(userType: _userType ?? 'client'),
     );
   }
 }

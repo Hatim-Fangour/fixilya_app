@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -76,8 +77,8 @@ class ClientProfileController extends GetxController {
       _profileData = results[0];
       _statsData = results[1];
 
-      print('📊 Profile Data: $_profileData');
-      print('📊 Stats Data: $_statsData');
+      if (kDebugMode) debugPrint('📊 Profile Data: $_profileData');
+      if (kDebugMode) debugPrint('📊 Stats Data: $_statsData');
 
       if (_profileData != null) {
         // Map profile data
@@ -105,17 +106,17 @@ class ClientProfileController extends GetxController {
         // Calculate profile completion
         profileCompletion.value = calculateProfileCompletion();
 
-        print('✅ Client profile loaded successfully');
-        print('   Name: ${name.value}');
-        print('   Total Bookings: ${totalBookings.value}');
-        print('   Favorites: ${favoriteHandymen.value}');
-        print('   Profile Completion: ${profileCompletion.value}%');
+        if (kDebugMode) debugPrint('✅ Client profile loaded successfully');
+        if (kDebugMode) debugPrint('   Name: ${name.value}');
+        if (kDebugMode) debugPrint('   Total Bookings: ${totalBookings.value}');
+        if (kDebugMode) debugPrint('   Favorites: ${favoriteHandymen.value}');
+        if (kDebugMode) debugPrint('   Profile Completion: ${profileCompletion.value}%');
 
         // Load additional data
         await Future.wait([loadRecentBookings(), loadFavoriteServices()]);
       }
     } catch (e) {
-      print('❌ Error loading profile: $e');
+      if (kDebugMode) debugPrint('❌ Error loading profile: $e');
     } finally {
       isLoadingData.value = false;
     }
@@ -138,9 +139,9 @@ class ClientProfileController extends GetxController {
         };
       }).toList();
 
-      print('✅ Loaded ${recentBookings.length} recent bookings');
+      if (kDebugMode) debugPrint('✅ Loaded ${recentBookings.length} recent bookings');
     } catch (e) {
-      print('❌ Error loading bookings: $e');
+      if (kDebugMode) debugPrint('❌ Error loading bookings: $e');
     }
   }
 
@@ -161,10 +162,10 @@ class ClientProfileController extends GetxController {
           return {'name': serviceName, 'icon': getServiceIcon(serviceName)};
         }).toList();
 
-        print('✅ Loaded ${favoriteServices.length} favorite services');
+        if (kDebugMode) debugPrint('✅ Loaded ${favoriteServices.length} favorite services');
       }
     } catch (e) {
-      print('❌ Error loading favorite services: $e');
+      if (kDebugMode) debugPrint('❌ Error loading favorite services: $e');
     }
   }
 
@@ -216,7 +217,7 @@ class ClientProfileController extends GetxController {
   /// Save profile to Firebase
   Future<void> saveProfileToFirebase() async {
     try {
-      print('💾 Saving client profile to Firebase...');
+      if (kDebugMode) debugPrint('💾 Saving client profile to Firebase...');
 
       final success = await _clientDataService.updateClientProfile({
         'fullName': name.value,
@@ -227,7 +228,7 @@ class ClientProfileController extends GetxController {
       });
 
       if (success) {
-        print('✅ Client profile saved successfully');
+        if (kDebugMode) debugPrint('✅ Client profile saved successfully');
 
         Get.snackbar(
           'Success',
@@ -243,7 +244,7 @@ class ClientProfileController extends GetxController {
         throw Exception('Update returned false');
       }
     } catch (e) {
-      print('❌ Error saving profile: $e');
+      if (kDebugMode) debugPrint('❌ Error saving profile: $e');
 
       Get.snackbar(
         'Error',
@@ -312,7 +313,7 @@ class ClientProfileController extends GetxController {
         icon: Icon(Icons.check_circle, color: Colors.white),
       );
     } catch (e) {
-      print('❌ Logout error: $e');
+      if (kDebugMode) debugPrint('❌ Logout error: $e');
 
       if (Get.isDialogOpen ?? false) {
         Get.back();

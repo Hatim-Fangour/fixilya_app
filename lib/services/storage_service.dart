@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,7 +14,7 @@ class StorageService {
   Future<File?> pickImage({bool fromCamera = false}) async {
     // ✅ Check if picker is already active
     if (_isPickerActive) {
-      print('⚠️ Image picker is already active');
+      if (kDebugMode) debugPrint('⚠️ Image picker is already active');
       return null;
     }
 
@@ -33,7 +34,7 @@ class StorageService {
       }
       return null;
     } catch (e) {
-      print('❌ Error picking image: $e');
+      if (kDebugMode) debugPrint('❌ Error picking image: $e');
       return null;
     } finally {
       // ✅ Always release lock
@@ -45,7 +46,7 @@ class StorageService {
   Future<List<File>> pickMultipleImages({int maxImages = 10}) async {
     // ✅ FIX: Check if picker is already active
     if (_isPickerActive) {
-      print('⚠️ Image picker is already active');
+      if (kDebugMode) debugPrint('⚠️ Image picker is already active');
       return [];
     }
 
@@ -60,13 +61,13 @@ class StorageService {
       );
 
       if (images.length > maxImages) {
-        print('⚠️ Selected ${images.length} images, limiting to $maxImages');
+        if (kDebugMode) debugPrint('⚠️ Selected ${images.length} images, limiting to $maxImages');
         return images.take(maxImages).map((xFile) => File(xFile.path)).toList();
       }
 
       return images.map((xFile) => File(xFile.path)).toList();
     } catch (e) {
-      print('❌ Error picking multiple images: $e');
+      if (kDebugMode) debugPrint('❌ Error picking multiple images: $e');
       return [];
     } finally {
       // ✅ FIX: Always release lock
@@ -84,13 +85,13 @@ class StorageService {
 
       // 1. Check file exists
       if (!await imageFile.exists()) {
-        print('❌ File does not exist: ${imageFile.path}');
+        if (kDebugMode) debugPrint('❌ File does not exist: ${imageFile.path}');
         throw Exception('File does not exist on device');
       }
 
       // 2. Check file size
       final fileSize = await imageFile.length();
-      print('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
+      if (kDebugMode) debugPrint('📁 File size: ${(fileSize / 1024).toStringAsFixed(2)} KB');
 
       if (fileSize == 0) {
         throw Exception('File is empty (0 bytes)');
@@ -105,7 +106,7 @@ class StorageService {
       try {
         await imageFile.readAsBytes();
       } catch (e) {
-        print('❌ Cannot read file: $e');
+        if (kDebugMode) debugPrint('❌ Cannot read file: $e');
         throw Exception('Cannot read file: $e');
       }
 
@@ -115,7 +116,7 @@ class StorageService {
           'profile_${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final Reference ref = _storage.ref().child('profiles/$fileName');
 
-      print('📤 Starting upload to: profiles/$fileName');
+      if (kDebugMode) debugPrint('📤 Starting upload to: profiles/$fileName');
 
       final metadata = SettableMetadata(
         contentType: 'image/jpeg',
@@ -130,49 +131,49 @@ class StorageService {
       // Track progress
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
         double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        print('📤 Upload progress: ${(progress * 100).toStringAsFixed(2)}%');
+        if (kDebugMode) debugPrint('📤 Upload progress: ${(progress * 100).toStringAsFixed(2)}%');
       });
 
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
-      print('✅ Profile picture uploaded successfully!');
-      print('🔗 URL: $downloadUrl');
+      if (kDebugMode) debugPrint('✅ Profile picture uploaded successfully!');
+      if (kDebugMode) debugPrint('🔗 URL: $downloadUrl');
 
       // ✅ Clean up temp file
       try {
         if (imageFile.path.contains('app_flutter')) {
           await imageFile.delete();
-          print('🗑️ Temp file cleaned up');
+          if (kDebugMode) debugPrint('🗑️ Temp file cleaned up');
         }
       } catch (e) {
-        print('⚠️ Could not delete temp file: $e');
+        if (kDebugMode) debugPrint('⚠️ Could not delete temp file: $e');
       }
 
       return downloadUrl;
     } on FirebaseException catch (e) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ FIREBASE ERROR');
-      print('Code: ${e.code}');
-      print('Message: ${e.message}');
-      print('File path: ${imageFile.path}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('❌ FIREBASE ERROR');
+      if (kDebugMode) debugPrint('Code: ${e.code}');
+      if (kDebugMode) debugPrint('Message: ${e.message}');
+      if (kDebugMode) debugPrint('File path: ${imageFile.path}');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       if (e.code == 'object-not-found') {
-        print('⚠️ object-not-found during upload usually means:');
-        print('  • File was deleted before upload completed');
-        print('  • File path is invalid or temporary');
-        print('  • Permission issue reading the file');
+        if (kDebugMode) debugPrint('⚠️ object-not-found during upload usually means:');
+        if (kDebugMode) debugPrint('  • File was deleted before upload completed');
+        if (kDebugMode) debugPrint('  • File path is invalid or temporary');
+        if (kDebugMode) debugPrint('  • Permission issue reading the file');
       }
 
       return null;
     } catch (e, stackTrace) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ UPLOAD ERROR');
-      print('Error: $e');
-      print('File: ${imageFile.path}');
-      print('Stack: $stackTrace');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      if (kDebugMode) debugPrint('❌ UPLOAD ERROR');
+      if (kDebugMode) debugPrint('Error: $e');
+      if (kDebugMode) debugPrint('File: ${imageFile.path}');
+      if (kDebugMode) debugPrint('Stack: $stackTrace');
+      if (kDebugMode) debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return null;
     }
   }
@@ -191,14 +192,14 @@ class StorageService {
 
         // Validate each file
         if (!await imageFile.exists()) {
-          print('⚠️ File $i does not exist, skipping');
+          if (kDebugMode) debugPrint('⚠️ File $i does not exist, skipping');
           if (onProgress != null) onProgress(i + 1, images.length);
           continue;
         }
 
         final fileSize = await imageFile.length();
         if (fileSize == 0) {
-          print('⚠️ File $i is empty, skipping');
+          if (kDebugMode) debugPrint('⚠️ File $i is empty, skipping');
           if (onProgress != null) onProgress(i + 1, images.length);
           continue;
         }
@@ -228,7 +229,7 @@ class StorageService {
           onProgress(i + 1, images.length);
         }
 
-        print('✅ Work image ${i + 1}/${images.length} uploaded');
+        if (kDebugMode) debugPrint('✅ Work image ${i + 1}/${images.length} uploaded');
 
         // Clean up temp file
         try {
@@ -236,13 +237,13 @@ class StorageService {
             await imageFile.delete();
           }
         } catch (e) {
-          print('⚠️ Could not delete temp file: $e');
+          if (kDebugMode) debugPrint('⚠️ Could not delete temp file: $e');
         }
       }
 
       return downloadUrls;
     } catch (e) {
-      print('❌ Error uploading work images: $e');
+      if (kDebugMode) debugPrint('❌ Error uploading work images: $e');
       return downloadUrls; // Return what we managed to upload
     }
   }
@@ -271,7 +272,7 @@ class StorageService {
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
-      print('✅ Work image uploaded: $downloadUrl');
+      if (kDebugMode) debugPrint('✅ Work image uploaded: $downloadUrl');
 
       // Clean up
       try {
@@ -282,7 +283,7 @@ class StorageService {
 
       return downloadUrl;
     } catch (e) {
-      print('❌ Error uploading work image: $e');
+      if (kDebugMode) debugPrint('❌ Error uploading work image: $e');
       return null;
     }
   }
@@ -297,17 +298,17 @@ class StorageService {
 
       final Reference ref = _storage.refFromURL(imageUrl);
       await ref.delete();
-      print('✅ Image deleted: $imageUrl');
+      if (kDebugMode) debugPrint('✅ Image deleted: $imageUrl');
       return true;
     } on FirebaseException catch (e) {
       if (e.code == 'object-not-found') {
-        print('ℹ️ Image already deleted: $imageUrl');
+        if (kDebugMode) debugPrint('ℹ️ Image already deleted: $imageUrl');
         return true; // Already deleted
       }
-      print('❌ Error deleting image: ${e.code} - ${e.message}');
+      if (kDebugMode) debugPrint('❌ Error deleting image: ${e.code} - ${e.message}');
       return false;
     } catch (e) {
-      print('❌ Error deleting image: $e');
+      if (kDebugMode) debugPrint('❌ Error deleting image: $e');
       return false;
     }
   }
@@ -321,7 +322,7 @@ class StorageService {
       if (deleted) deletedCount++;
     }
 
-    print('✅ Deleted $deletedCount/${imageUrls.length} images');
+    if (kDebugMode) debugPrint('✅ Deleted $deletedCount/${imageUrls.length} images');
     return deletedCount;
   }
 
@@ -331,6 +332,6 @@ class StorageService {
   // ✅ NEW: Force reset picker lock (use only if picker gets stuck)
   static void resetPickerLock() {
     _isPickerActive = false;
-    print('⚠️ Picker lock manually reset');
+    if (kDebugMode) debugPrint('⚠️ Picker lock manually reset');
   }
 }
