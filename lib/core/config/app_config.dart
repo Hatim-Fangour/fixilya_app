@@ -31,11 +31,14 @@ class AppConfig {
   }
 
   static bool get _isEmulator {
-    try {
-      return const bool.fromEnvironment('IS_EMULATOR', defaultValue: false);
-    } catch (_) {
-      return false;
-    }
+    // Explicit override via --dart-define=IS_EMULATOR=false lets physical-device
+    // developers opt out (they set up `adb reverse tcp:PORT tcp:PORT` instead).
+    const explicit = bool.fromEnvironment('IS_EMULATOR', defaultValue: true);
+    if (!explicit) return false; // user explicitly said "not an emulator"
+    // On Android without an explicit override, always use 10.0.2.2 (emulator
+    // loopback). On iOS simulators the host is also reachable via localhost, but
+    // 10.0.2.2 is Android-specific so keep the Platform guard.
+    return Platform.isAndroid;
   }
 
   static bool get _useWifi {

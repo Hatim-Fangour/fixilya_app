@@ -62,6 +62,7 @@ class UserRepository {
     final snapshot = await _firestore
         .collection(_collection)
         .where('userType', isEqualTo: userType.name)
+        .limit(200)
         .get();
 
     return snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();

@@ -85,6 +85,7 @@ class _BookingDialogState extends State<BookingDialog> {
         .collection('bookings')
         .where('handymanId', isEqualTo: handymanId)
         .where('status', whereIn: ['confirmed', 'in_progress'])
+        .limit(100)
         .snapshots()
         .listen((snapshot) {
           // Update unavailable dates when accepted bookings change

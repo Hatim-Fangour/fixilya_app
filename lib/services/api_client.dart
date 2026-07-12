@@ -133,6 +133,7 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          final sw = Stopwatch()..start();
           try {
             final token = await _getToken();
             if (token != null) {
@@ -141,16 +142,19 @@ class ApiClient {
           } catch (e) {
             if (kDebugMode) debugPrint('ApiClient: token injection error: $e');
           }
+          options.extra['_startTime'] = DateTime.now();
           if (kDebugMode) {
-            debugPrint('→ ${options.method} ${options.baseUrl}${options.path}');
+            debugPrint('→ ${options.method} ${options.baseUrl}${options.path} [token: ${sw.elapsedMilliseconds}ms]');
           }
           return handler.next(options);
         },
         onResponse: (response, handler) {
           if (kDebugMode) {
-            debugPrint(
-              '← ${response.statusCode} ${response.requestOptions.path}',
-            );
+            final req = response.requestOptions;
+            final elapsed = DateTime.now().difference(
+              req.extra['_startTime'] as DateTime? ?? DateTime.now(),
+            ).inMilliseconds;
+            debugPrint('← ${response.statusCode} ${req.path} [${elapsed}ms]');
           }
           return handler.next(response);
         },

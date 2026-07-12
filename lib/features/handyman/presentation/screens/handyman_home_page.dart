@@ -24,7 +24,7 @@ class HandymanHomePage extends StatefulWidget {
 }
 
 class _HandymanHomePageState extends State<HandymanHomePage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late AnimationController _animationController;
   bool get isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
@@ -56,6 +56,9 @@ class _HandymanHomePageState extends State<HandymanHomePage>
   late final Stream<int> _unreadNotificationsStream;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
@@ -72,6 +75,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         .where('handymanId', isEqualTo: uid)
         .where('status', whereIn: ['confirmed', 'in_progress'])
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .map(
           (s) => s.docs
@@ -84,6 +88,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         .where('handymanId', isEqualTo: uid)
         .where('status', isEqualTo: 'pending')
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .map(
           (s) => s.docs
@@ -120,6 +125,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
         .collection('notifications')
         .where('userId', isEqualTo: uid)
         .where('read', isEqualTo: false)
+        .limit(200)
         .snapshots()
         .map((snap) => snap.docs.length);
 
@@ -193,7 +199,9 @@ class _HandymanHomePageState extends State<HandymanHomePage>
     super.dispose();
   }
 
-  Future<void> _loadHandymanData() async {
+  Future<void> _loadHandymanData({bool forceRefresh = false}) async {
+    // Data freshness guard — skip if already loaded unless an explicit refresh is requested.
+    if (_profileData != null && !forceRefresh) return;
     if (!mounted) return;
 
     setState(() => _isLoadingData = true);
@@ -261,6 +269,7 @@ class _HandymanHomePageState extends State<HandymanHomePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     if (_isLoadingData) {
       // if (true) {
       return Scaffold(

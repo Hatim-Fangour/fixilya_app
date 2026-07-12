@@ -27,7 +27,7 @@ class ClientProfilePage extends StatefulWidget {
 }
 
 class _ClientProfilePageState extends State<ClientProfilePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   // ─── Services ───────────────────────────────
   final _clientService = ClientBackendService(); // ✅ CHANGED
   late final CloudinaryService _cloudinaryService;
@@ -69,6 +69,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   // Recent data
   late final Stream<QuerySnapshot> _recentBookingsStream;
   List<Map<String, dynamic>> _favoriteServices = [];
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -129,7 +132,9 @@ class _ClientProfilePageState extends State<ClientProfilePage>
   }
 
   /// ✅ All data from backend — no direct Firestore reads
-  Future<void> _loadProfileData() async {
+  Future<void> _loadProfileData({bool forceRefresh = false}) async {
+    // Data freshness guard — skip if already loaded unless an explicit refresh is requested.
+    if (_profileData != null && !forceRefresh) return;
     if (!mounted) return;
     setState(() => _isLoading = true);
 
@@ -492,6 +497,7 @@ class _ClientProfilePageState extends State<ClientProfilePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.backgroundColor(context),

@@ -1,5 +1,29 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
+
+# --- TEMPORARY WORKAROUND ---------------------------------------------------
+# CMake >= 4.0 removed compatibility with `cmake_minimum_required(VERSION <3.5)`.
+# The Firebase C++ SDK (pulled in transitively by firebase_storage /
+# firebase_messaging on Windows desktop) still declares an old minimum, so it
+# fails to configure under CMake 4.x with:
+#   "Compatibility with CMake < 3.5 has been removed from CMake."
+#
+# The CACHE variable below propagates into the extracted SDK's CMake scope and
+# re-enables the legacy policy floor *without* affecting our own code (we still
+# get full 3.14..3.25 policies above).
+#
+# Self-retiring: only active on CMake 4.0+. When the upstream firebase-cpp-sdk
+# bumps its minimum, or when someone downgrades CMake, this block becomes a
+# no-op automatically -- no code change required to remove the workaround.
+# To verify it's no longer needed: comment out this block, run `flutter clean`,
+# then `flutter run -d windows`. If it builds, delete the block.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+  message(STATUS "Applying CMake<3.5 policy workaround for firebase_cpp_sdk_windows (CMake ${CMAKE_VERSION})")
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING
+    "Minimum CMake policy version for legacy transitive dependencies" FORCE)
+endif()
+# --- END WORKAROUND ---------------------------------------------------------
+
 project(fixilya_app LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change

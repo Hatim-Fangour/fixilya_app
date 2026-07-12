@@ -2,6 +2,7 @@ import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_icons.dart';
 import 'package:fixilya_app/data/notifiers.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class NavBarWidget extends StatefulWidget {
   final String userType; // ✅ Add user type parameter
@@ -20,8 +21,8 @@ class _NavBarWidgetState extends State<NavBarWidget>
   late AnimationController _animationController;
 
   // Colors
-  static const primaryColor = Color.fromRGBO(83, 110, 254, 1);
-  static const secondaryColor = Color.fromRGBO(110, 133, 255, 1);
+  static const primaryColor = Color(0xFF536EFE);
+  static const secondaryColor = Color(0xFF6E85FF);
 
   @override
   void initState() {
@@ -39,17 +40,20 @@ class _NavBarWidgetState extends State<NavBarWidget>
   }
 
   // ✅ Dynamic nav items based on user type
+  // Index 0 → Home, Index 1 → Marketplace (Shop), Index 2 → Profile
   List<Map<String, dynamic>> get _navItems {
     if (widget.userType == 'client') {
       return [
-        {'icon': SocialIcons.home, 'label': 'Home', 'index': 0},
-        {'icon': SocialIcons.profile, 'label': 'Profile', 'index': 1},
+        {'icon': SocialIcons.home,             'label': 'Home',    'index': 0},
+        {'icon': FontAwesomeIcons.store,        'label': 'Shop',    'index': 1},
+        {'icon': SocialIcons.profile,           'label': 'Profile', 'index': 2},
       ];
     } else {
-      // Handyman
+      // Handyman — also has access to the marketplace
       return [
-        {'icon': SocialIcons.home, 'label': 'Home', 'index': 0},
-        {'icon': SocialIcons.profile, 'label': 'Profile', 'index': 1},
+        {'icon': SocialIcons.home,             'label': 'Home',    'index': 0},
+        {'icon': FontAwesomeIcons.store,        'label': 'Shop',    'index': 1},
+        {'icon': SocialIcons.profile,           'label': 'Profile', 'index': 2},
       ];
     }
   }

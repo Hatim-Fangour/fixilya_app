@@ -27,23 +27,25 @@ class BookingRepository {
         .update(booking.toFirestore());
   }
 
-  // Get client bookings
+  // Get client bookings (most recent 50 — billing-safe)
   Future<List<BookingModel>> getClientBookings(String clientId) async {
     final snapshot = await _firestore
         .collection(_collection)
         .where('clientId', isEqualTo: clientId)
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .get();
 
     return snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)).toList();
   }
 
-  // Get handyman bookings
+  // Get handyman bookings (most recent 50 — billing-safe)
   Future<List<BookingModel>> getHandymanBookings(String handymanId) async {
     final snapshot = await _firestore
         .collection(_collection)
         .where('handymanId', isEqualTo: handymanId)
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .get();
 
     return snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)).toList();
@@ -57,20 +59,22 @@ class BookingRepository {
   Future<List<BookingModel>> getUpcomingBookings(String userId) async {
     final now = DateTime.now();
 
-    // Query bookings where the user is the client
+    // Query bookings where the user is the client (cap at 20 — upcoming only)
     final clientSnapshot = await _firestore
         .collection(_collection)
         .where('clientId', isEqualTo: userId)
         .where('scheduledDate', isGreaterThan: now.toIso8601String())
         .where('status', whereIn: ['pending', 'confirmed'])
+        .limit(20)
         .get();
 
-    // Query bookings where the user is the handyman
+    // Query bookings where the user is the handyman (cap at 20 — upcoming only)
     final handymanSnapshot = await _firestore
         .collection(_collection)
         .where('handymanId', isEqualTo: userId)
         .where('scheduledDate', isGreaterThan: now.toIso8601String())
         .where('status', whereIn: ['pending', 'confirmed'])
+        .limit(20)
         .get();
 
     // Merge and deduplicate by document id

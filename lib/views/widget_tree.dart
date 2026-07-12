@@ -5,6 +5,7 @@ import 'package:fixilya_app/data/notifiers.dart';
 import 'package:fixilya_app/features/client/presentation/screens/client_profile_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_profile_page.dart';
 import 'package:fixilya_app/features/handyman/presentation/screens/handyman_home_page.dart';
+import 'package:fixilya_app/features/marketplace/presentation/screens/marketplace_page.dart';
 
 import 'package:fixilya_app/features/client/presentation/screens/client_home_page.dart';
 import 'package:fixilya_app/shared/widgets/navbar_widget.dart';
@@ -94,6 +95,7 @@ class _WidgetTreeState extends State<WidgetTree> {
         setState(() {
           _userType = resolvedType;
           _isLoading = false;
+          _cachedPages = null; // force page list to rebuild for new user type
         });
         selectedPageNotifier.value = 0;
       }
@@ -141,14 +143,37 @@ class _WidgetTreeState extends State<WidgetTree> {
     }
   }
 
-  // Pages based on resolved user type
+  // ── Page cache ────────────────────────────────────────────────────────────
+  // Stored as a field so the same widget instances are reused across tab
+  // switches. Re-created only when _userType changes (e.g. after a re-login).
+  //
+  // WHY: `_pages` was a getter that returned NEW instances on every call.
+  // When used with ValueListenableBuilder, Flutter destroyed the old page and
+  // rebuilt a fresh one on every tap — triggering onInit(), Firestore queries,
+  // and full widget-tree construction each time. That caused ~10-second delays.
+  //
+  // With IndexedStack + a cached list, pages are built once and simply
+  // shown/hidden on tab switch → instant navigation.
+  List<Widget>? _cachedPages;
+
   List<Widget> get _pages {
+    if (_cachedPages != null) return _cachedPages!;
     if (_userType == 'handyman') {
-      return [const HandymanHomePage(), HandymanProfilePage()];
+      _cachedPages = [
+        const HandymanHomePage(),
+        const MarketplacePage(),
+        HandymanProfilePage(),
+      ];
+    } else {
+      // client and admin both use the client layout as a fallback
+      // (admins should be routed to /admin directly and not reach WidgetTree)
+      _cachedPages = [
+        const ClientHomePage(),
+        const MarketplacePage(),
+        ClientProfilePage(),
+      ];
     }
-    // client and admin both use the client layout as a fallback
-    // (admins should be routed to /admin directly and not reach WidgetTree)
-    return [const ClientHomePage(), ClientProfilePage()];
+    return _cachedPages!;
   }
 
   @override
@@ -264,22 +289,27 @@ class _WidgetTreeState extends State<WidgetTree> {
       body: ValueListenableBuilder(
         valueListenable: selectedPageNotifier,
         builder: (BuildContext context, dynamic selectedPage, Widget? child) {
-          // ✅ CRITICAL FIX: Safe index validation
           final safeIndex =
               selectedPage is int &&
                   selectedPage >= 0 &&
                   selectedPage < _pages.length
               ? selectedPage
-              : 0; // Default to home if invalid
+              : 0;
 
-          // ✅ Update notifier if index was invalid
+          // Correct an out-of-range notifier value without causing a build-phase setState.
           if (safeIndex != selectedPage) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               selectedPageNotifier.value = safeIndex;
             });
           }
 
-          return _pages.elementAt(safeIndex);
+          // IndexedStack keeps every page alive in the widget tree and simply
+          // shows/hides them. No widget is destroyed or re-created on tab switch,
+          // so onInit() and data-fetch calls run exactly once per session.
+          return IndexedStack(
+            index: safeIndex,
+            children: _pages,
+          );
         },
       ),
       bottomNavigationBar: NavBarWidget(userType: _userType ?? 'client'),

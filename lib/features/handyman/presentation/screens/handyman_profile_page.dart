@@ -34,7 +34,7 @@ class HandymanProfilePage extends StatefulWidget {
 }
 
 class _HandymanProfilePageState extends State<HandymanProfilePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final _profileService = ProfileService();
 
   bool _isEditing = false;
@@ -143,6 +143,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   // ];
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
     _fadeController = AnimationController(
@@ -234,7 +237,9 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
   }
 
   // ✅ ADD THIS NEW METHOD
-  Future<void> _loadProfileData() async {
+  Future<void> _loadProfileData({bool forceRefresh = false}) async {
+    // Data freshness guard — skip if already loaded unless an explicit refresh is requested.
+    if (_profileData != null && !forceRefresh) return;
     if (!mounted) return;
     setState(() => _isLoading = true);
 
@@ -1544,6 +1549,7 @@ class _HandymanProfilePageState extends State<HandymanProfilePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     final l10n = AppLocalizations.of(context)!;
     if (_isLoading) {
       // if (true) {

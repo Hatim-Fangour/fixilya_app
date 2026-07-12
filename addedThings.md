@@ -5,7 +5,7 @@
 +! implement notification and sms notifications for handyman when he is assigned to a new job
 +! add user type detection at login and signup to redirect to the correct profile page (client/handyman)
 
-+ add error managment, like if no internat connection or app cant get a link like profile picture or other resources from internet
++ add error management, like if no internat connection or app cant get a link like profile picture or other resources from internet
 + if a user try to login without confirmed email, should be redirected to EmailConfirmation page 
 + statistique part should be implemented
 + add translation for app 
@@ -33,7 +33,7 @@ account :handyman
 
 
  OK - booking at 13 mars is accepted from notifications (mark as completed and give 5 stars with message "you have a nice work" still cannot see the client name in review and also not added to completed tab automatically without reloading the page, should be added instantly )
-     - the handyman should receive a notification if the client mark the booking as completed
+  - the handyman should receive a notification if the client mark the booking as completed
 
 
 

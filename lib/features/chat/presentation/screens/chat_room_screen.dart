@@ -3,6 +3,12 @@
 // Real-time 1-on-1 chat between a client and a handyman.
 // Messages are stored in Firestore under /chats/{chatId}/messages.
 //
+// Pagination strategy:
+//   - The live stream fetches only the most recent _pageSize messages.
+//   - Older messages are loaded on demand via cursor-based .get() calls
+//     using startAfterDocument() so Firestore never scans more than needed.
+//   - Scroll position is preserved when older messages are prepended.
+//
 // Firestore structure:
 //   /chats/{chatId}
 //     participants: [uid1, uid2]
@@ -45,15 +51,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
-  /// Track whether we have already marked messages as read on initial load,
-  /// so we do not call _markRead() on every StreamBuilder rebuild.
+  // ── Pagination state ────────────────────────────────────────────────────
+  // Older messages loaded on demand (in chronological order, oldest first).
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _olderDocs = [];
+
+  // Cursor pointing to the chronologically oldest document loaded so far.
+  // Used as the startAfterDocument() anchor for the next older-page fetch.
+  QueryDocumentSnapshot<Map<String, dynamic>>? _pageCursor;
+
+  bool _isLoadingMore = false;
+
+  // True once we know there are messages older than the live stream window.
+  bool _hasMoreMessages = false;
+
+  // Number of messages fetched per page (live stream + each older page).
+  static const int _pageSize = 50;
+
+  // ── Read-tracking ────────────────────────────────────────────────────────
+  // Avoid calling _markRead() on every StreamBuilder rebuild.
   bool _hasMarkedRead = false;
 
-  /// Track the previous message count so we only auto-scroll when new
-  /// messages arrive, not on every snapshot update.
-  int _previousMessageCount = 0;
+  // Track previous live-stream count to detect genuinely new messages.
+  int _previousLiveCount = 0;
 
-  /// Safely get the current user's UID. Returns null if not authenticated.
+  // ── Auth helpers ─────────────────────────────────────────────────────────
   String? get _myUid => _auth.currentUser?.uid;
 
   CollectionReference<Map<String, dynamic>> get _messagesRef =>
@@ -72,13 +93,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.dispose();
   }
 
-  // --- Firestore helpers ---
+  // ── Firestore helpers ────────────────────────────────────────────────────
 
-  /// Reset unread counter for this user.
   Future<void> _markRead() async {
     final uid = _myUid;
     if (uid == null) return;
-
     try {
       await _firestore.collection('chats').doc(widget.chatId).set(
         {'unread_$uid': 0},
@@ -100,7 +119,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
     final batch = _firestore.batch();
 
-    // 1. Add message document
     final msgRef = _messagesRef.doc();
     batch.set(msgRef, {
       'senderId': uid,
@@ -109,7 +127,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       'read': false,
     });
 
-    // 2. Update chat metadata + increment other user's unread counter
     final chatRef = _firestore.collection('chats').doc(widget.chatId);
     batch.set(
       chatRef,
@@ -131,6 +148,68 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
+  /// Load the next page of older messages using cursor-based pagination.
+  ///
+  /// Uses startAfterDocument() so Firestore reads exactly _pageSize docs —
+  /// no offset scanning, no wasted reads.
+  Future<void> _loadOlderMessages() async {
+    if (_isLoadingMore || !_hasMoreMessages || _pageCursor == null) return;
+
+    // Capture the scroll offset from the bottom before prepending.
+    // We'll restore it after the new items render so the view doesn't jump.
+    final offsetFromBottom = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent -
+            _scrollController.offset
+        : 0.0;
+
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final snap = await _messagesRef
+          .orderBy('createdAt', descending: true)
+          .startAfterDocument(_pageCursor!)
+          .limit(_pageSize)
+          .get();
+
+      if (!mounted) return;
+
+      if (snap.docs.isEmpty) {
+        setState(() {
+          _hasMoreMessages = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+
+      // Docs arrive newest-first (descending). Reverse to chronological order
+      // before prepending to _olderDocs, which is always oldest-first.
+      final fetchedChronological = snap.docs.reversed.toList();
+
+      // Move cursor to the oldest document in this page (last in descending).
+      final newCursor = snap.docs.last;
+
+      setState(() {
+        _olderDocs.insertAll(0, fetchedChronological);
+        _pageCursor = newCursor;
+        _hasMoreMessages = snap.docs.length >= _pageSize;
+        _isLoadingMore = false;
+      });
+
+      // Restore scroll position after the new items are rendered.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          final newMax = _scrollController.position.maxScrollExtent;
+          _scrollController.jumpTo(
+            (newMax - offsetFromBottom).clamp(0.0, newMax),
+          );
+        }
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('ChatRoom: loadOlderMessages error: $e');
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -143,13 +222,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
-  // --- Build ---
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final uid = _myUid;
 
-    // Guard: if user is not authenticated, show a message instead of crashing
     if (uid == null) {
       return Scaffold(
         backgroundColor: AppColors.backgroundColor(context),
@@ -184,21 +262,34 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       backgroundColor: AppColors.backgroundColor(context),
       elevation: 0,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimaryColor(context), size: 20),
+        icon: Icon(
+          Icons.arrow_back_ios_new,
+          color: AppColors.textPrimaryColor(context),
+          size: 20,
+        ),
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Row(
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundImage: widget.otherUserPicture != null && widget.otherUserPicture!.isNotEmpty
+            backgroundImage:
+                widget.otherUserPicture != null &&
+                    widget.otherUserPicture!.isNotEmpty
                 ? NetworkImage(widget.otherUserPicture!)
                 : null,
             backgroundColor: AppColors.primaryColor.withValues(alpha: 0.2),
-            child: widget.otherUserPicture == null || widget.otherUserPicture!.isEmpty
+            child:
+                widget.otherUserPicture == null ||
+                    widget.otherUserPicture!.isEmpty
                 ? Text(
-                    widget.otherUserName.isNotEmpty ? widget.otherUserName[0].toUpperCase() : '?',
-                    style: TextStyle(color: AppColors.primaryColor, fontWeight: FontWeight.bold),
+                    widget.otherUserName.isNotEmpty
+                        ? widget.otherUserName[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: AppColors.primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   )
                 : null,
           ),
@@ -233,11 +324,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   Widget _buildMessageList(bool isDark, String myUid) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _messagesRef.orderBy('createdAt', descending: false).snapshots(),
+      // Live stream: the most recent _pageSize messages only.
+      // Ordered descending so Firestore returns the newest first,
+      // then we reverse for chronological display.
+      stream: _messagesRef
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _olderDocs.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (snapshot.hasError) {
           return Center(
             child: Column(
@@ -267,18 +366,47 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        // Stream docs arrive newest-first. Reverse to chronological order.
+        final liveDocs = (snapshot.data?.docs ?? []).reversed.toList();
 
-        if (docs.isEmpty) {
+        // On the first snapshot with data, set up the pagination cursor.
+        // The oldest doc in the stream is the starting point for loading history.
+        if (_pageCursor == null && (snapshot.data?.docs ?? []).isNotEmpty) {
+          // docs.last in a descending query = chronologically oldest
+          final oldestInStream = snapshot.data!.docs.last;
+          // Only show "load older" if the stream is already full (_pageSize docs),
+          // which means there are likely more messages before it.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _pageCursor = oldestInStream;
+                _hasMoreMessages =
+                    (snapshot.data!.docs.length >= _pageSize);
+              });
+            }
+          });
+        }
+
+        // Combine: _olderDocs (history) + liveDocs (recent stream)
+        final allDocs = [..._olderDocs, ...liveDocs];
+
+        if (allDocs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.chat_bubble_outline, size: 56, color: AppColors.grey400),
+                Icon(
+                  Icons.chat_bubble_outline,
+                  size: 56,
+                  color: AppColors.grey400,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'No messages yet',
-                  style: TextStyle(color: AppColors.textSecondaryColor(context), fontSize: 16),
+                  style: TextStyle(
+                    color: AppColors.textSecondaryColor(context),
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -290,31 +418,40 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           );
         }
 
-        // Mark messages as read only once on initial data load
+        // Mark as read once on initial load.
         if (!_hasMarkedRead) {
           _hasMarkedRead = true;
           _markRead();
         }
 
-        // Auto-scroll only when new messages arrive (count increased)
-        final currentCount = docs.length;
-        if (currentCount > _previousMessageCount) {
-          _previousMessageCount = currentCount;
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        // Auto-scroll to bottom only when new live messages arrive.
+        final currentLiveCount = liveDocs.length;
+        if (currentLiveCount > _previousLiveCount) {
+          _previousLiveCount = currentLiveCount;
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _scrollToBottom(),
+          );
         }
+
+        // +1 for the "load older" header slot at index 0.
+        final itemCount = allDocs.length + 1;
 
         return ListView.builder(
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          itemCount: docs.length,
+          itemCount: itemCount,
           itemBuilder: (context, i) {
-            final data = docs[i].data();
+            // Index 0 is always the load-more header at the top of the list.
+            if (i == 0) {
+              return _buildLoadMoreHeader();
+            }
+
+            final doc = allDocs[i - 1];
+            final data = doc.data();
             final isMe = data['senderId'] == myUid;
             final text = data['text'] as String? ?? '';
             final ts = data['createdAt'] as Timestamp?;
-            final time = ts != null
-                ? _formatTime(ts.toDate())
-                : '';
+            final time = ts != null ? _formatTime(ts.toDate()) : '';
 
             return _MessageBubble(
               text: text,
@@ -326,6 +463,75 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         );
       },
     );
+  }
+
+  /// The header shown at the very top of the message list.
+  /// Shows a loading spinner, "Load older messages" button, or nothing.
+  Widget _buildLoadMoreHeader() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_hasMoreMessages) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
+        child: Center(
+          child: TextButton.icon(
+            onPressed: _loadOlderMessages,
+            icon: Icon(
+              Icons.history,
+              size: 16,
+              color: AppColors.primaryColor,
+            ),
+            label: Text(
+              'Load older messages',
+              style: TextStyle(
+                color: AppColors.primaryColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: AppColors.primaryColor.withValues(alpha: 0.3),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // No more messages to load — show a subtle beginning-of-chat label.
+    if (_olderDocs.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: Text(
+            '— Beginning of conversation —',
+            style: TextStyle(
+              color: AppColors.grey400,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Haven't loaded any older messages yet — show nothing.
+    return const SizedBox.shrink();
   }
 
   Widget _buildInputBar(bool isDark) {
@@ -364,7 +570,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   decoration: InputDecoration(
                     hintText: 'Type a message...',
                     hintStyle: TextStyle(color: AppColors.grey400, fontSize: 14),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     border: InputBorder.none,
                   ),
                   onSubmitted: (_) => _sendMessage(),
@@ -385,7 +594,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.send_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
             ),
           ],
@@ -401,7 +614,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 }
 
-// --- Message bubble widget ---
+// ── Message bubble widget ────────────────────────────────────────────────────
 
 class _MessageBubble extends StatelessWidget {
   final String text;
@@ -421,12 +634,11 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMe) ...[
-            const SizedBox(width: 4),
-          ],
+          if (!isMe) const SizedBox(width: 4),
           Flexible(
             child: Container(
               constraints: BoxConstraints(
@@ -434,7 +646,10 @@ class _MessageBubble extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isMe ? AppColors.primaryColor : AppColors.cardColor(context),
+                color:
+                    isMe
+                        ? AppColors.primaryColor
+                        : AppColors.cardColor(context),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -455,7 +670,10 @@ class _MessageBubble extends StatelessWidget {
                   Text(
                     text,
                     style: TextStyle(
-                      color: isMe ? Colors.white : AppColors.textPrimaryColor(context),
+                      color:
+                          isMe
+                              ? Colors.white
+                              : AppColors.textPrimaryColor(context),
                       fontSize: 15,
                     ),
                   ),
@@ -471,9 +689,7 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          if (isMe) ...[
-            const SizedBox(width: 4),
-          ],
+          if (isMe) const SizedBox(width: 4),
         ],
       ),
     );

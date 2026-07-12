@@ -30,7 +30,8 @@
       "Read(//c/Users/Windows/OneDrive/Bureau/Fixilya project/app/fixilya-backend/**)",
       "Bash(netstat:*)",
       "Bash(flutter:*)",
-      "Bash(ipconfig:*)"
+      "Bash(ipconfig:*)",
+      "Bash(cmake *)"
     ]
   }
 }

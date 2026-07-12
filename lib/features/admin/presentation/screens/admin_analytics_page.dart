@@ -187,7 +187,9 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
   Future<void> _loadBookingsByStatus() async {
     try {
-      final bookings = await _firestore.collection('bookings').get();
+      // Cap at 2000 to avoid loading the entire collection for analytics.
+      // For accurate totals at scale, use Firestore aggregation queries.
+      final bookings = await _firestore.collection('bookings').limit(2000).get();
 
       Map<String, int> statusCount = {};
 
@@ -206,7 +208,7 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
   Future<void> _loadTopCities() async {
     try {
-      final handymen = await _firestore.collection('handymen').get();
+      final handymen = await _firestore.collection('handymen').limit(2000).get();
 
       Map<String, int> cityCount = {};
 

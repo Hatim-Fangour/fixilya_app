@@ -178,6 +178,10 @@ class AppRoutes {
   static const String paramEmail = 'email';
   static const String paramPhone = 'phone';
   static const String paramFullName = 'fullName';
+  /// True if the backend successfully dispatched the verification email,
+  /// false if the SendGrid call failed (e.g. invalid key, sender rejected).
+  /// Passed to EmailVerificationScreen so the UI can warn the user.
+  static const String paramEmailWasSent = 'emailWasSent';
   static const String paramHandymanId = 'handymanId';
   static const String paramBookingId = 'bookingId';
   static const String paramChatId = 'chatId';
@@ -236,6 +240,7 @@ class AppRoutes {
           email: args[paramEmail],
           phone: args[paramPhone],
           fullName: args[paramFullName],
+          emailWasSent: args[paramEmailWasSent] as bool? ?? true,
         );
       },
       transition: Transition.rightToLeft,
@@ -454,13 +459,17 @@ class AppRoutes {
     Get.offAllNamed(guestHome);
   }
 
-  /// Navigate to email verification
+  /// Navigate to email verification.
+  ///
+  /// [emailWasSent] defaults to `true` for backwards compatibility — only
+  /// pass `false` when the backend signals the email dispatch failed.
   static Future<void> toEmailVerification({
     required String userType,
     required String userName,
     required String email,
     required String phone,
     required String fullName,
+    bool emailWasSent = true,
   }) {
     return to(
       emailVerification,
@@ -470,6 +479,7 @@ class AppRoutes {
         paramEmail: email,
         paramPhone: phone,
         paramFullName: fullName,
+        paramEmailWasSent: emailWasSent,
       },
     )!;
   }

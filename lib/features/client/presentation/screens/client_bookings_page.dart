@@ -48,6 +48,7 @@ class _ClientBookingsPageState extends State<ClientBookingsPage>
         .collection('bookings')
         .where('clientId', isEqualTo: uid)
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .listen((snap) {
       if (mounted) {

@@ -475,6 +475,7 @@ class BookingsService {
         .where('handymanId', isEqualTo: currentUserId)
         .where('status', whereIn: ['confirmed', 'in_progress'])
         .orderBy('scheduledDate', descending: false)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.map((doc) {
@@ -493,6 +494,7 @@ class BookingsService {
         .where('handymanId', isEqualTo: currentUserId)
         .where('status', isEqualTo: 'pending')
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.map((doc) {
@@ -555,7 +557,7 @@ class BookingsService {
       query = query.where('status', isEqualTo: status);
     }
 
-    return query.orderBy('createdAt', descending: true).snapshots().map((
+    return query.orderBy('createdAt', descending: true).limit(50).snapshots().map((
       snapshot,
     ) {
       return snapshot.docs.map((doc) {
@@ -606,6 +608,7 @@ class BookingsService {
         .collection('notifications')
         .where('userId', isEqualTo: currentUserId)
         .where('read', isEqualTo: false)
+        .limit(200)
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
   }

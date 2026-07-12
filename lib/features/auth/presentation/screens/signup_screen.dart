@@ -2,9 +2,14 @@ import 'package:fixilya_app/core/constants/app_colors.dart';
 import 'package:fixilya_app/core/constants/app_routes.dart';
 import 'package:fixilya_app/services/auth_service.dart';
 import 'package:fixilya_app/core/utils/validators.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
+
+/// Which legal document the user tapped on the consent row.
+/// Routed through [_SignUpScreenState._openLegalDoc].
+enum _LegalDoc { terms, privacy }
 
 class SignUpScreen extends StatefulWidget {
   final String userType;
@@ -39,6 +44,12 @@ class _SignUpScreenState extends State<SignUpScreen>
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true; // ✅ NEW
 
+  // Long-lived gesture recognizers for the Terms / Privacy tap targets.
+  // Created once in initState, disposed in dispose — avoids the per-frame
+  // recognizer leak that TweenAnimationBuilder rebuilds would otherwise cause.
+  late final TapGestureRecognizer _termsTapRecognizer;
+  late final TapGestureRecognizer _privacyTapRecognizer;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +80,12 @@ class _SignUpScreenState extends State<SignUpScreen>
       end: Offset.zero,
     ).animate(_formAnimation);
 
+    // Bind tap recognizers to the legal-doc opener.
+    _termsTapRecognizer = TapGestureRecognizer()
+      ..onTap = () => _openLegalDoc(_LegalDoc.terms);
+    _privacyTapRecognizer = TapGestureRecognizer()
+      ..onTap = () => _openLegalDoc(_LegalDoc.privacy);
+
     // Start animations
     _headerController.forward();
     Future.delayed(Duration(milliseconds: 200), () {
@@ -85,6 +102,8 @@ class _SignUpScreenState extends State<SignUpScreen>
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose(); // ✅ NEW
+    _termsTapRecognizer.dispose();
+    _privacyTapRecognizer.dispose();
     super.dispose();
   }
 
@@ -124,12 +143,18 @@ class _SignUpScreenState extends State<SignUpScreen>
           FocusScope.of(context).unfocus();
           await Future.delayed(const Duration(milliseconds: 80));
 
+          // `emailSent` comes from AuthService — it's the backend's honest
+          // signal about whether SendGrid actually accepted the message.
+          // Default to true if absent so we don't false-alarm on missing fields.
+          final bool emailWasSent = (result['emailSent'] as bool?) ?? true;
+
           AppRoutes.toEmailVerification(
             userType: widget.userType,
             userName: _nameController.text.trim(),
             email: _emailController.text.trim(),
             phone: _phoneController.text.trim(),
             fullName: _nameController.text.trim(),
+            emailWasSent: emailWasSent,
           );
         }
       } else {
@@ -398,7 +423,13 @@ class _SignUpScreenState extends State<SignUpScreen>
                       },
                     ),
 
-                    SizedBox(height: 20),
+                    SizedBox(height: 14),
+
+                    // Terms & Privacy consent — required by Moroccan Law 09-08
+                    // and GDPR. Defaults to false; validated in _handleSignUp.
+                    _buildTermsCheckbox(),
+
+                    SizedBox(height: 16),
 
                     // Animated Button
                     TweenAnimationBuilder(
@@ -619,6 +650,127 @@ class _SignUpScreenState extends State<SignUpScreen>
           ),
         );
       },
+    );
+  }
+
+  /// Consent row: Material Checkbox + RichText with tappable
+  /// "Terms of Service" and "Privacy Policy" spans.
+  ///
+  /// The whole row (label area) toggles the checkbox on tap, so users
+  /// don't need to hit the small Checkbox target precisely. Tapping the
+  /// highlighted link spans short-circuits the toggle and opens the
+  /// corresponding legal document via [_openLegalDoc].
+  Widget _buildTermsCheckbox() {
+    final linkStyle = TextStyle(
+      color: AppColors.primaryColor,
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+      decorationColor: AppColors.primaryColor,
+    );
+
+    return TweenAnimationBuilder(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 600),
+      builder: (context, double value, child) {
+        return Opacity(
+          opacity: value,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: _agreePersonalData,
+                  onChanged: (val) => setState(
+                    () => _agreePersonalData = val ?? false,
+                  ),
+                  activeColor: AppColors.primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(
+                    () => _agreePersonalData = !_agreePersonalData,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondaryColor(context),
+                          height: 1.4,
+                        ),
+                        children: [
+                          const TextSpan(text: 'I agree to the '),
+                          TextSpan(
+                            text: 'Terms of Service',
+                            style: linkStyle,
+                            recognizer: _termsTapRecognizer,
+                          ),
+                          const TextSpan(text: ' and '),
+                          TextSpan(
+                            text: 'Privacy Policy',
+                            style: linkStyle,
+                            recognizer: _privacyTapRecognizer,
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // TODO(hatim): Implement legal-doc opener.
+  //
+  // Codebase context (already verified):
+  //   • AppRoutes.terms ('/terms') and AppRoutes.privacy ('/privacy')
+  //     are DECLARED but NOT registered in the GetX page list.
+  //   • No /terms or /privacy screen files exist anywhere in lib/.
+  //   • Settings page tile taps are no-ops (`() {}`).
+  //   • `url_launcher: ^6.2.5` IS available in pubspec.yaml.
+  //
+  // Pick ONE strategy and replace the placeholder below (5–10 lines):
+  //
+  //   (A) url_launcher → real hosted URLs.  Simplest, ship-today.
+  //       Example:
+  //         final url = doc == _LegalDoc.terms
+  //             ? Uri.parse('https://fixilya.ma/legal/terms')
+  //             : Uri.parse('https://fixilya.ma/legal/privacy');
+  //         await launchUrl(url, mode: LaunchMode.externalApplication);
+  //
+  //   (B) Placeholder SnackBar — buys time until real docs are written.
+  //       Less professional, but won't break audits because the consent
+  //       checkbox itself is still recorded against the user account.
+  //
+  //   (C) Build stub screens + register the existing AppRoutes constants
+  //       in main.dart's GetX page list. Highest effort, cleanest result.
+  //
+  // Whatever you pick: keep it idempotent, don't throw, and surface a
+  // friendly error if launch fails (closed browser, no network, etc).
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _openLegalDoc(_LegalDoc doc) async {
+    // TODO(hatim): replace this stub. See guidance above.
+    _showSnackBar(
+      doc == _LegalDoc.terms
+          ? 'Terms of Service — screen coming soon'
+          : 'Privacy Policy — screen coming soon',
+      isError: false,
     );
   }
 }

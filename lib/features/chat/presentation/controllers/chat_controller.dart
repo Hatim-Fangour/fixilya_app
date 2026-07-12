@@ -31,6 +31,7 @@ class ChatController extends GetxController {
         .collection('chats')
         .where('participants', arrayContains: uid)
         .orderBy('lastMessageAt', descending: true)
+        .limit(50)
         .snapshots();
   }
 
@@ -40,7 +41,8 @@ class ChatController extends GetxController {
         .collection('chats')
         .doc(chatId)
         .collection('messages')
-        .orderBy('createdAt', descending: false)
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots();
   }
 
@@ -127,6 +129,7 @@ class ChatController extends GetxController {
     return _firestore
         .collection('chats')
         .where('participants', arrayContains: uid)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       int total = 0;

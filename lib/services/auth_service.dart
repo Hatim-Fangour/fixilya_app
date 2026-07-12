@@ -2,7 +2,6 @@
 import 'package:fixilya_app/data/controllers/theme_controller.dart';
 import 'package:fixilya_app/services/api_client.dart';
 import 'package:fixilya_app/services/data_persistence_service.dart';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -62,27 +61,11 @@ class AuthService {
       _log('   messagingSenderId: ${fbOptions.messagingSenderId}');
       _log('   storageBucket:     ${fbOptions.storageBucket}');
 
-      // ✅ Check network connectivity first
-      try {
-        final result = await InternetAddress.lookup('google.com').timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw Exception('Network timeout'),
-        );
-
-        if (result.isEmpty || result[0].rawAddress.isEmpty) {
-          return {
-            'success': false,
-            'message': 'No internet connection. Please check your network.',
-          };
-        }
-        _log('✅ Network connection verified');
-      } catch (e) {
-        _log('❌ Network check failed: $e');
-        return {
-          'success': false,
-          'message': 'No internet connection. Please try again.',
-        };
-      }
+      // Network connectivity is not pre-checked here. The previous
+      // InternetAddress.lookup('google.com') probe gave false negatives on
+      // ADB-reverse-tunneled devices, captive portals, and Google-blocked
+      // networks. Dio's own timeout + ApiClient.errorHandler now surface
+      // real failures from the actual /auth/register call below.
 
       // ✅ Call backend registration API using ApiClient
       _log('🌐 Calling backend API...');
@@ -527,27 +510,8 @@ class AuthService {
       _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       _log('User Type: $userType');
 
-      // ✅ Step 1: Check network connectivity
-      try {
-        final result = await InternetAddress.lookup('google.com').timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => throw Exception('Network timeout'),
-        );
-
-        if (result.isEmpty || result[0].rawAddress.isEmpty) {
-          return {
-            'success': false,
-            'message': 'No internet connection. Please check your network.',
-          };
-        }
-        _log('✅ Network connection verified');
-      } catch (e) {
-        _log('❌ Network check failed: $e');
-        return {
-          'success': false,
-          'message': 'No internet connection. Please try again.',
-        };
-      }
+      // Step 1 removed: no pre-flight DNS probe. See signUpWithEmail() for
+      // rationale. Network errors surface via Dio + ApiClient.errorHandler.
 
       // ✅ Step 2: Validate user type
       if (userType.toLowerCase() != 'handyman' &&

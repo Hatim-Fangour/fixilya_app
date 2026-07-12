@@ -21,7 +21,7 @@ class ClientHomePage extends StatefulWidget {
 }
 
 class _ClientHomePageState extends State<ClientHomePage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   // ─── Services ────────────────────────────────
   final HandymanApiService _handymanService = HandymanApiService();
   final NotificationApiService _notificationApi = NotificationApiService();
@@ -42,6 +42,9 @@ class _ClientHomePageState extends State<ClientHomePage>
   late final Stream<int> _unreadNotificationsStream;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -49,6 +52,7 @@ class _ClientHomePageState extends State<ClientHomePage>
         .collection('notifications')
         .where('userId', isEqualTo: uid)
         .where('read', isEqualTo: false)
+        .limit(200)
         .snapshots()
         .map((snap) => snap.docs.length);
     _checkIsAdmin();
@@ -92,6 +96,10 @@ class _ClientHomePageState extends State<ClientHomePage>
   }
 
   Future<void> _loadHandymen() async {
+    // Data freshness guard — skip re-fetch if we already have results this session.
+    // initState only fires once with IndexedStack, but this guard future-proofs
+    // against accidental extra calls (e.g. pull-to-refresh or didChangeDependencies).
+    if (_allHandymen.isNotEmpty) return;
     setState(() => _isLoading = true);
     try {
       final handymen = await _handymanService.getAllHandymen();
@@ -139,6 +147,7 @@ class _ClientHomePageState extends State<ClientHomePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     return CallListener(
       child: Scaffold(
         backgroundColor: AppColors.backgroundColor(context),

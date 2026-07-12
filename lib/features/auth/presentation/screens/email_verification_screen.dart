@@ -18,6 +18,12 @@ class EmailVerificationScreen extends StatefulWidget {
   final String phone;
   final String fullName;
 
+  /// `true` when the backend successfully dispatched the verification email
+  /// during signup, `false` when the dispatch failed (e.g. invalid SendGrid
+  /// key). When `false` the screen shows a warning banner so the user knows
+  /// to tap "Resend" instead of waiting forever for an email that won't come.
+  final bool emailWasSent;
+
   const EmailVerificationScreen({
     super.key,
     required this.userType,
@@ -25,6 +31,7 @@ class EmailVerificationScreen extends StatefulWidget {
     required this.email,
     required this.phone,
     required this.fullName,
+    this.emailWasSent = true,
   });
 
   @override
@@ -282,6 +289,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          if (!widget.emailWasSent) _buildEmailDispatchFailedBanner(),
+
           Spacer(flex: 1),
 
           // Animated Email Icon
@@ -894,4 +903,72 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   //     setState(() => _isResending = false);
   //   }
   // }
+
+  /// Warning banner shown at the top of the verification screen when the
+  /// backend failed to dispatch the welcome email at signup time.
+  ///
+  /// Why this exists: without it, users sit on this screen indefinitely
+  /// waiting for an email that never arrives — the worst possible silent
+  /// failure mode. Now they get an explicit "tap Resend" prompt.
+  ///
+  /// TODO(hatim): pick the final UX for this banner. Three reasonable
+  /// directions, each with trade-offs:
+  ///
+  ///   (1) Current: inline amber banner above the icon. Calm, doesn't
+  ///       block flow. Risk: easy to miss.
+  ///   (2) Show a one-shot dialog when emailWasSent=false on first build.
+  ///       Forces acknowledgment. Risk: feels accusatory.
+  ///   (3) Replace the entire "check your inbox" copy with "we couldn't
+  ///       send your email — tap Resend to try again". Strongest signal
+  ///       but loses the welcoming tone for users where this is rare.
+  ///
+  /// Localization: copy below is hardcoded English. Add i18n keys to
+  /// app_en.arb / app_ar.arb / app_fr.arb when you settle on final wording.
+  Widget _buildEmailDispatchFailedBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5), // soft amber
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFB547), width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFB35900),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "We couldn't send your verification email",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF7A4400),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your account was created. Tap "Resend" below to try '
+                  'again. If this keeps happening, contact support.',
+                  style: TextStyle(
+                    color: const Color(0xFF7A4400),
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

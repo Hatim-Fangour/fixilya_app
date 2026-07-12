@@ -648,7 +648,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage>
 
   Widget _buildAdminsList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('admins').snapshots(),
+      stream: _firestore.collection('admins').limit(100).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoading();
@@ -682,7 +682,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage>
       query = query.where('suspended', isEqualTo: true);
     }
 
-    return query.orderBy('createdAt', descending: true).snapshots();
+    return query.orderBy('createdAt', descending: true).limit(100).snapshots();
   }
 
   Stream<QuerySnapshot> _getClientsStream() {
@@ -694,7 +694,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage>
       query = query.where('suspended', isEqualTo: true);
     }
 
-    return query.orderBy('createdAt', descending: true).snapshots();
+    return query.orderBy('createdAt', descending: true).limit(100).snapshots();
   }
 
   Future<void> _toggleSuspend(

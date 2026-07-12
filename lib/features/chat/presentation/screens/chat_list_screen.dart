@@ -42,6 +42,7 @@ class ChatListScreen extends StatelessWidget {
             .collection('chats')
             .where('participants', arrayContains: uid)
             .orderBy('lastMessageAt', descending: true)
+            .limit(50)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
